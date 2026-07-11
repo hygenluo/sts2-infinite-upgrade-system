@@ -1,0 +1,150 @@
+<Project Sdk="Godot.NET.Sdk/4.5.1">
+
+  <!-- Auto-discover latest BaseLib version (only minimum version constraint). -->
+  <UsingTask TaskName="FindLatestBaseLib" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <BaseLibRoot ParameterType="System.String" Required="true" />
+      <FallbackVersion ParameterType="System.String" Required="true" />
+      <LatestVersion ParameterType="System.String" Output="true" />
+      <LatestDir ParameterType="System.String" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Linq" />
+      <Code Type="Fragment" Language="cs">
+      <![CDATA[
+      try {
+          if (!Directory.Exists(BaseLibRoot))
+          {
+              LatestVersion = FallbackVersion;
+              LatestDir = Path.Combine(BaseLibRoot, FallbackVersion);
+              return true;
+          }
+
+          var best = Directory.GetDirectories(BaseLibRoot)
+              .Select(d => new { Path = d, Name = Path.GetFileName(d) })
+              .Select(x => new { x.Path, x.Name, Ver = Version.TryParse(x.Name, out var v) ? v : null })
+              .Where(x => x.Ver != null && File.Exists(Path.Combine(x.Path, "lib", "net9.0", "BaseLib.dll")))
+              .OrderByDescending(x => x.Ver)
+              .FirstOrDefault();
+
+          if (best != null)
+          {
+              LatestVersion = best.Name;
+              LatestDir = best.Path;
+          }
+          else
+          {
+              LatestVersion = FallbackVersion;
+              LatestDir = Path.Combine(BaseLibRoot, FallbackVersion);
+          }
+      }
+      catch
+      {
+          LatestVersion = FallbackVersion;
+          LatestDir = Path.Combine(BaseLibRoot, FallbackVersion);
+      }
+      ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>12</LangVersion>
+    <Version>1.0.0</Version>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <DefaultItemExcludes>$(DefaultItemExcludes);packages/**</DefaultItemExcludes>
+
+    <!-- Game paths -->
+    <Sts2Dir Condition="'$(Sts2Dir)' == ''">D:\Program Files (x86)\Steam\steamapps\common\Slay the Spire 2</Sts2Dir>
+    <Sts2DataDir>$(Sts2Dir)\data_sts2_windows_x86_64</Sts2DataDir>
+    <ModsPath>$(Sts2Dir)\mods\</ModsPath>
+
+    <!-- BaseLib: auto-discover latest; no upper version bound, only minimum. -->
+    <BaseLibNuGetVersion Condition="'$(BaseLibNuGetVersion)' == ''">*</BaseLibNuGetVersion>
+    <BaseLibFallbackVersion>3.3.2</BaseLibFallbackVersion>
+    <BaseLibPkgRoot>$(NuGetPackageRoot)alchyr.sts2.baselib\</BaseLibPkgRoot>
+
+    <NoWarn>$(NoWarn);MSB3270;CS0436</NoWarn>
+  </PropertyGroup>
+
+  <!-- Game assembly references -->
+  <ItemGroup Condition="Exists('$(Sts2DataDir)')">
+    <Reference Include="0Harmony">
+      <HintPath>$(Sts2DataDir)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="sts2">
+      <HintPath>$(Sts2DataDir)\sts2.dll</HintPath>
+      <Private>false</Private>
+      <Publicize>true</Publicize>
+    </Reference>
+  </ItemGroup>
+
+  <!-- NuGet packages -->
+  <ItemGroup>
+    <PackageReference Include="Alchyr.Sts2.BaseLib" Version="$(BaseLibNuGetVersion)" PrivateAssets="All" />
+    <PackageReference Include="Alchyr.Sts2.ModAnalyzers" Version="0.1.6" PrivateAssets="All" />
+    <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!-- Additional files for ModAnalyzers -->
+  <ItemGroup>
+    <AdditionalFiles Include="InfiniteUpgradeSystem\localization\**\*.json" />
+  </ItemGroup>
+
+  <!-- Mod manifest and resource content -->
+  <ItemGroup>
+    <None Include="mod_manifest.json" />
+    <None Include="InfiniteUpgradeSystem\**\*" Exclude="InfiniteUpgradeSystem\**\*.cs" />
+  </ItemGroup>
+
+  <!-- Resolve BaseLib path (runs after restore, before Build) -->
+  <Target Name="ResolveBaseLibDir" BeforeTargets="Build">
+    <FindLatestBaseLib BaseLibRoot="$(BaseLibPkgRoot)"
+                       FallbackVersion="$(BaseLibFallbackVersion)">
+      <Output TaskParameter="LatestVersion" PropertyName="BaseLibResolvedVersion" />
+      <Output TaskParameter="LatestDir" PropertyName="BaseLibResolvedDir" />
+    </FindLatestBaseLib>
+    <Message Text="BaseLib resolved -> $(BaseLibResolvedVersion)  ($(BaseLibResolvedDir))" Importance="high" />
+  </Target>
+
+  <!-- Post-build: copy to mods/ -->
+  <Target Name="CopyToModsFolderOnBuild" AfterTargets="Build" Condition="Exists('$(Sts2DataDir)')">
+    <Message Text="Deploying InfiniteUpgradeSystem to mods." Importance="high" />
+
+    <Error
+      Text="BaseLib $(BaseLibResolvedVersion) not found at $(BaseLibResolvedDir)\lib\net9.0\BaseLib.dll. Run dotnet restore."
+      Condition="!Exists('$(BaseLibResolvedDir)\lib\net9.0\BaseLib.dll')" />
+
+    <!-- Clean previous deployment -->
+    <RemoveDir Directories="$(ModsPath)InfiniteUpgradeSystem" Condition="Exists('$(ModsPath)InfiniteUpgradeSystem')" />
+    <MakeDir Directories="$(ModsPath)InfiniteUpgradeSystem" />
+    <MakeDir Directories="$(ModsPath)BaseLib" Condition="!Exists('$(ModsPath)BaseLib')" />
+
+    <!-- Copy mod DLL -->
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ModsPath)InfiniteUpgradeSystem\" />
+    <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="$(ModsPath)InfiniteUpgradeSystem\" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
+    <Copy SourceFiles="mod_manifest.json" DestinationFolder="$(ModsPath)InfiniteUpgradeSystem\" />
+
+    <!-- Copy BaseLib (if not already present) -->
+    <Copy SourceFiles="$(BaseLibResolvedDir)\lib\net9.0\BaseLib.dll" DestinationFolder="$(ModsPath)BaseLib\" />
+    <Copy SourceFiles="$(BaseLibResolvedDir)\Content\BaseLib.pck" DestinationFolder="$(ModsPath)BaseLib\" />
+    <Copy SourceFiles="$(BaseLibResolvedDir)\Content\BaseLib.json" DestinationFolder="$(ModsPath)BaseLib\" />
+  </Target>
+
+  <!-- Warning if game not found -->
+  <Target Name="WarnMissingSts2" BeforeTargets="Build" Condition="!Exists('$(Sts2DataDir)')">
+    <Warning Text="Slay the Spire 2 data not found at $(Sts2DataDir). Set Sts2Dir or install the game; build may fail." />
+  </Target>
+
+</Project>

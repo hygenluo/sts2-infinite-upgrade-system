@@ -1,0 +1,22 @@
+## Godot
+.godot/
+*.pck
+*.export
+*.translation
+
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.sln.docstates
+
+## NuGet
+packages/
+
+## OS
+Thumbs.db
+.DS_Store
+
+## Build artifacts
+*.nupkg

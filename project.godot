@@ -1,0 +1,18 @@
+; Engine configuration file.
+; Minimal configuration for InfiniteUpgradeSystem mod.
+
+config_version=5
+
+[application]
+
+config/name="InfiniteUpgradeSystem"
+config/features=PackedStringArray("4.5", "C#", "Mobile")
+config/icon=""
+
+[dotnet]
+
+project/assembly_name="InfiniteUpgradeSystem"
+
+[rendering]
+
+renderer/rendering_method="mobile"
