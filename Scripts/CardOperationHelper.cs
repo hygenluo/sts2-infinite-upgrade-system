@@ -1,6 +1,5 @@
 using System.Linq;
 using System.Reflection;
-using HarmonyLib;
 using MegaCrit.Sts2.Core.CardSelection;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
@@ -20,14 +19,18 @@ namespace InfiniteUpgradeSystem;
 /// <summary>
 /// 卡牌操作执行引擎。
 /// 负责选择卡牌、执行修改、刷新视觉效果。不含 UI 状态管理。
+///
+/// 持久化策略：
+/// 每次升级后立即重置 CurrentUpgradeLevel 为 0（通过反射设置 _currentUpgradeLevel），
+/// 同时将升级次数记录到 CardUpgradeTracker。读档时由 RunStateHook 调用
+/// CardUpgradeTracker.ReapplyAllUpgrades 重新应用所有升级。
+/// 这样避免了游戏存档系统中 CurrentUpgradeLevel > MaxUpgradeLevel 导致的异常。
 /// </summary>
 public static class CardOperationHelper
 {
     public const int UpgradeCost = 5;
 
-    /// <summary>
-    /// 从当前 RunState 获取本地玩家。
-    /// </summary>
+    /// <summary>从当前 RunState 获取本地玩家。</summary>
     public static Player? GetLocalPlayer()
     {
         var state = RunManager.Instance?.DebugOnlyGetState();
@@ -35,10 +38,7 @@ public static class CardOperationHelper
         return LocalContext.GetMe(state) ?? state.Players.FirstOrDefault();
     }
 
-    /// <summary>
-    /// 弹出牌组选择界面，让玩家选择一张卡牌。
-    /// 调用者必须在调用前隐藏自定义 UI 遮罩层（陷阱1）。
-    /// </summary>
+    /// <summary>弹出牌组选择界面。调用前须隐藏自定义 UI 遮罩（陷阱1）。</summary>
     public static async Task<CardModel?> SelectCardFromDeck(Player player, string builtInPromptKey = "")
     {
         var prefs = string.IsNullOrEmpty(builtInPromptKey)
@@ -50,71 +50,53 @@ public static class CardOperationHelper
     }
 
     /// <summary>
-    /// 执行无限升级。
-    ///
-    /// 关键设计：UpgradeInternal() 内部会执行 CurrentUpgradeLevel++，
-    /// 该属性的 setter 校验 value > MaxUpgradeLevel 时抛出异常。
-    /// 为此我们通过 Harmony patch CardModel.get_MaxUpgradeLevel：
-    /// 当 _isOurUpgrade = true 时返回 int.MaxValue，绕过校验。
-    ///
-    /// 升级后不重置 CurrentUpgradeLevel——让游戏存档系统自然记录升级次数，
-    /// 确保读档后通过 UpgradeInternal × N 恢复所有升级效果。
+    /// 执行无限升级（玩家触发）。
+    /// 升级后重置 CurrentUpgradeLevel 为 0，由 CardUpgradeTracker 记录次数。
     /// </summary>
-    [ThreadStatic]
-    public static bool IsOurUpgrade;
-
     public static void PerformInfiniteUpgrade(CardModel card)
     {
         card.AssertMutable();
 
         var pileType = card.Pile?.Type ?? PileType.Deck;
 
-        // 设置标志位，让 MaxUpgradeLevel 临时返回 int.MaxValue
-        IsOurUpgrade = true;
-        try
-        {
-            card.UpgradeInternal();
-            card.FinalizeUpgradeInternal();
-        }
-        finally
-        {
-            IsOurUpgrade = false;
-        }
+        // 如果已达 MaxUpgradeLevel，先反射重置（绕过属性 setter 的校验）
+        if (card.CurrentUpgradeLevel >= card.MaxUpgradeLevel)
+            ResetUpgradeLevel(card);
 
-        // 不再重置升级等级——让 CurrentUpgradeLevel 自然累加
-        // 确保存档中记录正确的升级次数，读档时游戏会重新执行对应次数的 OnUpgrade()
+        card.UpgradeInternal();
+        card.FinalizeUpgradeInternal();
+
+        // 重置为 0 — 游戏存档不记录额外升级次数，由 CardUpgradeTracker 管理
+        ResetUpgradeLevel(card);
+
+        // 追踪升级次数（持久化到 card_upgrades.json）
+        CardUpgradeTracker.RecordUpgrade(card);
 
         var ncard = NCard.FindOnTable(card);
         if (ncard != null)
-        {
             ncard.UpdateVisuals(pileType, CardPreviewMode.Normal);
-        }
 
         ShowUpgradeVfx(card);
     }
 
     /// <summary>
-    /// Harmony patch：在 CardOperationHelper.PerformInfiniteUpgrade 执行期间，
-    /// 让 MaxUpgradeLevel 返回 int.MaxValue，绕过 CurrentUpgradeLevel 的校验。
-    /// 仅在 _isOurUpgrade = true 时生效。
+    /// 仅执行升级逻辑，不追踪（供读档时 CardUpgradeTracker.ReapplyAllUpgrades 使用）。
     /// </summary>
-    [HarmonyPatch(typeof(CardModel), "get_MaxUpgradeLevel")]
-    [HarmonyPrefix]
-    public static bool PatchMaxUpgradeLevel(CardModel __instance, ref int __result)
+    public static void UpgradeWithoutTracking(CardModel card)
     {
-        if (IsOurUpgrade)
-        {
-            __result = int.MaxValue;
-            return false; // 跳过原 getter
-        }
-        return true; // 正常行为
+        card.AssertMutable();
+
+        if (card.CurrentUpgradeLevel >= card.MaxUpgradeLevel)
+            ResetUpgradeLevel(card);
+
+        card.UpgradeInternal();
+        card.FinalizeUpgradeInternal();
+        ResetUpgradeLevel(card);
+
+        // 不调 RecordUpgrade — 这是从存档恢复已有的升级
     }
 
-    /// <summary>
-    /// 通过反射重置升级等级，使卡牌可被无限次升级。
-    /// 注意：依赖内部字段名 _currentUpgradeLevel，游戏更新时可能变化。
-    /// 技术债务：后续可考虑使用 Publicizer 暴露该字段。
-    /// </summary>
+    /// <summary>通过反射将 _currentUpgradeLevel 设为 0。</summary>
     public static void ResetUpgradeLevel(CardModel card)
     {
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
@@ -133,9 +115,6 @@ public static class CardOperationHelper
         }
     }
 
-    /// <summary>
-    /// 显示卡牌升级 VFX。
-    /// </summary>
     public static void ShowUpgradeVfx(CardModel card)
     {
         try

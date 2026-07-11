@@ -1,6 +1,7 @@
 using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Rooms;
@@ -9,15 +10,14 @@ using MegaCrit.Sts2.Core.Runs;
 namespace InfiniteUpgradeSystem;
 
 /// <summary>
-/// 游戏生命周期事件管理。
+/// 游戏生命周期事件管理 + 持久化。
 ///
-/// 持久化策略（简化版）：
-/// 1. 每次点数变化 → SavePoints 写入 points.json（存于 mod DLL 目录）
-/// 2. 新局 → Harmony Prefix 拦截 NGame.StartRun，先删除 points.json 再让流程继续
-/// 3. 读档 → NGame.LoadRun 不会触发 StartRun，points.json 保留 → RunStarted 时恢复
-/// 4. RunStarted 总是从 points.json 加载（新局=5，读档=上次保存的值）
-///
-/// 不再使用 _isLoadingSave 标志位或 TotalFloor 检测。
+/// 策略：
+/// - 新局：Harmony Prefix 拦截 NGame.StartNewSingleplayerRun，删除 points.json 和
+///   card_upgrades.json，确保从 5 点 + 无升级开始。
+/// - 读档：Harmony Prefix 拦截 NGame.LoadRun，不删文件。
+/// - RunStarted：总是从文件加载点数和卡牌升级数据。
+/// - 卡牌升级在 RunStarted 后通过 CardUpgradeTracker.ReapplyAllUpgrades 恢复。
 /// </summary>
 public static class RunStateHook
 {
@@ -27,31 +27,31 @@ public static class RunStateHook
     {
         CombatManager.Instance.CombatWon += OnCombatWon;
         RunManager.Instance.RunStarted += OnRunStarted;
-        Log.Info("InfiniteUpgrade: subscribed to CombatWon + RunStarted.");
+        Log.Info("InfiniteUpgrade: subscribed.");
         GD.Print("[InfiniteUpgrade] Subscribed.");
     }
 
     /// <summary>
-    /// 新局开始前删除旧的点数文件，确保 RunStarted 时从 5 开始。
-    /// Prefix 在 async 状态机启动前同步执行。
+    /// 新游戏开始前：删除旧的持久化文件，确保全新开始。
+    /// StartNewSingleplayerRun 是 public 方法，Harmony 可靠匹配。
     /// </summary>
-    [HarmonyPatch(typeof(NGame), nameof(NGame.StartRun))]
+    [HarmonyPatch(typeof(NGame), nameof(NGame.StartNewSingleplayerRun))]
     [HarmonyPrefix]
-    public static void BeforeStartRun()
+    public static void BeforeNewGame()
     {
         PointsPersistence.DeleteSavedPoints();
-        GD.Print("[InfiniteUpgrade] BeforeStartRun — deleted points file for fresh run.");
+        CardUpgradeTracker.Delete();
+        GD.Print("[InfiniteUpgrade] BeforeNewGame — deleted points + card upgrades files.");
     }
 
     /// <summary>
-    /// 读档时不会调用 StartRun（不会删文件），因此 points.json 保留。
-    /// Harmony Prefix 在 async 状态机启动前同步执行。
+    /// 读档前：保留持久化文件。仅用于调试日志。
     /// </summary>
     [HarmonyPatch(typeof(NGame), nameof(NGame.LoadRun))]
     [HarmonyPrefix]
     public static void BeforeLoadRun()
     {
-        GD.Print("[InfiniteUpgrade] BeforeLoadRun — points file preserved for restore.");
+        GD.Print("[InfiniteUpgrade] BeforeLoadRun — preserving persistence files.");
     }
 
     private static void OnCombatWon(CombatRoom room)
@@ -71,8 +71,8 @@ public static class RunStateHook
         if (points > 0)
         {
             UpgradePointManager.AddPoints(points);
-            Log.Info($"InfiniteUpgrade: CombatWon #{_combatWonFireCount} — +{points} pts → total {UpgradePointManager.CurrentPoints}");
-            GD.Print($"[InfiniteUpgrade] CombatWon +{points} → total {UpgradePointManager.CurrentPoints}");
+            Log.Info($"InfiniteUpgrade: CombatWon #{_combatWonFireCount} +{points} → {UpgradePointManager.CurrentPoints}");
+            GD.Print($"[InfiniteUpgrade] CombatWon +{points} → {UpgradePointManager.CurrentPoints}");
         }
     }
 
@@ -80,11 +80,18 @@ public static class RunStateHook
     {
         _combatWonFireCount = 0;
 
-        // 总是从文件加载：新局时文件被 BeforeStartRun 删除 → LoadPoints 返回 5
-        //              读档时文件保留 → LoadPoints 返回上次保存的值
+        // 1. 恢复点数
         int points = PointsPersistence.LoadPoints();
         UpgradePointManager.SetPointsDirect(points);
         Log.Info($"InfiniteUpgrade: RunStarted — points = {points}");
         GD.Print($"[InfiniteUpgrade] RunStarted — points = {points}");
+
+        // 2. 恢复卡牌升级（读档时 card_upgrades.json 有数据）
+        CardUpgradeTracker.Load();
+        var player = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault();
+        if (player != null)
+        {
+            CardUpgradeTracker.ReapplyAllUpgrades(player);
+        }
     }
 }
