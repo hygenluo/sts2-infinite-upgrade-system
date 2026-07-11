@@ -1,3 +1,4 @@
+using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Logging;
@@ -30,6 +31,7 @@ public static class RunStateHook
         CombatManager.Instance.CombatWon += OnCombatWon;
         RunManager.Instance.RunStarted += OnRunStarted;
         Log.Info("InfiniteUpgrade: subscribed to CombatWon + RunStarted.");
+        GD.Print("[InfiniteUpgrade] Subscribed to CombatWon + RunStarted.");
     }
 
     /// <summary>
@@ -41,7 +43,8 @@ public static class RunStateHook
     public static void BeforeLoadRun()
     {
         _isLoadingSave = true;
-        Log.Info("InfiniteUpgrade: LoadRun detected — will restore points from disk.");
+        Log.Info("InfiniteUpgrade: [BeforeLoadRun] _isLoadingSave = TRUE");
+        GD.Print("[InfiniteUpgrade] BeforeLoadRun called — will restore points from disk.");
     }
 
     private static void OnCombatWon(CombatRoom room)
@@ -73,20 +76,22 @@ public static class RunStateHook
     {
         _combatWonFireCount = 0;
 
+        GD.Print($"[InfiniteUpgrade] RunStarted fired — _isLoadingSave={_isLoadingSave}, TotalFloor={runState.TotalFloor}");
+
         if (_isLoadingSave)
         {
-            // 读档：从 JSON 文件恢复点数
             _isLoadingSave = false;
             int savedPoints = PointsPersistence.LoadPoints();
             UpgradePointManager.SetPointsDirect(savedPoints);
             Log.Info($"InfiniteUpgrade: RunStarted (loaded save) — restored {savedPoints} points.");
+            GD.Print($"[InfiniteUpgrade] LOADED SAVE — restored {savedPoints} points.");
         }
         else
         {
-            // 新局：重置为 5
             PointsPersistence.DeleteSavedPoints();
             UpgradePointManager.InitializeDirect();
             Log.Info("InfiniteUpgrade: RunStarted (new run) — points reset to 5.");
+            GD.Print("[InfiniteUpgrade] NEW RUN — points reset to 5.");
         }
     }
 }

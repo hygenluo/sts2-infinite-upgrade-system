@@ -2,56 +2,58 @@ using System;
 using System.IO;
 using System.Text.Json;
 using MegaCrit.Sts2.Core.Logging;
-using MegaCrit.Sts2.Core.Saves;
 
 namespace InfiniteUpgradeSystem;
 
 /// <summary>
 /// 点数持久化 — 通过 JSON 文件在存档/读档间保存点数。
-///
-/// 背景：游戏退出重启后所有 static 变量归零。RunStarted 事件在新局 AND 读档时都会触发
-/// （NGame.LoadRun 和 NGame.StartRun 都调用了 RunManager.Launch()），因此需要：
-/// 1. 新局 → 重置为 5
-/// 2. 读档 → 从文件恢复
-///
-/// 数据存储位置：游戏存档目录下的 infinite_upgrade_points.json
+/// 文件存储在 mod DLL 所在目录（mods/InfiniteUpgradeSystem/），保证可读写。
 /// </summary>
 public static class PointsPersistence
 {
-    private const string FileName = "infinite_upgrade_points.json";
+    private const string FileName = "points.json";
 
-    private static readonly JsonSerializerOptions s_jsonOptions = new()
-    {
-        WriteIndented = false,
-    };
+    private static string? s_cachedPath;
+    private static readonly JsonSerializerOptions s_jsonOptions = new() { WriteIndented = false };
 
     private static string GetFilePath()
     {
-        try
+        if (s_cachedPath != null) return s_cachedPath;
+
+        // 使用 mod DLL 所在目录，保证存在且可写
+        var modDir = Path.GetDirectoryName(typeof(Entry).Assembly.Location);
+        if (!string.IsNullOrEmpty(modDir))
         {
-            return SaveManager.Instance.GetProfileScopedPath(FileName);
+            s_cachedPath = Path.Combine(modDir, FileName);
+            Log.Info($"InfiniteUpgrade: persistence path = {s_cachedPath}");
+            return s_cachedPath;
         }
-        catch
-        {
-            // Fallback: 模组目录
-            return Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
-                "mods", "InfiniteUpgradeSystem", FileName);
-        }
+
+        // 极端情况 fallback
+        s_cachedPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "InfiniteUpgradeSystem", FileName);
+        Log.Warn($"InfiniteUpgrade: using fallback persistence path = {s_cachedPath}");
+        return s_cachedPath;
     }
 
     public static void SavePoints(int points)
     {
         try
         {
-            var data = new PointsData { Points = points, SavedAt = DateTime.UtcNow.Ticks };
+            var data = new PointsData { Points = points };
             var json = JsonSerializer.Serialize(data, s_jsonOptions);
-            File.WriteAllText(GetFilePath(), json);
-            Log.Info($"InfiniteUpgrade: saved {points} points to disk.");
+            var path = GetFilePath();
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            File.WriteAllText(path, json);
+            Log.Info($"InfiniteUpgrade: SAVED {points} pts → {path}");
         }
         catch (Exception ex)
         {
-            Log.Warn($"InfiniteUpgrade: failed to save points: {ex.Message}");
+            Log.Error($"InfiniteUpgrade: FAILED to save points: {ex.GetType().Name} — {ex.Message}");
         }
     }
 
@@ -60,9 +62,11 @@ public static class PointsPersistence
         try
         {
             var path = GetFilePath();
+            Log.Info($"InfiniteUpgrade: attempting to load from {path} (exists={File.Exists(path)})");
+
             if (!File.Exists(path))
             {
-                Log.Info("InfiniteUpgrade: no saved points file, defaulting to 5.");
+                Log.Info("InfiniteUpgrade: no saved points file, return 5.");
                 return 5;
             }
 
@@ -70,13 +74,13 @@ public static class PointsPersistence
             var data = JsonSerializer.Deserialize<PointsData>(json, s_jsonOptions);
             if (data != null)
             {
-                Log.Info($"InfiniteUpgrade: loaded {data.Points} points from disk.");
+                Log.Info($"InfiniteUpgrade: LOADED {data.Points} pts from disk.");
                 return data.Points;
             }
         }
         catch (Exception ex)
         {
-            Log.Warn($"InfiniteUpgrade: failed to load points: {ex.Message}");
+            Log.Error($"InfiniteUpgrade: FAILED to load points: {ex.GetType().Name} — {ex.Message}");
         }
 
         return 5;
@@ -87,7 +91,11 @@ public static class PointsPersistence
         try
         {
             var path = GetFilePath();
-            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+                Log.Info("InfiniteUpgrade: deleted saved points file.");
+            }
         }
         catch (Exception ex)
         {
@@ -98,6 +106,5 @@ public static class PointsPersistence
     private class PointsData
     {
         public int Points { get; set; } = 5;
-        public long SavedAt { get; set; }
     }
 }

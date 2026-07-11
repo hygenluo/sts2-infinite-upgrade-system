@@ -62,6 +62,13 @@ public sealed partial class UpgradeUIHandler : Control
 
     public override void _Input(InputEvent @event)
     {
+        // 如果 UI 开着但 RunState 已不存在（回到主菜单等），自动隐藏
+        if (_isOpen && RunManager.Instance?.DebugOnlyGetState() == null)
+        {
+            HideUI();
+            return;
+        }
+
         if (@event is InputEventKey { Pressed: true, Keycode: ToggleHotkey, Echo: false })
         {
             GetViewport().SetInputAsHandled();
