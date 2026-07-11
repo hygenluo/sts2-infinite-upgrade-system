@@ -69,8 +69,9 @@ public static class CardOperationHelper
         // 重置为 0 — 游戏存档不记录额外升级次数，由 CardUpgradeTracker 管理
         ResetUpgradeLevel(card);
 
-        // 追踪升级次数（持久化到 card_upgrades.json）
-        CardUpgradeTracker.RecordUpgrade(card);
+        // 追踪升级次数（按 Run seed 持久化）
+        var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
+        CardUpgradeTracker.RecordUpgrade(card, seed);
 
         var ncard = NCard.FindOnTable(card);
         if (ncard != null)
