@@ -16,6 +16,9 @@ public static class Entry
         harmony.PatchAll(typeof(Entry).Assembly);
         ScriptManagerBridge.LookupScriptsInAssembly(typeof(Entry).Assembly);
 
+        // 订阅游戏生命周期事件（直接 C# 事件，非 Harmony）
+        RunStateHook.Subscribe();
+
         // Create the UI overlay and attach it to the scene tree
         UpgradeUIHandler.CreateInstance();
 

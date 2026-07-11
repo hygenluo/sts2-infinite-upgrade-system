@@ -1,4 +1,3 @@
-using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Rooms;
@@ -7,37 +6,27 @@ using MegaCrit.Sts2.Core.Runs;
 namespace InfiniteUpgradeSystem;
 
 /// <summary>
-/// 使用 Harmony 补丁挂钩游戏生命周期事件：
-/// - 战斗开始(SetUpCombat)时订阅 CombatWon 事件来发放点数
-/// - 新对局开始时重置点数
+/// 直接订阅游戏 C# 事件（非 Harmony）：
+/// - CombatManager.Instance.CombatWon → 发放点数
+/// - RunManager.Instance.RunStarted  → 重置点数
 ///
-/// 为什么不用 EndCombatInternal：该方法是 async Task，Harmony Postfix
-/// 会在 Task 返回时（而非 await 链完成后）执行，导致点数发放时机不对。
-/// 改用 SetUpCombat（同步方法）懒订阅 CombatWon（C# 事件）的方案。
+/// CombatManager.Instance 和 RunManager.Instance 都是 static readonly 字段，
+/// 在游戏启动时就已存在，因此可以直接在 Entry.Init() 中订阅事件。
 /// </summary>
 public static class RunStateHook
 {
-    private static bool _combatWonSubscribed;
+    private static int _combatWonFireCount;
 
     /// <summary>
-    /// 首次进入战斗时订阅 CombatWon 事件。
-    /// SetUpCombat 是同步方法，此时 CombatManager.Instance 已存在。
+    /// 在 Entry.Init() 中调用，订阅游戏生命周期事件。
     /// </summary>
-    [HarmonyPatch(typeof(CombatManager), nameof(CombatManager.SetUpCombat))]
-    [HarmonyPostfix]
-    public static void LazySubscribeToCombatWon()
+    public static void Subscribe()
     {
-        if (_combatWonSubscribed) return;
-        if (CombatManager.Instance == null) return;
-
         CombatManager.Instance.CombatWon += OnCombatWon;
-        _combatWonSubscribed = true;
-        Log.Info("InfiniteUpgrade: subscribed to CombatWon.");
+        RunManager.Instance.RunStarted += OnRunStarted;
+        Log.Info("InfiniteUpgrade: subscribed to CombatWon + RunStarted.");
     }
 
-    /// <summary>
-    /// 战斗胜利时发放点数：普通怪 +1，精英 +5，BOSS +20
-    /// </summary>
     private static void OnCombatWon(CombatRoom room)
     {
         if (room == null) return;
@@ -50,21 +39,23 @@ public static class RunStateHook
             _ => 0
         };
 
+        _combatWonFireCount++;
+
         if (points > 0)
         {
             UpgradePointManager.AddPoints(points);
-            Log.Info($"InfiniteUpgrade: +{points} points from {room.RoomType} combat. Total: {UpgradePointManager.CurrentPoints}");
+            Log.Info($"InfiniteUpgrade: CombatWon #{_combatWonFireCount} — +{points} pts from {room.RoomType} → total {UpgradePointManager.CurrentPoints}");
+        }
+        else
+        {
+            Log.Info($"InfiniteUpgrade: CombatWon #{_combatWonFireCount} — {room.RoomType}, no points awarded.");
         }
     }
 
-    /// <summary>
-    /// 新对局开始时重置点数为 5
-    /// </summary>
-    [HarmonyPatch(typeof(RunManager), nameof(RunManager.Launch))]
-    [HarmonyPostfix]
-    public static void AfterRunLaunch()
+    private static void OnRunStarted(RunState runState)
     {
+        _combatWonFireCount = 0;
         UpgradePointManager.Initialize();
-        Log.Info("InfiniteUpgrade: points reset to 5 for new run.");
+        Log.Info("InfiniteUpgrade: RunStarted — points reset to 5.");
     }
 }
