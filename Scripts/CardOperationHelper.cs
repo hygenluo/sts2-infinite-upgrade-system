@@ -49,18 +49,28 @@ public static class CardOperationHelper
     }
 
     /// <summary>
-    /// 执行无限升级：升级 + 重置升级等级 + 刷新视觉 + VFX。
-    /// 卡牌必须已转为 mutable。
+    /// 执行无限升级。
+    /// 注意：如果卡牌已达 MaxUpgradeLevel（如已被营火升级），
+    /// UpgradeInternal() 中 CurrentUpgradeLevel++ 会触发属性 setter 的
+    /// "cannot be upgraded past its MaxUpgradeLevel" 校验而抛出异常。
+    /// 因此需要先通过反射重置升级等级，再调用 UpgradeInternal()。
     /// </summary>
     public static void PerformInfiniteUpgrade(CardModel card)
     {
         card.AssertMutable();
+
+        // 如果卡牌已达最大升级等级，先重置（否则 UpgradeInternal 会抛异常）
+        if (card.CurrentUpgradeLevel >= card.MaxUpgradeLevel)
+        {
+            ResetUpgradeLevel(card);
+        }
 
         var pileType = card.Pile?.Type ?? PileType.Deck;
 
         card.UpgradeInternal();
         card.FinalizeUpgradeInternal();
 
+        // 升级后再次重置，确保后续仍可无限次升级
         ResetUpgradeLevel(card);
 
         var ncard = NCard.FindOnTable(card);

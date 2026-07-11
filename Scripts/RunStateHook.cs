@@ -55,7 +55,20 @@ public static class RunStateHook
     private static void OnRunStarted(RunState runState)
     {
         _combatWonFireCount = 0;
-        UpgradePointManager.Initialize();
-        Log.Info("InfiniteUpgrade: RunStarted — points reset to 5.");
+
+        // TotalFloor > 1 表示读档（已有地图移动记录），从文件恢复点数；
+        // TotalFloor <= 1 表示新局，重置为 5。
+        if (runState.TotalFloor > 1)
+        {
+            int savedPoints = PointsPersistence.LoadPoints();
+            UpgradePointManager.SetPoints(savedPoints);
+            Log.Info($"InfiniteUpgrade: RunStarted (loaded save) — restored {savedPoints} points.");
+        }
+        else
+        {
+            PointsPersistence.DeleteSavedPoints();
+            UpgradePointManager.Initialize();
+            Log.Info("InfiniteUpgrade: RunStarted (new run) — points reset to 5.");
+        }
     }
 }
