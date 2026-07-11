@@ -1,4 +1,5 @@
 {
     "INFINITEUPGRADESYSTEM-UPGRADE_SELECT.title": "Select Card to Upgrade",
-    "INFINITEUPGRADESYSTEM-UPGRADE_SELECT.description": "Choose a card for infinite upgrade."
+    "INFINITEUPGRADESYSTEM-UPGRADE_SELECT.description": "Choose a card for infinite upgrade.",
+    "INFINITEUPGRADESYSTEM-UPGRADE_SELECT_PROMPT": "Select a card to upgrade"
 }

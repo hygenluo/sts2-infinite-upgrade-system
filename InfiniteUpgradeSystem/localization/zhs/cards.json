@@ -1,4 +1,5 @@
 {
     "INFINITEUPGRADESYSTEM-UPGRADE_SELECT.title": "选择升级的牌",
-    "INFINITEUPGRADESYSTEM-UPGRADE_SELECT.description": "选择一张牌进行无限升级。"
+    "INFINITEUPGRADESYSTEM-UPGRADE_SELECT.description": "选择一张牌进行无限升级。",
+    "INFINITEUPGRADESYSTEM-UPGRADE_SELECT_PROMPT": "选择一张牌进行升级"
 }

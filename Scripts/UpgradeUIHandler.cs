@@ -9,6 +9,7 @@ using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Helpers;
+using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes;
@@ -222,6 +223,11 @@ public sealed partial class UpgradeUIHandler : Control
             _pointsLabel.Text = "当前点数: " + UpgradePointManager.CurrentPoints;
     }
 
+    /// <summary>
+    /// 升级按钮点击处理。
+    /// 注意：为了避免自定义UI遮罩层阻塞游戏原生卡牌选择界面（陷阱1），
+    /// 必须在唤起 CardSelectCmd 前先隐藏遮罩层，选择完成后再关闭UI。
+    /// </summary>
     private async void OnUpgradeClicked()
     {
         if (!UpgradePointManager.TrySpendPoints(UpgradeCost))
@@ -241,8 +247,11 @@ public sealed partial class UpgradeUIHandler : Control
 
         try
         {
+            // 陷阱1：在唤起游戏原生卡牌选择界面之前，先隐藏自定义UI遮罩层
+            SetUIVisible(false);
+
             var prefs = new CardSelectorPrefs(
-                CardSelectorPrefs.UpgradeSelectionPrompt, 1);
+                new LocString("cards", "INFINITEUPGRADESYSTEM-UPGRADE_SELECT_PROMPT"), 1);
 
             var selected = (await CardSelectCmd.FromDeckGeneric(player, prefs)).ToList();
 
@@ -251,6 +260,8 @@ public sealed partial class UpgradeUIHandler : Control
                 UpgradePointManager.AddPoints(UpgradeCost);
                 RefreshPointsLabel();
                 GD.Print("未选择卡牌，点数已退回。");
+                // 用户取消了选择，恢复UI显示以便继续操作
+                SetUIVisible(true);
                 return;
             }
 
@@ -261,6 +272,7 @@ public sealed partial class UpgradeUIHandler : Control
             GD.Print("卡牌 [" + card.Id.Entry + "] 升级成功！剩余点数: " + UpgradePointManager.CurrentPoints);
             Log.Info("InfiniteUpgrade: upgraded card '" + card.Id.Entry + "', points remaining: " + UpgradePointManager.CurrentPoints);
 
+            // 升级成功后关闭UI回到游戏
             HideUI();
         }
         catch (Exception ex)
@@ -269,6 +281,8 @@ public sealed partial class UpgradeUIHandler : Control
             UpgradePointManager.AddPoints(UpgradeCost);
             RefreshPointsLabel();
             GD.PrintErr("升级过程出错：" + ex.Message);
+            // 出错后恢复UI显示以便查看状态
+            SetUIVisible(true);
         }
     }
 
