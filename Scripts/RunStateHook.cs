@@ -55,12 +55,7 @@ public static class RunStateHook
         UpgradePointManager.SetPointsDirect(points);
         GD.Print($"[InfiniteUpgrade] Points = {points}");
 
-        // 加载卡牌升级
-        CardUpgradeTracker.Load(seed);
-        var player = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault();
-        if (player != null)
-        {
-            CardUpgradeTracker.ReapplyAllUpgrades(player);
-        }
+        // CardUpgradeTracker 留空 — 当前升级操作由游戏存档系统自然持久化。
+        // 后续非升级类卡牌操作（攻击+1/格挡+1/Keyword等）的持久化在此恢复。
     }
 }
