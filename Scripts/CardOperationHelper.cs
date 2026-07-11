@@ -20,24 +20,16 @@ namespace InfiniteUpgradeSystem;
 /// <summary>
 /// 卡牌操作执行引擎。
 ///
-/// 升级持久化策略：
-/// 不再重置 CurrentUpgradeLevel。通过 Harmony patch 临时使 MaxUpgradeLevel 返回
-/// int.MaxValue 绕过属性 setter 的校验。升级后 CurrentUpgradeLevel 自然累加，
-/// 游戏存档系统自动记录并在读档时重新执行对应次数的 UpgradeInternal()。
+/// 关键 Harmony patch：全局移除 CurrentUpgradeLevel setter 中的 MaxUpgradeLevel 校验。
+/// 不这样做会导致读档时 FromSerializable 的 UpgradeInternal 循环在 level > MaxUpgradeLevel 时抛异常。
 ///
-/// CardUpgradeTracker 仅用于游戏存档无法覆盖的修改（如攻击+1、格挡+1、Keyword 等），
-/// 升级操作不使用 CardUpgradeTracker。
+/// 基础游戏行为不受影响：营火/事件升级 UI 使用 IsUpgradable 过滤
+/// （IsUpgradable = CurrentUpgradeLevel < MaxUpgradeLevel），
+/// getter 未被 patch，过滤逻辑不变。
 /// </summary>
 public static class CardOperationHelper
 {
     public const int UpgradeCost = 5;
-
-    /// <summary>
-    /// 线程本地标志：在 PerformInfiniteUpgrade 执行 UpgradeInternal 时为 true，
-    /// 使 Harmony patch get_MaxUpgradeLevel 返回 int.MaxValue。
-    /// </summary>
-    [ThreadStatic]
-    private static bool s_isOurUpgrade;
 
     /// <summary>从当前 RunState 获取本地玩家。</summary>
     public static Player? GetLocalPlayer()
@@ -60,8 +52,7 @@ public static class CardOperationHelper
 
     /// <summary>
     /// 执行无限升级（玩家触发）。
-    /// 升级后不重置 CurrentUpgradeLevel——让游戏存档系统自然记录升级次数。
-    /// 卡牌保持"已升级"外观（IsUpgraded = true）。
+    /// 不重置 CurrentUpgradeLevel——让游戏存档系统自然记录升级次数。
     /// </summary>
     public static void PerformInfiniteUpgrade(CardModel card)
     {
@@ -69,20 +60,8 @@ public static class CardOperationHelper
 
         var pileType = card.Pile?.Type ?? PileType.Deck;
 
-        // 设置标志位：让 MaxUpgradeLevel 临时返回 int.MaxValue
-        s_isOurUpgrade = true;
-        try
-        {
-            card.UpgradeInternal();
-            card.FinalizeUpgradeInternal();
-        }
-        finally
-        {
-            s_isOurUpgrade = false;
-        }
-
-        // 不再重置 CurrentUpgradeLevel → 卡牌保持"已升级"外观
-        // 游戏存档自然记录升级次数 → 读档时自动恢复
+        card.UpgradeInternal();
+        card.FinalizeUpgradeInternal();
 
         var ncard = NCard.FindOnTable(card);
         if (ncard != null)
@@ -93,58 +72,44 @@ public static class CardOperationHelper
 
     /// <summary>
     /// 仅执行升级逻辑（供读档时 CardUpgradeTracker.ReapplyAllUpgrades 使用）。
-    /// 同样使用 MaxUpgradeLevel 绕过，不重置 level。
     /// </summary>
     public static void UpgradeWithoutTracking(CardModel card)
     {
         card.AssertMutable();
-
-        s_isOurUpgrade = true;
-        try
-        {
-            card.UpgradeInternal();
-            card.FinalizeUpgradeInternal();
-        }
-        finally
-        {
-            s_isOurUpgrade = false;
-        }
-        // 不重置 level，不调 RecordUpgrade
+        card.UpgradeInternal();
+        card.FinalizeUpgradeInternal();
     }
 
     /// <summary>
-    /// Harmony patch：当 s_isOurUpgrade = true 时，MaxUpgradeLevel 返回 int.MaxValue。
-    /// 绕过 CurrentUpgradeLevel setter 的 value > MaxUpgradeLevel 校验。
+    /// Harmony patch：全局移除 CurrentUpgradeLevel setter 的 MaxUpgradeLevel 校验。
+    /// 直接将值写入 _currentUpgradeLevel 字段，跳过 value > MaxUpgradeLevel 检查。
+    ///
+    /// 为什么必须这样做：
+    /// CardModel.FromSerializable 中 for 循环调用 UpgradeInternal()，
+    /// 每次 CurrentUpgradeLevel++。如果卡牌已被多次升级（level > MaxUpgradeLevel=1），
+    /// 后续的 ++ 操作会通过 setter 抛出 InvalidOperationException。
+    ///
+    /// 对基础游戏的影响：
+    /// - IsUpgradable 仍使用原始 MaxUpgradeLevel getter（未被 patch）
+    /// - 营火/事件升级 UI 过滤逻辑不受影响
     /// </summary>
-    [HarmonyPatch(typeof(CardModel), "get_MaxUpgradeLevel")]
+    [HarmonyPatch(typeof(CardModel), "set_CurrentUpgradeLevel")]
     [HarmonyPrefix]
-    public static bool PatchMaxUpgradeLevel(CardModel __instance, ref int __result)
+    public static bool PatchCurrentUpgradeLevelSetter(CardModel __instance, int value)
     {
-        if (s_isOurUpgrade)
-        {
-            __result = int.MaxValue;
-            return false; // 跳过原 getter
-        }
-        return true;
+        // 通过反射直接写入 _currentUpgradeLevel，绕过 setter 的校验
+        typeof(CardModel)
+            .GetField("_currentUpgradeLevel", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.SetValue(__instance, value);
+        return false; // 跳过原始 setter
     }
 
-    /// <summary>通过反射将 _currentUpgradeLevel 设为 0（供 CardUpgradeTracker 后续使用）。</summary>
+    /// <summary>通过反射将 _currentUpgradeLevel 设为 0。</summary>
     public static void ResetUpgradeLevel(CardModel card)
     {
-        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
-
-        var field = typeof(CardModel).GetField("_currentUpgradeLevel", flags)
-                 ?? typeof(CardModel).GetField("CurrentUpgradeLevel", flags)
-                 ?? typeof(CardModel).GetField("upgradeLevel", flags);
-
-        if (field != null)
-        {
-            field.SetValue(card, 0);
-        }
-        else
-        {
-            Log.Warn("InfiniteUpgrade: could not find upgrade level field via reflection.");
-        }
+        typeof(CardModel)
+            .GetField("_currentUpgradeLevel", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.SetValue(card, 0);
     }
 
     public static void ShowUpgradeVfx(CardModel card)
