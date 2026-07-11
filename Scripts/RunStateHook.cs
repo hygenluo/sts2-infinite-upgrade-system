@@ -1,4 +1,5 @@
 using Godot;
+using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Logging;
@@ -10,14 +11,14 @@ namespace InfiniteUpgradeSystem;
 /// <summary>
 /// 游戏生命周期事件管理 + 持久化。
 ///
-/// 策略（不使用 Harmony patch NGame 方法，避免 async 方法匹配问题）：
-/// - 新局检测：RunStarted 时 TotalFloor == 0 → 删除持久化文件，5 点，无升级
-/// - 读档检测：RunStarted 时 TotalFloor > 0  → 加载持久化文件，恢复点数和升级
-/// - 战斗奖励：CombatWon 事件
+/// 新局检测：Harmony Prefix 拦截 RunState.CreateForNewRun（public static sync）。
+///   这是所有新游戏（单机/联机/每日）必经的底层方法，非 async，Harmony 可靠匹配。
+/// 读档检测：TotalFloor > 0 时从文件恢复点数和卡牌升级。
 /// </summary>
 public static class RunStateHook
 {
     private static int _combatWonFireCount;
+    private static bool _isNewRun;
 
     public static void Subscribe()
     {
@@ -25,6 +26,20 @@ public static class RunStateHook
         RunManager.Instance.RunStarted += OnRunStarted;
         Log.Info("InfiniteUpgrade: subscribed.");
         GD.Print("[InfiniteUpgrade] Subscribed.");
+    }
+
+    /// <summary>
+    /// 新游戏创建 RunState 前删除旧持久化文件。
+    /// CreateForNewRun 是 public static 同步方法，无 async 匹配问题。
+    /// </summary>
+    [HarmonyPatch(typeof(RunState), nameof(RunState.CreateForNewRun))]
+    [HarmonyPrefix]
+    public static void BeforeCreateNewRun()
+    {
+        _isNewRun = true;
+        PointsPersistence.DeleteSavedPoints();
+        CardUpgradeTracker.Delete();
+        GD.Print("[InfiniteUpgrade] CreateForNewRun — deleted persistence files.");
     }
 
     private static void OnCombatWon(CombatRoom room)
@@ -52,24 +67,14 @@ public static class RunStateHook
     {
         _combatWonFireCount = 0;
 
-        // TotalFloor: MapPointHistory 中所有楼层数之和
-        // 新局 = 尚未进入任何房间 = TotalFloor == 0
-        // 读档 = 存档中有已访问的房间记录 = TotalFloor > 0
-        bool isNewRun = runState.TotalFloor == 0;
-
-        GD.Print($"[InfiniteUpgrade] RunStarted — TotalFloor={runState.TotalFloor}, isNewRun={isNewRun}");
-
-        if (isNewRun)
+        if (_isNewRun)
         {
-            // 新局：清空旧持久化文件，从 5 点零升级开始
-            PointsPersistence.DeleteSavedPoints();
-            CardUpgradeTracker.Delete();
+            _isNewRun = false;
             UpgradePointManager.InitializeDirect();
             GD.Print("[InfiniteUpgrade] NEW RUN — points=5, upgrades cleared.");
         }
         else
         {
-            // 读档：从文件恢复
             int points = PointsPersistence.LoadPoints();
             UpgradePointManager.SetPointsDirect(points);
             GD.Print($"[InfiniteUpgrade] LOADED SAVE — points={points}");
@@ -83,3 +88,4 @@ public static class RunStateHook
         }
     }
 }
+
