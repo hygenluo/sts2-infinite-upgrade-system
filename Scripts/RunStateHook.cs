@@ -22,6 +22,7 @@ namespace InfiniteUpgradeSystem;
 public static class RunStateHook
 {
     private static int _combatWonFireCount;
+    private static bool _isLoadingSave;
 
     public static void Subscribe()
     {
@@ -32,8 +33,9 @@ public static class RunStateHook
     }
 
     /// <summary>
-    /// 新游戏开始前：删除旧的持久化文件，确保全新开始。
-    /// StartNewSingleplayerRun 是 public 方法，Harmony 可靠匹配。
+    /// 新游戏开始前：删除旧的持久化文件。
+    /// 主方案：Patch NGame.StartNewSingleplayerRun（public async）。
+    /// 备方案：OnRunStarted 中 TotalFloor <= 1 时再次兜底清理。
     /// </summary>
     [HarmonyPatch(typeof(NGame), nameof(NGame.StartNewSingleplayerRun))]
     [HarmonyPrefix]
@@ -41,16 +43,18 @@ public static class RunStateHook
     {
         PointsPersistence.DeleteSavedPoints();
         CardUpgradeTracker.Delete();
-        GD.Print("[InfiniteUpgrade] BeforeNewGame — deleted points + card upgrades files.");
+        GD.Print("[InfiniteUpgrade] BeforeNewGame — deleted persistence files.");
+        Log.Info("InfiniteUpgrade: BeforeNewGame — deleted persistence files.");
     }
 
     /// <summary>
-    /// 读档前：保留持久化文件。仅用于调试日志。
+    /// 读档前：设置标志位，防止 OnRunStarted 的兜底清理误删文件。
     /// </summary>
     [HarmonyPatch(typeof(NGame), nameof(NGame.LoadRun))]
     [HarmonyPrefix]
     public static void BeforeLoadRun()
     {
+        _isLoadingSave = true;
         GD.Print("[InfiniteUpgrade] BeforeLoadRun — preserving persistence files.");
     }
 
@@ -80,18 +84,28 @@ public static class RunStateHook
     {
         _combatWonFireCount = 0;
 
+        // 兜底检测：如果 BeforeNewGame 未触发（例如从"放弃并重开"路径进入），
+        // 通过 TotalFloor 判断这是新局，手动清理旧持久化文件。
+        if (runState.TotalFloor <= 1 && !_isLoadingSave)
+        {
+            PointsPersistence.DeleteSavedPoints();
+            CardUpgradeTracker.Delete();
+            GD.Print("[InfiniteUpgrade] OnRunStarted backup cleanup — TotalFloor <= 1.");
+        }
+
         // 1. 恢复点数
         int points = PointsPersistence.LoadPoints();
         UpgradePointManager.SetPointsDirect(points);
-        Log.Info($"InfiniteUpgrade: RunStarted — points = {points}");
         GD.Print($"[InfiniteUpgrade] RunStarted — points = {points}");
 
-        // 2. 恢复卡牌升级（读档时 card_upgrades.json 有数据）
+        // 2. 恢复卡牌升级
         CardUpgradeTracker.Load();
         var player = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault();
         if (player != null)
         {
             CardUpgradeTracker.ReapplyAllUpgrades(player);
         }
+
+        _isLoadingSave = false;
     }
 }
