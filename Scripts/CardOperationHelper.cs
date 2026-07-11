@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Reflection;
+using HarmonyLib;
 using MegaCrit.Sts2.Core.CardSelection;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
@@ -50,28 +51,38 @@ public static class CardOperationHelper
 
     /// <summary>
     /// 执行无限升级。
-    /// 注意：如果卡牌已达 MaxUpgradeLevel（如已被营火升级），
-    /// UpgradeInternal() 中 CurrentUpgradeLevel++ 会触发属性 setter 的
-    /// "cannot be upgraded past its MaxUpgradeLevel" 校验而抛出异常。
-    /// 因此需要先通过反射重置升级等级，再调用 UpgradeInternal()。
+    ///
+    /// 关键设计：UpgradeInternal() 内部会执行 CurrentUpgradeLevel++，
+    /// 该属性的 setter 校验 value > MaxUpgradeLevel 时抛出异常。
+    /// 为此我们通过 Harmony patch CardModel.get_MaxUpgradeLevel：
+    /// 当 _isOurUpgrade = true 时返回 int.MaxValue，绕过校验。
+    ///
+    /// 升级后不重置 CurrentUpgradeLevel——让游戏存档系统自然记录升级次数，
+    /// 确保读档后通过 UpgradeInternal × N 恢复所有升级效果。
     /// </summary>
+    [ThreadStatic]
+    public static bool IsOurUpgrade;
+
     public static void PerformInfiniteUpgrade(CardModel card)
     {
         card.AssertMutable();
 
-        // 如果卡牌已达最大升级等级，先重置（否则 UpgradeInternal 会抛异常）
-        if (card.CurrentUpgradeLevel >= card.MaxUpgradeLevel)
-        {
-            ResetUpgradeLevel(card);
-        }
-
         var pileType = card.Pile?.Type ?? PileType.Deck;
 
-        card.UpgradeInternal();
-        card.FinalizeUpgradeInternal();
+        // 设置标志位，让 MaxUpgradeLevel 临时返回 int.MaxValue
+        IsOurUpgrade = true;
+        try
+        {
+            card.UpgradeInternal();
+            card.FinalizeUpgradeInternal();
+        }
+        finally
+        {
+            IsOurUpgrade = false;
+        }
 
-        // 升级后再次重置，确保后续仍可无限次升级
-        ResetUpgradeLevel(card);
+        // 不再重置升级等级——让 CurrentUpgradeLevel 自然累加
+        // 确保存档中记录正确的升级次数，读档时游戏会重新执行对应次数的 OnUpgrade()
 
         var ncard = NCard.FindOnTable(card);
         if (ncard != null)
@@ -80,6 +91,23 @@ public static class CardOperationHelper
         }
 
         ShowUpgradeVfx(card);
+    }
+
+    /// <summary>
+    /// Harmony patch：在 CardOperationHelper.PerformInfiniteUpgrade 执行期间，
+    /// 让 MaxUpgradeLevel 返回 int.MaxValue，绕过 CurrentUpgradeLevel 的校验。
+    /// 仅在 _isOurUpgrade = true 时生效。
+    /// </summary>
+    [HarmonyPatch(typeof(CardModel), "get_MaxUpgradeLevel")]
+    [HarmonyPrefix]
+    public static bool PatchMaxUpgradeLevel(CardModel __instance, ref int __result)
+    {
+        if (IsOurUpgrade)
+        {
+            __result = int.MaxValue;
+            return false; // 跳过原 getter
+        }
+        return true; // 正常行为
     }
 
     /// <summary>
