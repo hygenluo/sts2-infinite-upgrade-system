@@ -1,21 +1,26 @@
+using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 
 namespace InfiniteUpgradeSystem;
 
 /// <summary>
-/// 直接订阅游戏 C# 事件（非 Harmony）：
-/// - CombatManager.Instance.CombatWon → 发放点数
-/// - RunManager.Instance.RunStarted  → 重置点数
+/// 游戏生命周期事件管理。
 ///
-/// CombatManager.Instance 和 RunManager.Instance 都是 static readonly 字段，
-/// 在游戏启动时就已存在，因此可以直接在 Entry.Init() 中订阅事件。
+/// 关键发现：新局（NGame.StartRun）和读档（NGame.LoadRun）都会调用
+/// RunManager.Instance.Launch()，从而触发 RunStarted 事件。
+/// 仅通过 RunState.TotalFloor 无法可靠区分（刚开局就存档时 TotalFloor 也很小）。
+///
+/// 解决方案：Harmony Prefix 拦截 NGame.LoadRun 设置标志位，
+/// 在 OnRunStarted 中根据标志位决定是恢复存档还是重置点数。
 /// </summary>
 public static class RunStateHook
 {
     private static int _combatWonFireCount;
+    private static bool _isLoadingSave;
 
     /// <summary>
     /// 在 Entry.Init() 中调用，订阅游戏生命周期事件。
@@ -25,6 +30,18 @@ public static class RunStateHook
         CombatManager.Instance.CombatWon += OnCombatWon;
         RunManager.Instance.RunStarted += OnRunStarted;
         Log.Info("InfiniteUpgrade: subscribed to CombatWon + RunStarted.");
+    }
+
+    /// <summary>
+    /// Harmony Prefix：在 NGame.LoadRun 开始执行前设置标志位。
+    /// 虽然是 async 方法，但 Prefix 在状态机启动前同步执行，安全可靠。
+    /// </summary>
+    [HarmonyPatch(typeof(NGame), nameof(NGame.LoadRun))]
+    [HarmonyPrefix]
+    public static void BeforeLoadRun()
+    {
+        _isLoadingSave = true;
+        Log.Info("InfiniteUpgrade: LoadRun detected — will restore points from disk.");
     }
 
     private static void OnCombatWon(CombatRoom room)
@@ -56,18 +73,19 @@ public static class RunStateHook
     {
         _combatWonFireCount = 0;
 
-        // TotalFloor > 1 表示读档（已有地图移动记录），从文件恢复点数；
-        // TotalFloor <= 1 表示新局，重置为 5。
-        if (runState.TotalFloor > 1)
+        if (_isLoadingSave)
         {
+            // 读档：从 JSON 文件恢复点数
+            _isLoadingSave = false;
             int savedPoints = PointsPersistence.LoadPoints();
-            UpgradePointManager.SetPoints(savedPoints);
+            UpgradePointManager.SetPointsDirect(savedPoints);
             Log.Info($"InfiniteUpgrade: RunStarted (loaded save) — restored {savedPoints} points.");
         }
         else
         {
+            // 新局：重置为 5
             PointsPersistence.DeleteSavedPoints();
-            UpgradePointManager.Initialize();
+            UpgradePointManager.InitializeDirect();
             Log.Info("InfiniteUpgrade: RunStarted (new run) — points reset to 5.");
         }
     }
