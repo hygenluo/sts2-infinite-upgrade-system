@@ -1,5 +1,16 @@
 # DEBUG (InfiniteUpgradeSystem)
 
+## 2026-07-12: Phase 0-1 -- CardOperationHelper 解耦 + 点数系统
+
+- **改动**：
+  - 新建 `CardOperationHelper.cs`：抽取升级逻辑为独立工具类（SelectCardFromDeck, PerformInfiniteUpgrade, ResetUpgradeLevel, ShowUpgradeVfx）
+  - 新建 `RunStateHook.cs`：Harmony patch CombatManager.EndCombatInternal 发放点数 + RunManager.Launch 重置点数
+  - UpgradeUIHandler 精简了 ~80 行，移除内联的升级方法和重复 import
+- **已知限制（技术债务）**：
+  - 点数使用 static 变量存储。存档读档后会丢失（新局 RunStarted 事件会重置为 5）。后续需接入 BaseLib 或游戏内置 SaveManager 持久化
+  - 升级等级重置使用反射访问 `_currentUpgradeLevel`（CardOperationHelper.ResetUpgradeLevel），字段名可能随游戏更新变化
+- **验证结果**：编译 0 Error 0 Warning，部署成功
+
 ## YYYY-MM-DD: Initial setup
 
 - **Phenomenon**: N/A (first record)
