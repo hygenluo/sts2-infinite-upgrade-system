@@ -49,34 +49,42 @@ public static class CardOperationHelper
 
     /// <summary>
     /// 执行无限升级。
-    /// 保存并恢复原始 CurrentUpgradeLevel——让游戏存档只记录卡牌原本的升级状态，
-    /// 我们的额外升级由 CardUpgradeTracker 管理并在读档时重新应用。
+    ///
+    /// 策略：
+    /// - 卡牌之前未被升级过（originalLevel == 0）：让 CurrentUpgradeLevel 自然变为 1，
+    ///   游戏存档记录。不追踪到 CardUpgradeTracker（避免读档时重复应用）。
+    ///   卡牌外观变为"已升级"（IsUpgraded = true）。
+    /// - 卡牌之前已被升级过（originalLevel > 0）：升级后恢复到 originalLevel，
+    ///   追踪到 CardUpgradeTracker。读档时游戏恢复 originalLevel 次升级，
+    ///   CardUpgradeTracker 恢复额外次数。
     /// </summary>
     public static void PerformInfiniteUpgrade(CardModel card)
     {
         card.AssertMutable();
 
         var pileType = card.Pile?.Type ?? PileType.Deck;
-
-        // 1. 保存原始升级等级
         int originalLevel = card.CurrentUpgradeLevel;
+        bool wasAlreadyUpgraded = originalLevel > 0;
 
-        // 2. 如果已达最大等级，临时重置以通过 UpgradeInternal 的 setter 校验
+        // 如果已达最大等级，临时重置以通过 UpgradeInternal 的 setter 校验
         if (originalLevel >= card.MaxUpgradeLevel)
             WriteUpgradeLevelField(card, 0);
 
-        // 3. 执行升级（OnUpgrade 效果生效，CurrentUpgradeLevel 临时变化）
+        // 执行升级（OnUpgrade 效果生效）
         card.UpgradeInternal();
         card.FinalizeUpgradeInternal();
 
-        // 4. 恢复原始升级等级——游戏存档不记录我们的额外升级
-        WriteUpgradeLevelField(card, originalLevel);
-
-        // 5. 追踪额外升级次数（持久化到 card_upgrades_{seed}.json）
         var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
-        CardUpgradeTracker.RecordUpgrade(card, seed);
 
-        // 6. 刷新视觉
+        if (wasAlreadyUpgraded)
+        {
+            // 恢复原始等级——额外的升级由 CardUpgradeTracker 管理
+            WriteUpgradeLevelField(card, originalLevel);
+            CardUpgradeTracker.RecordUpgrade(card, seed);
+        }
+        // else: 卡牌之前未被升级 → CurrentUpgradeLevel 自然为 1
+        // 游戏存档会记录 level=1，读档时自动恢复，无需 CardUpgradeTracker
+
         var ncard = NCard.FindOnTable(card);
         if (ncard != null)
             ncard.UpdateVisuals(pileType, CardPreviewMode.Normal);
@@ -86,20 +94,24 @@ public static class CardOperationHelper
 
     /// <summary>
     /// 仅执行升级逻辑（供读档时 CardUpgradeTracker.ReapplyAllUpgrades 使用）。
-    /// 不追踪、不恢复——调用方负责管理升级计数。
+    /// 与 PerformInfiniteUpgrade 逻辑一致：已在追踪中的升级都是"额外"升级，
+    /// 需要恢复原始等级。
     /// </summary>
     public static void UpgradeWithoutTracking(CardModel card)
     {
         card.AssertMutable();
 
         int originalLevel = card.CurrentUpgradeLevel;
+        bool wasAlreadyUpgraded = originalLevel > 0;
+
         if (originalLevel >= card.MaxUpgradeLevel)
             WriteUpgradeLevelField(card, 0);
 
         card.UpgradeInternal();
         card.FinalizeUpgradeInternal();
 
-        WriteUpgradeLevelField(card, originalLevel);
+        if (wasAlreadyUpgraded)
+            WriteUpgradeLevelField(card, originalLevel);
     }
 
     /// <summary>通过反射直接写入 _currentUpgradeLevel。</summary>
