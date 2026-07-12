@@ -73,7 +73,7 @@ public static class RunStateHook
         var player = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault();
         if (player != null)
         {
-            CardUpgradeTracker.ReapplyAllUpgrades(player);
+            CardUpgradeTracker.ReapplyAll(player);
             CardOperationHelper.RefreshAllVisuals(player);
         }
     }

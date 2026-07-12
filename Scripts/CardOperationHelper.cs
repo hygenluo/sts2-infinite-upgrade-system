@@ -70,8 +70,8 @@ public static class CardOperationHelper
         }
         // else: 首次升级 → CurrentUpgradeLevel 保持为 1，卡牌外观自动变为"已升级"
 
-        // 始终追踪：CardUpgradeTracker 是唯一权威升级记录
-        CardUpgradeTracker.RecordUpgrade(card, seed);
+        // 始终追踪：CardUpgradeTracker 是唯一权威修改记录
+        CardUpgradeTracker.RecordModification(card, seed, CardUpgradeTracker.ModType.Upgrade);
 
         var ncard = NCard.FindOnTable(card);
         if (ncard != null)
@@ -88,7 +88,8 @@ public static class CardOperationHelper
     {
         if (!UpgradePointManager.TrySpendPoints(cost)) return false;
         var result = await PickAndModifyCard("攻击", c => c.DynamicVars.Damage?.BaseValue,
-            c => c.DynamicVars.Damage.BaseValue += 1m);
+            c => c.DynamicVars.Damage.BaseValue += 1m,
+            CardUpgradeTracker.ModType.DamagePlus);
         if (!result) UpgradePointManager.AddPoints(cost);
         return result;
     }
@@ -97,13 +98,15 @@ public static class CardOperationHelper
     {
         if (!UpgradePointManager.TrySpendPoints(cost)) return false;
         var result = await PickAndModifyCard("格挡", c => c.DynamicVars.Block?.BaseValue,
-            c => c.DynamicVars.Block.BaseValue += 1m);
+            c => c.DynamicVars.Block.BaseValue += 1m,
+            CardUpgradeTracker.ModType.BlockPlus);
         if (!result) UpgradePointManager.AddPoints(cost);
         return result;
     }
 
     private static async Task<bool> PickAndModifyCard(string propName,
-        Func<CardModel, decimal?> getter, Action<CardModel> modifier)
+        Func<CardModel, decimal?> getter, Action<CardModel> modifier,
+        CardUpgradeTracker.ModType? modType = null)
     {
         var player = GetLocalPlayer();
         if (player == null) return false;
@@ -120,6 +123,11 @@ public static class CardOperationHelper
                 return false;
             }
             modifier(card);
+            if (modType != null)
+            {
+                var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
+                CardUpgradeTracker.RecordModification(card, seed, modType.Value);
+            }
             UpgradeUIHandler.Instance?.RefreshPointsLabel();
             UpgradeUIHandler.Instance?.HideUI();
             return true;
@@ -160,6 +168,9 @@ public static class CardOperationHelper
                 { GD.Print("此卡牌没有该词条。"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
                 card.RemoveKeyword(keyword);
             }
+            var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
+            var modType = add ? CardUpgradeTracker.ModType.KeywordAdd : CardUpgradeTracker.ModType.KeywordRemove;
+            CardUpgradeTracker.RecordModification(card, seed, modType, keyword.ToString());
             UpgradeUIHandler.Instance?.RefreshPointsLabel();
             UpgradeUIHandler.Instance?.HideUI();
             return true;
@@ -185,6 +196,8 @@ public static class CardOperationHelper
             var cur = card.EnergyCost.Canonical;
             if (cur <= 0) { GD.Print("此卡牌已是0费。"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
             card.EnergyCost.SetCustomBaseCost(cur - 1);
+            var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
+            CardUpgradeTracker.RecordModification(card, seed, CardUpgradeTracker.ModType.EnergyReduce);
             UpgradeUIHandler.Instance?.RefreshPointsLabel();
             UpgradeUIHandler.Instance?.HideUI();
             return true;
@@ -200,7 +213,8 @@ public static class CardOperationHelper
     {
         if (!UpgradePointManager.TrySpendPoints(cost)) return false;
         var result = await PickAndModifyCard("抽牌", c => c.DynamicVars.Cards?.BaseValue,
-            c => c.DynamicVars.Cards.BaseValue += 1m);
+            c => c.DynamicVars.Cards.BaseValue += 1m,
+            CardUpgradeTracker.ModType.DrawPlus);
         if (!result) UpgradePointManager.AddPoints(cost);
         return result;
     }
@@ -217,6 +231,8 @@ public static class CardOperationHelper
             if (card == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
             if (!card.IsMutable) card = card.ToMutable();
             card.BaseReplayCount += 1;
+            var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
+            CardUpgradeTracker.RecordModification(card, seed, CardUpgradeTracker.ModType.ReplayPlus);
             UpgradeUIHandler.Instance?.RefreshPointsLabel();
             UpgradeUIHandler.Instance?.HideUI();
             return true;
@@ -228,7 +244,8 @@ public static class CardOperationHelper
     {
         if (!UpgradePointManager.TrySpendPoints(cost)) return false;
         var result = await PickAndModifyCard("次数", c => c.DynamicVars.Repeat?.BaseValue,
-            c => c.DynamicVars.Repeat.BaseValue += 1m);
+            c => c.DynamicVars.Repeat.BaseValue += 1m,
+            CardUpgradeTracker.ModType.RepeatPlus);
         if (!result) UpgradePointManager.AddPoints(cost);
         return result;
     }
