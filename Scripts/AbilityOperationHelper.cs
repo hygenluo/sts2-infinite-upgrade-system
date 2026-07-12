@@ -71,16 +71,17 @@ public static class AbilityOperationHelper
             await PlayerCmd.GainStars(stars, player);
     }
 
-    /// <summary>Harmony Postfix: 如果购买了格挡不消失，阻止格挡清除。</summary>
-    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Hooks.Hook), nameof(MegaCrit.Sts2.Core.Hooks.Hook.ShouldClearBlock))]
-    [HarmonyPostfix]
-    public static void PatchShouldClearBlock(Creature creature, ref bool __result)
+    /// <summary>Harmony Prefix: 如果购买了格挡跨回合不消失，跳过 ClearBlock。</summary>
+    [HarmonyPatch(typeof(Creature), "ClearBlock")]
+    [HarmonyPrefix]
+    public static bool PatchClearBlock(Creature __instance)
     {
-        if (GetBoost("blockKeep") > 0 && creature.IsPlayer)
+        if (GetBoost("blockKeep") > 0 && __instance.IsPlayer)
         {
-            GD.Print($"[IU] BlockKeep: preventing clear for {creature.IsPlayer}");
-            __result = false;
+            GD.Print($"[IU] BlockKeep: skipping ClearBlock for player (block={__instance.Block})");
+            return false; // 跳过原方法，格挡不清零
         }
+        return true;
     }
 
     public static void ResetForNewRun() => s_appliedThisRun = false;
