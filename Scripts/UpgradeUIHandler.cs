@@ -399,14 +399,9 @@ public sealed partial class UpgradeUIHandler : Control
 
     private void ShowUI()
     {
-        if (CombatManager.Instance is { IsOverOrEnding: false })
-        {
-            GD.Print("战斗中无法打开无限升级系统。");
-            return;
-        }
         if (RunManager.Instance?.DebugOnlyGetState() == null)
         {
-            GD.Print("没有正在进行的游戏，无法打开升级系统。");
+            GD.Print("非对局中，无法打开升级系统。");
             return;
         }
         _isOpen = true;
