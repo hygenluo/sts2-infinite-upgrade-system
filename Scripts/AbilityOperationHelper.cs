@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Godot;
@@ -10,12 +11,29 @@ using MegaCrit.Sts2.Core.Logging;
 namespace InfiniteUpgradeSystem;
 
 /// <summary>
-/// 能力操作引擎。购买后在战斗开始时应用。
+/// 能力操作引擎。
+/// 购买的能力在战斗开始时通过 PowerCmd.Apply 应用到玩家 Creature。
+/// 使用 Reflection 调用以兼容实际运行时 PowerCmd 签名。
 /// </summary>
 public static class AbilityOperationHelper
 {
     private static readonly Dictionary<string, int> s_boosts = new();
     private static readonly JsonSerializerOptions s_jsonOptions = new() { PropertyNameCaseInsensitive = true };
+
+    // Power 类型全名（运行时反射用）
+    private static readonly Dictionary<string, string> s_powerTypes = new()
+    {
+        ["strength"] = "MegaCrit.Sts2.Core.Models.Powers.StrengthPower",
+        ["dexterity"] = "MegaCrit.Sts2.Core.Models.Powers.DexterityPower",
+        ["focus"]     = "MegaCrit.Sts2.Core.Models.Powers.FocusPower",
+        ["plating"]   = "MegaCrit.Sts2.Core.Models.Powers.PlatingPower",
+        ["thorns"]    = "MegaCrit.Sts2.Core.Models.Powers.ThornsPower",
+        ["artifact"]  = "MegaCrit.Sts2.Core.Models.Powers.ArtifactPower",
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    // 公共
+    // ═══════════════════════════════════════════════════════════════
 
     public static bool TryPurchase(string key, int cost)
     {
@@ -25,7 +43,6 @@ public static class AbilityOperationHelper
         return true;
     }
 
-    /// <summary>即时效果（hp/energy/orbSlot）。</summary>
     public static async Task ApplyImmediate(string key)
     {
         var player = CardOperationHelper.GetLocalPlayer();
@@ -49,17 +66,61 @@ public static class AbilityOperationHelper
         }
     }
 
-    /// <summary>战斗开始时应用所有已购买的能力（幂等，由 AbilityTracker 追踪已应用次数）。</summary>
-    public static void ApplyAllOnCombatStart()
+    /// <summary>战斗开始时应用所有已购买的 Power 类能力。</summary>
+    public static async void ApplyAllOnCombatStart()
     {
         var player = CardOperationHelper.GetLocalPlayer();
         if (player?.Creature == null) return;
 
-        // HP/Energy/OrbSlot 在购买时即时应用，不需要战斗中重复
-        // Power-based abilities (strength/dex/focus/plating/thorns/artifact)
-        // 需要在战斗中通过 PowerCmd.Apply 应用，暂时留空
-        GD.Print($"[InfiniteUpgrade] Ability boosts active: {string.Join(", ", s_boosts)}");
+        foreach (var kv in s_boosts)
+        {
+            if (kv.Value <= 0) continue;
+            if (!s_powerTypes.TryGetValue(kv.Key, out var typeName)) continue;
+
+            try
+            {
+                var powerType = Type.GetType(typeName + ", sts2");
+                if (powerType == null)
+                {
+                    Log.Warn($"InfiniteUpgrade: Power type not found: {typeName}");
+                    continue;
+                }
+
+                // PowerCmd.Apply<T>(Creature target, decimal amount, Creature? applier, CardModel? cardSource, bool silent=false)
+                var method = typeof(PowerCmd).GetMethod("Apply",
+                    BindingFlags.Public | BindingFlags.Static,
+                    null,
+                    new[] { typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature),
+                            typeof(decimal),
+                            typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature),
+                            typeof(MegaCrit.Sts2.Core.Models.CardModel),
+                            typeof(bool) },
+                    null);
+
+                if (method == null)
+                {
+                    // Try the 5-param version with CardModel?
+                    Log.Warn($"InfiniteUpgrade: PowerCmd.Apply method not found for {kv.Key}");
+                    continue;
+                }
+
+                var generic = method.MakeGenericMethod(powerType);
+                await (Task)generic.Invoke(null, new object?[]
+                {
+                    player.Creature, (decimal)kv.Value, player.Creature, null, false
+                })!;
+                GD.Print($"[InfiniteUpgrade] Applied {kv.Key} x{kv.Value}");
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"InfiniteUpgrade: Apply {kv.Key} error: {ex.Message}");
+            }
+        }
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 持久化
+    // ═══════════════════════════════════════════════════════════════
 
     public static void SaveCheckpoint(string seed)
     {
