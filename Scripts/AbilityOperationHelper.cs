@@ -71,17 +71,24 @@ public static class AbilityOperationHelper
             await PlayerCmd.GainStars(stars, player);
     }
 
-    /// <summary>Harmony Prefix: 如果购买了格挡跨回合不消失，跳过 ClearBlock。</summary>
-    [HarmonyPatch(typeof(Creature), "ClearBlock")]
+    /// <summary>保存格挡值供 Postfix 恢复（Prefix/Postfix 协作）。</summary>
+    [HarmonyPatch(typeof(Creature), nameof(Creature.AfterTurnStart))]
     [HarmonyPrefix]
-    public static bool PatchClearBlock(Creature __instance)
+    public static void BeforeAfterTurnStart(Creature __instance, out int __state)
     {
-        if (GetBoost("blockKeep") > 0 && __instance.IsPlayer)
+        __state = __instance.Block;
+    }
+
+    /// <summary>如果购买了格挡跨回合不消失，恢复格挡。</summary>
+    [HarmonyPatch(typeof(Creature), nameof(Creature.AfterTurnStart))]
+    [HarmonyPostfix]
+    public static void AfterAfterTurnStart(Creature __instance, int __state)
+    {
+        if (GetBoost("blockKeep") > 0 && __instance.IsPlayer && __state > 0)
         {
-            GD.Print($"[IU] BlockKeep: skipping ClearBlock for player (block={__instance.Block})");
-            return false; // 跳过原方法，格挡不清零
+            __instance.Block = __state;
+            GD.Print($"[IU] BlockKeep: restored block {__state}");
         }
-        return true;
     }
 
     public static void ResetForNewRun() => s_appliedThisRun = false;
