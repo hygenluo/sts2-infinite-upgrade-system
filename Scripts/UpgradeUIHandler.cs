@@ -1,5 +1,9 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using Godot;
+using InfiniteUpgradeSystem.UiComponents;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Runs;
@@ -9,43 +13,37 @@ namespace InfiniteUpgradeSystem;
 public sealed partial class UpgradeUIHandler : Control
 {
     private const Key ToggleHotkey = Key.P;
-    private const float PanelWidth = 520f;
-    private const float PanelHeight = 440f;
+    private const float PanelWidth = 640f;
+    private const float PanelHeight = 620f;
 
     private static UpgradeUIHandler? s_instance;
 
+    // UI 组件
     private ColorRect? _background;
     private Panel? _mainPanel;
     private Label? _pointsLabel;
-    private Button? _upgradeButton;
-
+    private LineEdit? _searchBox;
+    private ScrollContainer? _scrollContainer;
+    private VBoxContainer? _scrollContent;
     private bool _isOpen;
+
+    // 操作项数据 + 控件映射
+    private readonly List<UpgradeItemData> _allItems = new();
+    private readonly Dictionary<UpgradeItemData, Control> _itemControls = new();
 
     public static void CreateInstance()
     {
-        if (s_instance != null)
-            return;
-
-        s_instance = new UpgradeUIHandler
-        {
-            Name = "InfiniteUpgradeUI"
-        };
-
+        if (s_instance != null) return;
+        s_instance = new UpgradeUIHandler { Name = "InfiniteUpgradeUI" };
         var tree = (SceneTree?)Engine.GetMainLoop();
-        if (tree?.Root != null)
-        {
-            tree.Root.CallDeferred(Node.MethodName.AddChild, s_instance);
-        }
-        else
-        {
-            Log.Warn("InfiniteUpgradeUI: SceneTree root not available during init.");
-        }
+        tree?.Root?.CallDeferred(Node.MethodName.AddChild, s_instance);
     }
 
     public static UpgradeUIHandler? Instance => s_instance;
 
     public override void _Ready()
     {
+        PopulateItems();
         BuildUI();
         SetUIVisible(false);
         Log.Info("InfiniteUpgradeUI: ready.");
@@ -62,7 +60,6 @@ public sealed partial class UpgradeUIHandler : Control
 
     public override void _Input(InputEvent @event)
     {
-        // 如果 UI 开着但 RunState 已不存在（回到主菜单等），自动隐藏
         if (_isOpen && RunManager.Instance?.DebugOnlyGetState() == null)
         {
             HideUI();
@@ -74,7 +71,17 @@ public sealed partial class UpgradeUIHandler : Control
             GetViewport().SetInputAsHandled();
             ToggleUI();
         }
+
+        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape, Echo: false } && _isOpen)
+        {
+            GetViewport().SetInputAsHandled();
+            HideUI();
+        }
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // UI 构建
+    // ═══════════════════════════════════════════════════════════════
 
     private void BuildUI()
     {
@@ -82,6 +89,7 @@ public sealed partial class UpgradeUIHandler : Control
         AnchorRight = 1;
         AnchorBottom = 1;
 
+        // 全屏半透明背景
         _background = new ColorRect
         {
             Color = new Color(0, 0, 0, 0.65f),
@@ -90,6 +98,7 @@ public sealed partial class UpgradeUIHandler : Control
         _background.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(_background);
 
+        // 居中面板
         _mainPanel = new Panel
         {
             CustomMinimumSize = new Vector2(PanelWidth, PanelHeight),
@@ -97,59 +106,233 @@ public sealed partial class UpgradeUIHandler : Control
         };
         AddChild(_mainPanel);
 
-        var margin = 9;
-        var ownSize = new Vector2(PanelWidth - margin * 2, PanelHeight - margin * 2);
-        var vbox = new VBoxContainer
-        {
-            AnchorLeft = 0, AnchorTop = 0, AnchorRight = 1, AnchorBottom = 1,
-            Size = ownSize,
-            Position = new Vector2(margin, margin),
-        };
-        _mainPanel.AddChild(vbox);
+        var outerMargin = 12;
+        var innerWidth = PanelWidth - outerMargin * 2;
+        var innerHeight = PanelHeight - outerMargin * 2;
 
+        var outerVBox = new VBoxContainer
+        {
+            Position = new Vector2(outerMargin, outerMargin),
+            Size = new Vector2(innerWidth, innerHeight),
+        };
+        _mainPanel.AddChild(outerVBox);
+
+        // 标题
         var title = new Label
         {
             Text = "无限升级系统",
             HorizontalAlignment = HorizontalAlignment.Center,
         };
-        title.AddThemeFontSizeOverride("font_size", 28);
-        vbox.AddChild(title);
+        title.AddThemeFontSizeOverride("font_size", 26);
+        outerVBox.AddChild(title);
 
-        vbox.AddChild(new HSeparator());
+        // 点数 + 提示行
+        var infoRow = new HBoxContainer();
+        _pointsLabel = new Label { HorizontalAlignment = HorizontalAlignment.Left };
+        _pointsLabel.AddThemeFontSizeOverride("font_size", 18);
+        infoRow.AddChild(_pointsLabel);
 
-        _pointsLabel = new Label
+        var hintLabel = new Label
         {
-            HorizontalAlignment = HorizontalAlignment.Center,
+            Text = "[P] 打开/关闭  [Esc] 关闭",
+            HorizontalAlignment = HorizontalAlignment.Right,
+            SizeFlagsHorizontal = SizeFlags.Expand | SizeFlags.Fill,
         };
-        _pointsLabel.AddThemeFontSizeOverride("font_size", 22);
-        RefreshPointsLabel();
-        vbox.AddChild(_pointsLabel);
+        hintLabel.AddThemeColorOverride("font_color", new Color(0.6f, 0.6f, 0.6f));
+        infoRow.AddChild(hintLabel);
+        outerVBox.AddChild(infoRow);
 
-        vbox.AddChild(new Label
-        {
-            Text = "--- 卡牌操作 ---",
-            HorizontalAlignment = HorizontalAlignment.Center,
-        });
+        outerVBox.AddChild(new HSeparator());
 
-        _upgradeButton = new Button
+        // 搜索框
+        _searchBox = new LineEdit
         {
-            Text = "选择一张牌，令其升级 [" + CardOperationHelper.UpgradeCost + "点]",
-            TooltipText = "从牌组中选择一张卡牌，消耗点数令其升级（可无限次升级同一张牌）",
+            PlaceholderText = "搜索加点项目...",
+            ClearButtonEnabled = true,
         };
-        _upgradeButton.Pressed += OnUpgradeClicked;
-        vbox.AddChild(_upgradeButton);
+        _searchBox.TextChanged += OnSearchTextChanged;
+        outerVBox.AddChild(_searchBox);
 
-        vbox.AddChild(new Control { SizeFlagsVertical = Control.SizeFlags.Expand });
+        outerVBox.AddChild(new HSeparator());
 
-        vbox.AddChild(new HSeparator());
-
-        var closeButton = new Button
+        // 可滚动区域
+        _scrollContainer = new ScrollContainer
         {
-            Text = "关闭",
+            SizeFlagsVertical = SizeFlags.Expand | SizeFlags.Fill,
+            FollowFocus = true,
         };
+        _scrollContent = new VBoxContainer();
+        _scrollContainer.AddChild(_scrollContent);
+        outerVBox.AddChild(_scrollContainer);
+
+        // 生成分类按钮
+        BuildCategorySections();
+
+        outerVBox.AddChild(new HSeparator());
+
+        // 关闭按钮
+        var closeButton = new Button { Text = "关闭" };
         closeButton.Pressed += OnCloseClicked;
-        vbox.AddChild(closeButton);
+        outerVBox.AddChild(closeButton);
     }
+
+    private void BuildCategorySections()
+    {
+        var categories = _allItems.Select(i => i.Category).Distinct();
+        foreach (var category in categories)
+        {
+            var header = new Label
+            {
+                Text = $"── {category} ──",
+                HorizontalAlignment = HorizontalAlignment.Center,
+            };
+            header.AddThemeColorOverride("font_color", new Color(0.8f, 0.7f, 0.3f));
+            header.AddThemeFontSizeOverride("font_size", 16);
+            _scrollContent!.AddChild(header);
+
+            foreach (var item in _allItems.Where(i => i.Category == category))
+            {
+                var button = new Button
+                {
+                    Text = item.ButtonLabel,
+                    TooltipText = item.DisplayName,
+                };
+                button.Pressed += async () =>
+                {
+                    GD.Print($"[InfiniteUpgrade] Clicked: {item.DisplayName}");
+                    await item.OnClick();
+                    RefreshPointsLabel();
+                };
+                _scrollContent.AddChild(button);
+                _itemControls[item] = button;
+            }
+
+            _scrollContent.AddChild(new HSeparator());
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 搜索
+    // ═══════════════════════════════════════════════════════════════
+
+    private void OnSearchTextChanged(string text)
+    {
+        var filter = text.Trim().ToLower();
+        foreach (var item in _allItems)
+        {
+            if (_itemControls.TryGetValue(item, out var control))
+            {
+                control.Visible = string.IsNullOrEmpty(filter)
+                    || item.SearchText.Contains(filter);
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 操作项定义（47 项）—— onClick 在 Phase 3+ 实现
+    // ═══════════════════════════════════════════════════════════════
+
+    private async Task Placeholder(string name)
+    {
+        GD.Print($"[InfiniteUpgrade] {name} — 尚未实现");
+        await Task.CompletedTask;
+    }
+
+    private void PopulateItems()
+    {
+        // === 卡牌操作 (29) ===
+        _allItems.Add(new("卡牌操作", "升级卡牌", 5, async () =>
+        {
+            if (!UpgradePointManager.TrySpendPoints(CardOperationHelper.UpgradeCost)) return;
+            var player = CardOperationHelper.GetLocalPlayer();
+            if (player == null) return;
+            SetUIVisible(false);
+            try
+            {
+                var card = await CardOperationHelper.SelectCardFromDeck(player);
+                if (card == null)
+                {
+                    UpgradePointManager.AddPoints(CardOperationHelper.UpgradeCost);
+                    RefreshPointsLabel();
+                    SetUIVisible(true);
+                    return;
+                }
+                CardOperationHelper.PerformInfiniteUpgrade(card);
+                RefreshPointsLabel();
+                HideUI();
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Upgrade error: {ex.Message}");
+                UpgradePointManager.AddPoints(CardOperationHelper.UpgradeCost);
+                RefreshPointsLabel();
+                SetUIVisible(true);
+            }
+        }));
+
+        _allItems.Add(new("卡牌操作", "攻击+1", 1, () => Placeholder("攻击+1")));
+        _allItems.Add(new("卡牌操作", "格挡+1", 1, () => Placeholder("格挡+1")));
+        _allItems.Add(new("卡牌操作", "易伤+1", 2, () => Placeholder("易伤+1")));
+        _allItems.Add(new("卡牌操作", "虚弱+1", 2, () => Placeholder("虚弱+1")));
+        _allItems.Add(new("卡牌操作", "回复+1", 3, () => Placeholder("回复+1")));
+        _allItems.Add(new("卡牌操作", "中毒+1", 2, () => Placeholder("中毒+1")));
+        _allItems.Add(new("卡牌操作", "铸造+1", 1, () => Placeholder("铸造+1")));
+        _allItems.Add(new("卡牌操作", "活力+1", 1, () => Placeholder("活力+1")));
+        _allItems.Add(new("卡牌操作", "召唤+1", 2, () => Placeholder("召唤+1")));
+        _allItems.Add(new("卡牌操作", "灾厄+1", 1, () => Placeholder("灾厄+1")));
+        _allItems.Add(new("卡牌操作", "集中+1", 3, () => Placeholder("集中+1")));
+        _allItems.Add(new("卡牌操作", "抽牌+1", 7, () => Placeholder("抽牌+1")));
+        _allItems.Add(new("卡牌操作", "重放+1", 7, () => Placeholder("重放+1")));
+        _allItems.Add(new("卡牌操作", "次数+1", 6, () => Placeholder("次数+1")));
+        _allItems.Add(new("卡牌操作", "耗能-1", 12, () => Placeholder("耗能-1")));
+        _allItems.Add(new("卡牌操作", "无实体+1", 15, () => Placeholder("无实体+1")));
+        _allItems.Add(new("卡牌操作", "获得能量+1", 15, () => Placeholder("获得能量+1")));
+        _allItems.Add(new("卡牌操作", "添加消耗", 12, () => Placeholder("添加消耗")));
+        _allItems.Add(new("卡牌操作", "移除消耗", 20, () => Placeholder("移除消耗")));
+        _allItems.Add(new("卡牌操作", "添加奇巧", 7, () => Placeholder("添加奇巧")));
+        _allItems.Add(new("卡牌操作", "添加保留", 7, () => Placeholder("添加保留")));
+        _allItems.Add(new("卡牌操作", "移除保留", 7, () => Placeholder("移除保留")));
+        _allItems.Add(new("卡牌操作", "添加固有", 7, () => Placeholder("添加固有")));
+        _allItems.Add(new("卡牌操作", "移除固有", 7, () => Placeholder("移除固有")));
+        _allItems.Add(new("卡牌操作", "添加虚无", 8, () => Placeholder("添加虚无")));
+        _allItems.Add(new("卡牌操作", "移除虚无", 8, () => Placeholder("移除虚无")));
+        _allItems.Add(new("卡牌操作", "添加永恒", 10, () => Placeholder("添加永恒")));
+        _allItems.Add(new("卡牌操作", "移除永恒", 30, () => Placeholder("移除永恒")));
+
+        // === 能力操作 (12) ===
+        _allItems.Add(new("能力操作", "力量+1", 10, () => Placeholder("力量+1")));
+        _allItems.Add(new("能力操作", "敏捷+1", 10, () => Placeholder("敏捷+1")));
+        _allItems.Add(new("能力操作", "集中+1", 15, () => Placeholder("集中+1")));
+        _allItems.Add(new("能力操作", "生命+1", 2, () => Placeholder("生命+1")));
+        _allItems.Add(new("能力操作", "每回合能量+1", 40, () => Placeholder("每回合能量+1")));
+        _allItems.Add(new("能力操作", "每回合辉星+1", 20, () => Placeholder("每回合辉星+1")));
+        _allItems.Add(new("能力操作", "每回合铸造+5", 20, () => Placeholder("每回合铸造+5")));
+        _allItems.Add(new("能力操作", "覆甲+1", 15, () => Placeholder("覆甲+1")));
+        _allItems.Add(new("能力操作", "荆棘+1", 10, () => Placeholder("荆棘+1")));
+        _allItems.Add(new("能力操作", "人工制品+1", 20, () => Placeholder("人工制品+1")));
+        _allItems.Add(new("能力操作", "充能球栏位+1", 15, () => Placeholder("充能球栏位+1")));
+        _allItems.Add(new("能力操作", "格挡不消失", 40, () => Placeholder("格挡不消失")));
+
+        // === 牌组操作 (5) ===
+        _allItems.Add(new("牌组操作", "从牌组删除一张牌", 0, () => Placeholder("删除牌")));
+        _allItems.Add(new("牌组操作", "添加一张普通牌", 0, () => Placeholder("添加普通牌")));
+        _allItems.Add(new("牌组操作", "添加一张罕见牌", 0, () => Placeholder("添加罕见牌")));
+        _allItems.Add(new("牌组操作", "添加一张稀有牌", 0, () => Placeholder("添加稀有牌")));
+        _allItems.Add(new("牌组操作", "添加一张其他牌", 0, () => Placeholder("添加其他牌")));
+
+        // === 测试操作 (1) ===
+        _allItems.Add(new("测试操作", "点数+999", 0, () =>
+        {
+            UpgradePointManager.AddPoints(999);
+            RefreshPointsLabel();
+            GD.Print($"[InfiniteUpgrade] +999 points → {UpgradePointManager.CurrentPoints}");
+            return Task.CompletedTask;
+        }));
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // UI 状态
+    // ═══════════════════════════════════════════════════════════════
 
     private void ToggleUI()
     {
@@ -164,15 +347,14 @@ public sealed partial class UpgradeUIHandler : Control
             GD.Print("战斗中无法打开无限升级系统。");
             return;
         }
-
         if (RunManager.Instance?.DebugOnlyGetState() == null)
         {
             GD.Print("没有正在进行的游戏，无法打开升级系统。");
             return;
         }
-
         _isOpen = true;
         RefreshPointsLabel();
+        if (_searchBox != null) _searchBox.Text = "";
         SetUIVisible(true);
         ResizeBackground();
         CenterMainPanel();
@@ -190,10 +372,13 @@ public sealed partial class UpgradeUIHandler : Control
         MouseFilter = visible ? MouseFilterEnum.Stop : MouseFilterEnum.Ignore;
     }
 
-    private void OnCloseClicked()
+    public void RefreshPointsLabel()
     {
-        HideUI();
+        if (_pointsLabel != null)
+            _pointsLabel.Text = $"当前点数: {UpgradePointManager.CurrentPoints}";
     }
+
+    private void OnCloseClicked() => HideUI();
 
     private void ResizeBackground()
     {
@@ -208,63 +393,5 @@ public sealed partial class UpgradeUIHandler : Control
         _mainPanel.Position = new Vector2(
             (vpSize.X - PanelWidth) / 2,
             (vpSize.Y - PanelHeight) / 2);
-    }
-
-    private void RefreshPointsLabel()
-    {
-        if (_pointsLabel != null)
-            _pointsLabel.Text = "当前点数: " + UpgradePointManager.CurrentPoints;
-    }
-
-    private async void OnUpgradeClicked()
-    {
-        if (!UpgradePointManager.TrySpendPoints(CardOperationHelper.UpgradeCost))
-        {
-            GD.Print("点数不足！需要 " + CardOperationHelper.UpgradeCost + " 点，当前只有 " + UpgradePointManager.CurrentPoints + " 点。");
-            return;
-        }
-
-        var player = CardOperationHelper.GetLocalPlayer();
-        if (player == null)
-        {
-            Log.Warn("InfiniteUpgradeUI: no local player found, refunding.");
-            UpgradePointManager.AddPoints(CardOperationHelper.UpgradeCost);
-            RefreshPointsLabel();
-            return;
-        }
-
-        try
-        {
-            // 陷阱1：在唤起游戏原生卡牌选择界面之前，先隐藏自定义UI遮罩层
-            SetUIVisible(false);
-
-            var card = await CardOperationHelper.SelectCardFromDeck(player);
-
-            if (card == null)
-            {
-                UpgradePointManager.AddPoints(CardOperationHelper.UpgradeCost);
-                RefreshPointsLabel();
-                GD.Print("未选择卡牌，点数已退回。");
-                SetUIVisible(true);
-                return;
-            }
-
-            CardOperationHelper.PerformInfiniteUpgrade(card);
-
-            RefreshPointsLabel();
-            GD.Print("卡牌 [" + card.Id.Entry + "] 升级成功！剩余点数: " + UpgradePointManager.CurrentPoints);
-            Log.Info("InfiniteUpgrade: upgraded card '" + card.Id.Entry + "', points remaining: " + UpgradePointManager.CurrentPoints);
-
-            // 升级成功后关闭UI回到游戏
-            HideUI();
-        }
-        catch (Exception ex)
-        {
-            Log.Error("InfiniteUpgrade: upgrade error: " + ex.Message + "\n" + ex.StackTrace);
-            UpgradePointManager.AddPoints(CardOperationHelper.UpgradeCost);
-            RefreshPointsLabel();
-            GD.PrintErr("升级过程出错：" + ex.Message);
-            SetUIVisible(true);
-        }
     }
 }
