@@ -21,11 +21,16 @@ public sealed partial class UpgradeUIHandler : Control
     // UI 组件
     private ColorRect? _background;
     private Panel? _mainPanel;
+    private Control? _titleBar;
     private Label? _pointsLabel;
     private LineEdit? _searchBox;
     private ScrollContainer? _scrollContainer;
     private VBoxContainer? _scrollContent;
     private bool _isOpen;
+
+    // 拖拽
+    private bool _isDragging;
+    private Vector2 _dragOffset;
 
     // 操作项数据 + 控件映射
     private readonly List<UpgradeItemData> _allItems = new();
@@ -60,23 +65,69 @@ public sealed partial class UpgradeUIHandler : Control
 
     public override void _Input(InputEvent @event)
     {
+        // 自动隐藏：RunState 不存在了（回到主菜单）
         if (_isOpen && RunManager.Instance?.DebugOnlyGetState() == null)
         {
             HideUI();
             return;
         }
 
+        // 快捷键
         if (@event is InputEventKey { Pressed: true, Keycode: ToggleHotkey, Echo: false })
         {
             GetViewport().SetInputAsHandled();
             ToggleUI();
         }
-
         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape, Echo: false } && _isOpen)
         {
             GetViewport().SetInputAsHandled();
             HideUI();
         }
+
+        // 拖拽标题栏移动面板
+        if (_isOpen && _mainPanel != null)
+        {
+            if (@event is InputEventMouseButton mb && mb.ButtonIndex == MouseButton.Left)
+            {
+                if (mb.Pressed && IsMouseInTitleBar())
+                {
+                    _isDragging = true;
+                    _dragOffset = _mainPanel.Position - GetGlobalMousePosition();
+                    GetViewport().SetInputAsHandled();
+                }
+                else
+                {
+                    _isDragging = false;
+                }
+            }
+
+            if (@event is InputEventMouseMotion && _isDragging)
+            {
+                _mainPanel.Position = GetGlobalMousePosition() + _dragOffset;
+                ClampPanelToScreen();
+                GetViewport().SetInputAsHandled();
+            }
+        }
+    }
+
+    /// <summary>鼠标是否在标题栏区域（面板顶部 42px）。</summary>
+    private bool IsMouseInTitleBar()
+    {
+        if (_mainPanel == null) return false;
+        var mousePos = GetGlobalMousePosition();
+        var panelPos = _mainPanel.GlobalPosition;
+        return mousePos.X >= panelPos.X && mousePos.X <= panelPos.X + PanelWidth
+            && mousePos.Y >= panelPos.Y && mousePos.Y <= panelPos.Y + 42;
+    }
+
+    /// <summary>限制面板不超出屏幕。</summary>
+    private void ClampPanelToScreen()
+    {
+        if (_mainPanel == null) return;
+        var vpSize = GetViewportRect().Size;
+        _mainPanel.Position = new Vector2(
+            Mathf.Clamp(_mainPanel.Position.X, -PanelWidth + 80, vpSize.X - 80),
+            Mathf.Clamp(_mainPanel.Position.Y, 0, vpSize.Y - 60));
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -117,14 +168,19 @@ public sealed partial class UpgradeUIHandler : Control
         };
         _mainPanel.AddChild(outerVBox);
 
-        // 标题
+        // 标题栏（可拖拽）
+        _titleBar = new Control { CustomMinimumSize = new Vector2(0, 32) };
         var title = new Label
         {
-            Text = "无限升级系统",
+            Text = "⋮⋮ 无限升级系统 （拖拽此处移动）",
             HorizontalAlignment = HorizontalAlignment.Center,
+            MouseFilter = MouseFilterEnum.Pass,
         };
-        title.AddThemeFontSizeOverride("font_size", 26);
-        outerVBox.AddChild(title);
+        title.AddThemeFontSizeOverride("font_size", 22);
+        title.AddThemeColorOverride("font_color", new Color(0.75f, 0.75f, 0.75f));
+        _titleBar.AddChild(title);
+        title.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        outerVBox.AddChild(_titleBar);
 
         // 点数 + 提示行
         var infoRow = new HBoxContainer();
