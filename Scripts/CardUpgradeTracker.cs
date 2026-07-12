@@ -22,6 +22,12 @@ public static class CardUpgradeTracker
         return Path.Combine(dir, $"card_upgrades_{seed}.json");
     }
 
+    public static int GetUpgradeCount(CardModel card)
+    {
+        s_upgrades.TryGetValue(card.Id.Entry, out int count);
+        return count;
+    }
+
     public static void RecordUpgrade(CardModel card, string seed)
     {
         var key = card.Id.Entry;

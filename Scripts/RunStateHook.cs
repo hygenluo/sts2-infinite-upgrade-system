@@ -55,10 +55,13 @@ public static class RunStateHook
         UpgradePointManager.SetPointsDirect(points);
         GD.Print($"[InfiniteUpgrade] Points = {points}");
 
-        // 恢复卡牌额外升级（CardUpgradeTracker 管理的部分）
+        // 恢复卡牌额外升级 + 刷新外观
         CardUpgradeTracker.Load(seed);
         var player = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault();
         if (player != null)
+        {
             CardUpgradeTracker.ReapplyAllUpgrades(player);
+            CardOperationHelper.RefreshAllVisuals(player);
+        }
     }
 }
