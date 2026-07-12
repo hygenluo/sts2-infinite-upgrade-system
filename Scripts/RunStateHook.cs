@@ -60,6 +60,7 @@ public static class RunStateHook
         var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
         CardUpgradeTracker.SaveCheckpoint(seed);
         AbilityOperationHelper.SaveCheckpoint(seed);
+        AbilityOperationHelper.ResetForNextCombat();  // 下场战斗重新应用初始能力
         GD.Print($"[InfiniteUpgrade] Checkpoint SAVED (combat won, +{points}) — pts={UpgradePointManager.CurrentPoints}");
     }
 

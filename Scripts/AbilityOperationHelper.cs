@@ -133,6 +133,9 @@ public static class AbilityOperationHelper
 
     public static void ResetForNewRun() => s_appliedThisRun = false;
 
+    /// <summary>战斗结束后重置，确保下场战斗重新应用初始能力。</summary>
+    public static void ResetForNextCombat() => s_appliedThisRun = false;
+
     public static void SaveCheckpoint(string seed)
     {
         try
