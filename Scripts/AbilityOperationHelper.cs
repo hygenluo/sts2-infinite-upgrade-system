@@ -99,12 +99,13 @@ public static class AbilityOperationHelper
             if (template == null) { GD.PrintErr($"[IU] Power<T>() returned null for {key}"); return; }
             GD.Print($"[IU] Template: {template.GetType().Name}");
 
-            // 3. ToMutable()
-            var toMutable = template.GetType().GetMethod("ToMutable", Type.EmptyTypes);
-            if (toMutable == null) { GD.PrintErr("[IU] ToMutable not found"); return; }
-            var mutable = toMutable.Invoke(template, null);
-            if (mutable == null) { GD.PrintErr("[IU] ToMutable null"); return; }
-            GD.Print($"[IU] Mutable: {mutable.GetType().Name}, IsMutable={((dynamic)mutable).IsMutable}");
+            // 3. MutableClone() — AbstractModel 上的 public 方法
+            var cloneMethod = template.GetType().GetMethod("MutableClone",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (cloneMethod == null) { GD.PrintErr("[IU] MutableClone not found"); return; }
+            var mutable = cloneMethod.Invoke(template, null);
+            if (mutable == null) { GD.PrintErr("[IU] MutableClone null"); return; }
+            GD.Print($"[IU] Mutable: {mutable.GetType().Name}");
 
             // 4. ApplyInternal(Creature, decimal, bool)
             var applyMethod = mutable.GetType().GetMethod("ApplyInternal",
