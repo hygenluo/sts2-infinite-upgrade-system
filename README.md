@@ -1,38 +1,77 @@
-# Infinite Upgrade System (Wu Xian Sheng Ji Xi Tong)
+# 无限升级系统 (InfiniteUpgradeSystem)
 
-An STS2 mod that adds an infinite upgrade system with currency points.
+《杀戮尖塔 2》Mod：通过消耗点数对卡牌和能力进行无限升级。
 
-## Features (Iteration 1)
+## 功能
 
-- Press **P** to open the upgrade UI (outside combat only)
-- Displays current available upgrade points
-- Select a card from your deck and spend **5 points** to upgrade it
-- Infinitely repeatable upgrades — upgrades reset the card's upgrade counter
-- Debug: add 999 points via the UI button
+### 点数系统
+- 新局获得 5 点，击败普通怪 +1，精英 +5，BOSS +20
+- 点数本局有效，存档/读档自动保存
+- 检查点机制：战斗开始/结束时保存，未到检查点的修改退出后回滚
 
-## Dependencies
+### 卡牌操作 (16项)
+| 操作 | 点数 | 说明 |
+|------|------|------|
+| 升级卡牌 | 5 | 无限次升级（OnUpgrade 效果叠加） |
+| 攻击+1 | 1 | 卡牌伤害永久 +1 |
+| 格挡+1 | 1 | 卡牌格挡永久 +1 |
+| 抽牌+1 | 7 | 卡牌抽牌数 +1 |
+| 重放+1 | 7 | 卡牌重放次数 +1 |
+| 耗能-1 | 12 | 卡牌费用 -1（最低 0） |
+| 添加/移除消耗 | 12/20 | 添加/移除卡牌消耗词条 |
+| 添加/移除保留 | 7/7 | 添加/移除卡牌保留词条 |
+| 添加/移除固有 | 7/7 | 添加/移除卡牌固有词条 |
+| 添加/移除虚无 | 8/8 | 添加/移除卡牌虚无词条 |
+| 添加/移除永恒 | 10/30 | 添加/移除卡牌永恒词条 |
+| 添加奇巧 | 7 | 添加奇巧 (Sly) 词条 |
 
-- [Slay the Spire 2](https://store.steampowered.com/app/2862050)
-- [BaseLib](https://github.com/Alchyr/BaseLib-StS2) (auto-adapts to latest version, minimum v3.3.2)
+### 能力操作 (11项)
+| 操作 | 点数 | 说明 |
+|------|------|------|
+| 初始力量+1 | 10 | 每场战斗开始获得力量 |
+| 初始敏捷+1 | 10 | 每场战斗开始获得敏捷 |
+| 初始集中+1 | 15 | 每场战斗开始获得集中 |
+| 初始覆甲+1 | 15 | 每场战斗开始获得覆甲 |
+| 初始荆棘+1 | 10 | 每场战斗开始获得荆棘 |
+| 初始人工制品+1 | 20 | 每场战斗开始获得人工制品 |
+| 生命+1 | 5 | HP 上限和当前 HP +1 |
+| 每回合能量+1 | 40 | 每回合能量上限 +1 |
+| 充能球栏位+1 | 15 | 充能球栏位数 +1 |
+| 每回合辉星+1 | 20 | 每场战斗开始获得辉星 |
+| 格挡跨回合不消失 | 40 | 壁垒效果：回合结束格挡不清零 |
 
-## Build
+### 牌组操作 (1项)
+| 操作 | 说明 |
+|------|------|
+| 从牌组删除一张牌 | 选择一张牌从牌组中移除（免费） |
 
+### 测试操作 (1项)
+| 操作 | 说明 |
+|------|------|
+| 点数+999 | 快速获取测试点数 |
+
+## UI
+- 按 **P** 打开/关闭（仅非战斗中可用）
+- 按 **Esc** 关闭
+- 标题栏可拖拽移动面板
+- 搜索框支持实时筛选
+- 面板可滚动浏览
+
+## 依赖
+- 游戏本体（STS2）
+- [BaseLib](https://github.com/Alchyr/BaseLib-StS2)（自动适配最新版，仅设最小值 v3.3.2）
+
+## 构建
 ```powershell
+cd InfiniteUpgradeSystem
 dotnet build -c Debug
 ```
 
-The mod is automatically deployed to `%Sts2Dir%/mods/InfiniteUpgradeSystem/`.
+自动部署到 `mods/InfiniteUpgradeSystem/`。
 
-## Game Test
-
-1. Make sure BaseLib is enabled in the mod manager
-2. Enable InfiniteUpgradeSystem
-3. Start a run
-4. Press **P** to open the upgrade UI
-5. Click "Select a card to upgrade" to test
-
-## Points System
-
-- Start each run with **5** points
-- Spend **5** points to upgrade a card (infinitely repeatable)
-- Points persist across combats within the same run
+## 游戏内测试
+1. 启用 BaseLib + InfiniteUpgradeSystem
+2. 开始新局
+3. 非战斗中按 P 打开 UI
+4. 消耗点数进行升级/加点
+5. 进入战斗验证效果

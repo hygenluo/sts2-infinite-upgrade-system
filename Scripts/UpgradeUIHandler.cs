@@ -290,12 +290,6 @@ public sealed partial class UpgradeUIHandler : Control
     // 操作项定义（47 项）—— onClick 在 Phase 3+ 实现
     // ═══════════════════════════════════════════════════════════════
 
-    private async Task Placeholder(string name)
-    {
-        GD.Print($"[InfiniteUpgrade] {name} — 尚未实现");
-        await Task.CompletedTask;
-    }
-
     private void PopulateItems()
     {
         // === 卡牌操作 (29) ===

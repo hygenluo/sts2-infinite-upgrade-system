@@ -1,40 +1,62 @@
-# DEBUG (InfiniteUpgradeSystem)
+# DEBUG 记录 (InfiniteUpgradeSystem)
 
-## 2026-07-12: Phase 0-1 -- CardOperationHelper 解耦 + 点数系统
+## 持久化方案演进
 
-- **改动**：
-  - 新建 `CardOperationHelper.cs`：抽取升级逻辑为独立工具类（SelectCardFromDeck, PerformInfiniteUpgrade, ResetUpgradeLevel, ShowUpgradeVfx）
-  - 新建 `RunStateHook.cs`：Harmony patch CombatManager.EndCombatInternal 发放点数 + RunManager.Launch 重置点数
-  - UpgradeUIHandler 精简了 ~80 行，移除内联的升级方法和重复 import
-- **已知限制（技术债务）**：
-  - 点数使用 static 变量存储。存档读档后会丢失（新局 RunStarted 事件会重置为 5）。后续需接入 BaseLib 或游戏内置 SaveManager 持久化
-  - 升级等级重置使用反射访问 `_currentUpgradeLevel`（CardOperationHelper.ResetUpgradeLevel），字段名可能随游戏更新变化
-- **验证结果**：编译 0 Error 0 Warning，部署成功
+### v1-v5: 全局文件
+- 问题：跨 Run 数据污染（新局继承旧局数据）
+- 尝试过：TotalFloor 检测、Harmony NGame 拦截（async 方法匹配失败）
 
-## YYYY-MM-DD: Initial setup
+### v6+: 每 Run 独立文件
+- 方案：`points_{seed}.json`，按 `RunState.Rng.StringSeed` 区分
+- 新局 = 新 seed = 新文件 = 5 点起步
+- 读档 = 同 seed = 同文件 = 恢复
 
-- **Phenomenon**: N/A (first record)
-- **Cause**: N/A
-- **Fix**: N/A
-- **Result**: Build passes, deployed to mods.
+### 检查点机制
+- 问题：每次修改立即写盘，退出重进无法回滚
+- 方案：战斗开始/结束时保存，中间修改只在内存
 
-## 2026-07-12: 修复 Trap 1 — UI 遮罩层阻塞卡牌选择界面
+## 卡牌持久化
 
-- **Phenomenon**: 在无限升级UI中点击升级按钮后，游戏原生卡牌选择界面（NDeckCardSelectScreen）被弹出，但鼠标点击卡牌无响应，无法完成选择。
-- **Cause**: 自定义 UI 的 `ColorRect` 背景遮罩设置了 `MouseFilter.Stop`，该遮罩层始终存在于场景树中。当 `CardSelectCmd.FromDeckGeneric` 唤起原生卡牌选择界面时，该界面作为覆盖层（Overlay）被推入 `NOverlayStack`，但由于我们的遮罩层也处于事件捕获路径中，拦截了鼠标事件，导致玩家无法与卡牌交互。
-- **Fix**: 在 `OnUpgradeClicked()` 中调用 `CardSelectCmd.FromDeckGeneric` 之前，先调用 `SetUIVisible(false)` 隐藏整个UI（包括背景遮罩）。选择完成后根据结果恢复UI或关闭UI。
-- **Result**: 卡牌选择界面可以正常响应鼠标点击，升级流程完整可用。
+### CardModel.ToSerializable 限制
+- 只存 Id + CurrentUpgradeLevel + Enchantment
+- DynamicVar 修改不被保存 → 需要 CardUpgradeTracker 独立追踪
 
-## 2026-07-12: 使用自定义本地化文本作为卡牌选择提示
+### CurrentUpgradeLevel 重置
+- 问题：不重置 → MaxUpgradeLevel 校验 → FromSerializable 循环翻倍
+- 方案：升级后重置为 0，CardUpgradeTracker 记录次数，读档时重放
 
-- **Phenomenon**: 卡牌选择界面的提示文本使用了原版内置的 `CardSelectorPrefs.UpgradeSelectionPrompt`（"选择一张牌升级"），模组自己的本地化 key 未被使用。
-- **Cause**: 代码直接使用了 `CardSelectorPrefs.UpgradeSelectionPrompt`（`new LocString("card_selection", "TO_UPGRADE")`），没有使用模组自定义的 `cards.json` 中的 key。
-- **Fix**: 将 `CardSelectorPrefs` 的 `Prompt` 参数改为 `new LocString("cards", "INFINITEUPGRADESYSTEM-UPGRADE_SELECT_PROMPT")`，同时在 `zhs/cards.json` 和 `eng/cards.json` 中添加对应的文本 key。
-- **Result**: 卡牌选择界面显示模组自定义的提示文本，本地化文件正确生效。
+### 同名卡牌区分
+- 问题：templateId 追踪 → 所有同名卡牌共享升级
+- 方案：deckIndex 追踪 + templateId 校验
 
-## Known issues
+### JSON 反序列化
+- 问题：System.Text.Json 默认 camelCase，C# 属性 PascalCase → 反序列化失败
+- 方案：PropertyNameCaseInsensitive = true
 
-- `DebugOnlyGetState()` is used to access the run state. This may change in future BaseLib versions.
-- Card upgrade level reset uses reflection on `_currentUpgradeLevel`. The field name could change between game versions.
-- The UI attaches to `SceneTree.Root` — on scene transitions, the node persists, which may cause layer-ordering issues.
-- `UpgradePointManager` uses static variables (临时方案) for point storage. Points reset on game restart but NOT on new run. Will be replaced with proper `RunSavedData` in a future step. (参见常见陷阱3：全局静态变量存储本局数据)
+## 能力 Power 应用
+
+### PowerCmd.Apply 运行时签名不匹配
+- 问题：编译通过但运行时找不到重载（需要 PlayerChoiceContext）
+- 方案：ModelDb.Power<T>().MutableClone().ApplyInternal(creature, amount)
+
+### ToMutable() → MutableClone()
+- 问题：AbstractModel.ToMutable() 不存在
+- 方案：使用 MutableClone() 方法
+
+### 每场战斗重新应用
+- 问题：Power 在战斗结束后清除，s_appliedThisRun 阻止重新应用
+- 方案：CombatWon 时 ResetForNextCombat()
+
+## UI
+
+### has_pck=false 本地化不加载
+- 问题：LocString 自定义 key 无法解析
+- 方案：使用游戏内置 CardSelectorPrefs 静态 LocString
+
+### UI 遮罩阻塞卡牌选择
+- 问题：ColorRect MouseFilter.Stop 拦截原生选择界面
+- 方案：SetUIVisible(false) → SelectCard → SetUIVisible(true)
+
+### Harmony async 方法匹配
+- 问题：NGame.StartRun/LoadRun 是 async → Prefix 不触发
+- 方案：改用 C# 事件订阅 (CombatWon, RunStarted)
