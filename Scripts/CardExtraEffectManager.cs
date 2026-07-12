@@ -48,14 +48,20 @@ public static class CardExtraEffectManager
     public static int GetEffectCount(CardModel card)
         => s_records.TryGetValue(card.Id.Entry, out var list) ? list.Count : 0;
 
-    /// <summary>Harmony Postfix: 卡牌打出后注入额外效果（按模板ID匹配）。</summary>
+    /// <summary>Harmony Postfix: 卡牌打出后注入额外效果。</summary>
     [HarmonyPatch(typeof(CardModel), nameof(CardModel.OnPlayWrapper))]
     [HarmonyPostfix]
-    public static async void InjectExtraEffects(CardModel __instance)
+    public static void InjectExtraEffects(CardModel __instance)
     {
-        var player = __instance.Owner;
-        if (player == null) return;
         if (!s_records.TryGetValue(__instance.Id.Entry, out var effects)) return;
+        // 使用 Task.Run 确保 async 效果应用不被 Harmony 吞掉
+        _ = Task.Run(async () => await ApplyEffects(__instance, effects));
+    }
+
+    private static async Task ApplyEffects(CardModel card, List<string> effects)
+    {
+        var player = card.Owner;
+        if (player == null) return;
 
         foreach (var effStr in effects)
         {
@@ -92,7 +98,7 @@ public static class CardExtraEffectManager
                         await PlayerCmd.GainEnergy(1, player);
                         break;
                     case EffectType.Forge:
-                        await ForgeCmd.Forge(1, player, __instance);
+                        await ForgeCmd.Forge(1, player, card);
                         break;
                 }
             }
