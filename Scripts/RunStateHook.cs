@@ -29,12 +29,14 @@ public static class RunStateHook
         GD.Print("[InfiniteUpgrade] Subscribed.");
     }
 
-    /// <summary>战斗开始 → 保存检查点</summary>
+    /// <summary>战斗开始 → 应用能力 + 保存检查点</summary>
     private static void OnCombatSetUp(CombatState state)
     {
+        AbilityOperationHelper.ApplyAllOnCombatStart();
         UpgradePointManager.SaveCheckpoint();
         var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
         CardUpgradeTracker.SaveCheckpoint(seed);
+        AbilityOperationHelper.SaveCheckpoint(seed);
         GD.Print($"[InfiniteUpgrade] Checkpoint SAVED (combat start) — pts={UpgradePointManager.CurrentPoints}");
     }
 
@@ -57,6 +59,7 @@ public static class RunStateHook
         UpgradePointManager.SaveCheckpoint();
         var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
         CardUpgradeTracker.SaveCheckpoint(seed);
+        AbilityOperationHelper.SaveCheckpoint(seed);
         GD.Print($"[InfiniteUpgrade] Checkpoint SAVED (combat won, +{points}) — pts={UpgradePointManager.CurrentPoints}");
     }
 
@@ -70,6 +73,7 @@ public static class RunStateHook
         GD.Print($"[InfiniteUpgrade] Points = {points}");
 
         CardUpgradeTracker.Load(seed);
+        AbilityOperationHelper.Load(seed);
         var player = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault();
         if (player != null)
         {
