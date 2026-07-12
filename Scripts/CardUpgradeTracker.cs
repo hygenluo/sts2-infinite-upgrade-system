@@ -45,7 +45,12 @@ public static class CardUpgradeTracker
         {
             if (s_upgrades.TryGetValue(card.Id.Entry, out int count) && count > 0)
             {
-                for (int i = 0; i < count; i++)
+                // 去重：首次升级时 CurrentUpgradeLevel 被设为 1（视觉需要），
+                // 游戏存档也会记录 level=1。读档时游戏已自动应用了 1 次升级，
+                // 因此 CardUpgradeTracker 恢复时跳过这一次，避免重复。
+                int gameApplied = (card.CurrentUpgradeLevel > 0) ? 1 : 0;
+                int toApply = count - gameApplied;
+                for (int i = 0; i < toApply; i++)
                     CardOperationHelper.UpgradeWithoutTracking(card);
                 applied++;
             }

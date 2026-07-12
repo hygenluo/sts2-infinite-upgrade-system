@@ -1,6 +1,5 @@
 using System.Linq;
 using System.Reflection;
-using HarmonyLib;
 using MegaCrit.Sts2.Core.CardSelection;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
@@ -20,10 +19,13 @@ namespace InfiniteUpgradeSystem;
 /// <summary>
 /// 卡牌操作执行引擎。
 ///
-/// 持久化策略（v16）：
-/// - 升级后 CurrentUpgradeLevel 始终重置为 0，由 CardUpgradeTracker 管理一切。
-/// - Harmony patch get_IsUpgraded：有追踪升级的卡牌强制返回 true，确保外观正确。
-/// - 不修改 CurrentUpgradeLevel → 游戏存档记录 0 → 读档不会重复应用升级。
+/// v14 核心逻辑：
+/// - 首次升级（originalLevel==0）：CurrentUpgradeLevel 自然变为 1，卡牌外观升级。
+///   游戏存档记录 level=1。始终追踪到 CardUpgradeTracker。
+/// - 非首次升级（originalLevel>0）：升级后恢复 originalLevel。
+///   CardUpgradeTracker 追踪额外次数。
+///
+/// 读档去重：ReapplyAllUpgrades 中通过 skipCount 处理游戏已自动应用的升级次数。
 /// </summary>
 public static class CardOperationHelper
 {
@@ -50,19 +52,24 @@ public static class CardOperationHelper
         card.AssertMutable();
         var pileType = card.Pile?.Type ?? PileType.Deck;
         int originalLevel = card.CurrentUpgradeLevel;
+        bool wasAlreadyUpgraded = originalLevel > 0;
 
-        // 已达最大等级 → 临时重置以通过 setter 校验
         if (originalLevel >= card.MaxUpgradeLevel)
             WriteUpgradeLevelField(card, 0);
 
         card.UpgradeInternal();
         card.FinalizeUpgradeInternal();
 
-        // 重置为 0 — 游戏存档不参与我们的升级持久化
-        WriteUpgradeLevelField(card, 0);
-
-        // CardUpgradeTracker 是唯一升级记录来源
         var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
+
+        if (wasAlreadyUpgraded)
+        {
+            // 非首次：恢复到原始等级，追踪额外升级
+            WriteUpgradeLevelField(card, originalLevel);
+        }
+        // else: 首次升级 → CurrentUpgradeLevel 保持为 1，卡牌外观自动变为"已升级"
+
+        // 始终追踪：CardUpgradeTracker 是唯一权威升级记录
         CardUpgradeTracker.RecordUpgrade(card, seed);
 
         var ncard = NCard.FindOnTable(card);
@@ -72,28 +79,31 @@ public static class CardOperationHelper
         ShowUpgradeVfx(card);
     }
 
+    /// <summary>
+    /// 与 PerformInfiniteUpgrade 逻辑一致：升级后恢复 originalLevel。
+    /// 不追踪 — 调用方负责管理计数。
+    /// </summary>
     public static void UpgradeWithoutTracking(CardModel card)
     {
         card.AssertMutable();
         int originalLevel = card.CurrentUpgradeLevel;
+
         if (originalLevel >= card.MaxUpgradeLevel)
             WriteUpgradeLevelField(card, 0);
 
         card.UpgradeInternal();
         card.FinalizeUpgradeInternal();
-        WriteUpgradeLevelField(card, 0);
+
+        if (originalLevel > 0)
+            WriteUpgradeLevelField(card, originalLevel);
+        // else: 首次升级 → 保持 level=1
     }
 
-    /// <summary>
-    /// Harmony patch：有 CardUpgradeTracker 追踪的卡牌强制 IsUpgraded = true。
-    /// 不修改 CurrentUpgradeLevel → 存档安全 → 读档不会重复应用升级。
-    /// </summary>
-    [HarmonyPatch(typeof(CardModel), "get_IsUpgraded")]
-    [HarmonyPostfix]
-    public static void PatchIsUpgraded(CardModel __instance, ref bool __result)
+    public static void WriteUpgradeLevelField(CardModel card, int value)
     {
-        if (!__result && CardUpgradeTracker.GetUpgradeCount(__instance) > 0)
-            __result = true;
+        typeof(CardModel)
+            .GetField("_currentUpgradeLevel", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.SetValue(card, value);
     }
 
     /// <summary>读档后刷新牌组所有卡牌的外观。</summary>
@@ -105,13 +115,6 @@ public static class CardOperationHelper
             if (ncard != null)
                 ncard.UpdateVisuals(card.Pile?.Type ?? PileType.Deck, CardPreviewMode.Normal);
         }
-    }
-
-    public static void WriteUpgradeLevelField(CardModel card, int value)
-    {
-        typeof(CardModel)
-            .GetField("_currentUpgradeLevel", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?.SetValue(card, value);
     }
 
     public static void ShowUpgradeVfx(CardModel card)
