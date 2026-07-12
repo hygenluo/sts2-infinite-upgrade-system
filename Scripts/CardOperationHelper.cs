@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Reflection;
+using Godot;
 using MegaCrit.Sts2.Core.CardSelection;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
@@ -77,6 +78,159 @@ public static class CardOperationHelper
             ncard.UpdateVisuals(pileType, CardPreviewMode.Normal);
 
         ShowUpgradeVfx(card);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Phase 3.1: 攻击+1 / 格挡+1
+    // ═══════════════════════════════════════════════════════════════
+
+    public static async Task<bool> ModifyDamage(int cost)
+    {
+        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
+        var result = await PickAndModifyCard("攻击", c => c.DynamicVars.Damage?.BaseValue,
+            c => c.DynamicVars.Damage.BaseValue += 1m);
+        if (!result) UpgradePointManager.AddPoints(cost);
+        return result;
+    }
+
+    public static async Task<bool> ModifyBlock(int cost)
+    {
+        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
+        var result = await PickAndModifyCard("格挡", c => c.DynamicVars.Block?.BaseValue,
+            c => c.DynamicVars.Block.BaseValue += 1m);
+        if (!result) UpgradePointManager.AddPoints(cost);
+        return result;
+    }
+
+    private static async Task<bool> PickAndModifyCard(string propName,
+        Func<CardModel, decimal?> getter, Action<CardModel> modifier)
+    {
+        var player = GetLocalPlayer();
+        if (player == null) return false;
+        UpgradeUIHandler.Instance?.SetUIVisible(false);
+        try
+        {
+            var card = await SelectCardFromDeck(player);
+            if (card == null) { UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+            if (!card.IsMutable) card = card.ToMutable();
+            if (getter(card) == null)
+            {
+                GD.Print($"此卡牌没有{propName}属性。");
+                UpgradeUIHandler.Instance?.SetUIVisible(true);
+                return false;
+            }
+            modifier(card);
+            UpgradeUIHandler.Instance?.RefreshPointsLabel();
+            UpgradeUIHandler.Instance?.HideUI();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Card {propName} error: {ex.Message}");
+            UpgradeUIHandler.Instance?.SetUIVisible(true);
+            return false;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Phase 3.2: Keyword 操作
+    // ═══════════════════════════════════════════════════════════════
+
+    public static async Task<bool> ToggleKeyword(int cost, CardKeyword keyword, bool add)
+    {
+        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
+        var player = GetLocalPlayer();
+        if (player == null) return false;
+        UpgradeUIHandler.Instance?.SetUIVisible(false);
+        try
+        {
+            var card = await SelectCardFromDeck(player);
+            if (card == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+            if (!card.IsMutable) card = card.ToMutable();
+
+            if (add)
+            {
+                if (card.Keywords.Contains(keyword))
+                { GD.Print("此卡牌已有该词条。"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+                card.AddKeyword(keyword);
+            }
+            else
+            {
+                if (!card.Keywords.Contains(keyword))
+                { GD.Print("此卡牌没有该词条。"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+                card.RemoveKeyword(keyword);
+            }
+            UpgradeUIHandler.Instance?.RefreshPointsLabel();
+            UpgradeUIHandler.Instance?.HideUI();
+            return true;
+        }
+        catch (Exception ex) { Log.Error($"Keyword error: {ex.Message}"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Phase 3.3: 能量消耗-1
+    // ═══════════════════════════════════════════════════════════════
+
+    public static async Task<bool> ReduceEnergyCost(int cost)
+    {
+        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
+        var player = GetLocalPlayer();
+        if (player == null) return false;
+        UpgradeUIHandler.Instance?.SetUIVisible(false);
+        try
+        {
+            var card = await SelectCardFromDeck(player);
+            if (card == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+            if (!card.IsMutable) card = card.ToMutable();
+            var cur = card.EnergyCost.Canonical;
+            if (cur <= 0) { GD.Print("此卡牌已是0费。"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+            card.EnergyCost.SetCustomBaseCost(cur - 1);
+            UpgradeUIHandler.Instance?.RefreshPointsLabel();
+            UpgradeUIHandler.Instance?.HideUI();
+            return true;
+        }
+        catch (Exception ex) { Log.Error($"Energy cost error: {ex.Message}"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Phase 3.4: 抽牌+1 / 重放+1 / 次数+1
+    // ═══════════════════════════════════════════════════════════════
+
+    public static async Task<bool> ModifyDrawCount(int cost)
+    {
+        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
+        var result = await PickAndModifyCard("抽牌", c => c.DynamicVars.Cards?.BaseValue,
+            c => c.DynamicVars.Cards.BaseValue += 1m);
+        if (!result) UpgradePointManager.AddPoints(cost);
+        return result;
+    }
+
+    public static async Task<bool> ModifyReplayCount(int cost)
+    {
+        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
+        var player = GetLocalPlayer();
+        if (player == null) return false;
+        UpgradeUIHandler.Instance?.SetUIVisible(false);
+        try
+        {
+            var card = await SelectCardFromDeck(player);
+            if (card == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+            if (!card.IsMutable) card = card.ToMutable();
+            card.BaseReplayCount += 1;
+            UpgradeUIHandler.Instance?.RefreshPointsLabel();
+            UpgradeUIHandler.Instance?.HideUI();
+            return true;
+        }
+        catch (Exception ex) { Log.Error($"Replay error: {ex.Message}"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+    }
+
+    public static async Task<bool> ModifyRepeatCount(int cost)
+    {
+        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
+        var result = await PickAndModifyCard("次数", c => c.DynamicVars.Repeat?.BaseValue,
+            c => c.DynamicVars.Repeat.BaseValue += 1m);
+        if (!result) UpgradePointManager.AddPoints(cost);
+        return result;
     }
 
     /// <summary>

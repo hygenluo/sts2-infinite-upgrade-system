@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Godot;
 using InfiniteUpgradeSystem.UiComponents;
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Runs;
 
@@ -326,8 +327,8 @@ public sealed partial class UpgradeUIHandler : Control
             }
         }));
 
-        _allItems.Add(new("卡牌操作", "攻击+1", 1, () => Placeholder("攻击+1")));
-        _allItems.Add(new("卡牌操作", "格挡+1", 1, () => Placeholder("格挡+1")));
+        _allItems.Add(new("卡牌操作", "攻击+1", 1, () => CardOperationHelper.ModifyDamage(1)));
+        _allItems.Add(new("卡牌操作", "格挡+1", 1, () => CardOperationHelper.ModifyBlock(1)));
         _allItems.Add(new("卡牌操作", "易伤+1", 2, () => Placeholder("易伤+1")));
         _allItems.Add(new("卡牌操作", "虚弱+1", 2, () => Placeholder("虚弱+1")));
         _allItems.Add(new("卡牌操作", "回复+1", 3, () => Placeholder("回复+1")));
@@ -337,23 +338,23 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(new("卡牌操作", "召唤+1", 2, () => Placeholder("召唤+1")));
         _allItems.Add(new("卡牌操作", "灾厄+1", 1, () => Placeholder("灾厄+1")));
         _allItems.Add(new("卡牌操作", "集中+1", 3, () => Placeholder("集中+1")));
-        _allItems.Add(new("卡牌操作", "抽牌+1", 7, () => Placeholder("抽牌+1")));
-        _allItems.Add(new("卡牌操作", "重放+1", 7, () => Placeholder("重放+1")));
-        _allItems.Add(new("卡牌操作", "次数+1", 6, () => Placeholder("次数+1")));
-        _allItems.Add(new("卡牌操作", "耗能-1", 12, () => Placeholder("耗能-1")));
+        _allItems.Add(new("卡牌操作", "抽牌+1", 7, () => CardOperationHelper.ModifyDrawCount(7)));
+        _allItems.Add(new("卡牌操作", "重放+1", 7, () => CardOperationHelper.ModifyReplayCount(7)));
+        _allItems.Add(new("卡牌操作", "次数+1", 6, () => CardOperationHelper.ModifyRepeatCount(6)));
+        _allItems.Add(new("卡牌操作", "耗能-1", 12, () => CardOperationHelper.ReduceEnergyCost(12)));
         _allItems.Add(new("卡牌操作", "无实体+1", 15, () => Placeholder("无实体+1")));
         _allItems.Add(new("卡牌操作", "获得能量+1", 15, () => Placeholder("获得能量+1")));
-        _allItems.Add(new("卡牌操作", "添加消耗", 12, () => Placeholder("添加消耗")));
-        _allItems.Add(new("卡牌操作", "移除消耗", 20, () => Placeholder("移除消耗")));
-        _allItems.Add(new("卡牌操作", "添加奇巧", 7, () => Placeholder("添加奇巧")));
-        _allItems.Add(new("卡牌操作", "添加保留", 7, () => Placeholder("添加保留")));
-        _allItems.Add(new("卡牌操作", "移除保留", 7, () => Placeholder("移除保留")));
-        _allItems.Add(new("卡牌操作", "添加固有", 7, () => Placeholder("添加固有")));
-        _allItems.Add(new("卡牌操作", "移除固有", 7, () => Placeholder("移除固有")));
-        _allItems.Add(new("卡牌操作", "添加虚无", 8, () => Placeholder("添加虚无")));
-        _allItems.Add(new("卡牌操作", "移除虚无", 8, () => Placeholder("移除虚无")));
-        _allItems.Add(new("卡牌操作", "添加永恒", 10, () => Placeholder("添加永恒")));
-        _allItems.Add(new("卡牌操作", "移除永恒", 30, () => Placeholder("移除永恒")));
+        _allItems.Add(new("卡牌操作", "添加消耗", 12, () => CardOperationHelper.ToggleKeyword(12, CardKeyword.Exhaust, true)));
+        _allItems.Add(new("卡牌操作", "移除消耗", 20, () => CardOperationHelper.ToggleKeyword(20, CardKeyword.Exhaust, false)));
+        _allItems.Add(new("卡牌操作", "添加奇巧", 7, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Sly, true)));
+        _allItems.Add(new("卡牌操作", "添加保留", 7, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Retain, true)));
+        _allItems.Add(new("卡牌操作", "移除保留", 7, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Retain, false)));
+        _allItems.Add(new("卡牌操作", "添加固有", 7, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Innate, true)));
+        _allItems.Add(new("卡牌操作", "移除固有", 7, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Innate, false)));
+        _allItems.Add(new("卡牌操作", "添加虚无", 8, () => CardOperationHelper.ToggleKeyword(8, CardKeyword.Ethereal, true)));
+        _allItems.Add(new("卡牌操作", "移除虚无", 8, () => CardOperationHelper.ToggleKeyword(8, CardKeyword.Ethereal, false)));
+        _allItems.Add(new("卡牌操作", "添加永恒", 10, () => CardOperationHelper.ToggleKeyword(10, CardKeyword.Eternal, true)));
+        _allItems.Add(new("卡牌操作", "移除永恒", 30, () => CardOperationHelper.ToggleKeyword(30, CardKeyword.Eternal, false)));
 
         // === 能力操作 (12) ===
         _allItems.Add(new("能力操作", "力量+1", 10, () => Placeholder("力量+1")));
@@ -416,13 +417,13 @@ public sealed partial class UpgradeUIHandler : Control
         CenterMainPanel();
     }
 
-    private void HideUI()
+    public void HideUI()
     {
         _isOpen = false;
         SetUIVisible(false);
     }
 
-    private void SetUIVisible(bool visible)
+    public void SetUIVisible(bool visible)
     {
         Visible = visible;
         MouseFilter = visible ? MouseFilterEnum.Stop : MouseFilterEnum.Ignore;
