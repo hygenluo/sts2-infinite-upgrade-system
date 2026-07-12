@@ -53,8 +53,9 @@ public static class CardExtraEffectManager
     [HarmonyPostfix]
     public static void InjectExtraEffects(CardModel __instance)
     {
+        GD.Print($"[IU] OnPlayWrapper Postfix fired: card={__instance.Id.Entry}");
         if (!s_records.TryGetValue(__instance.Id.Entry, out var effects)) return;
-        // 使用 Task.Run 确保 async 效果应用不被 Harmony 吞掉
+        GD.Print($"[IU] Card has {effects.Count} extra effects");
         _ = Task.Run(async () => await ApplyEffects(__instance, effects));
     }
 
