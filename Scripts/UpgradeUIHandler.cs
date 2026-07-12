@@ -7,6 +7,7 @@ using InfiniteUpgradeSystem.UiComponents;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Runs;
 
 namespace InfiniteUpgradeSystem;
@@ -370,10 +371,10 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(new("能力操作", "格挡不消失", 40, () => Placeholder("格挡不消失")));
 
         // === 牌组操作 (5) ===
-        _allItems.Add(new("牌组操作", "从牌组删除一张牌", 0, () => Placeholder("删除牌")));
-        _allItems.Add(new("牌组操作", "添加一张普通牌", 0, () => Placeholder("添加普通牌")));
-        _allItems.Add(new("牌组操作", "添加一张罕见牌", 0, () => Placeholder("添加罕见牌")));
-        _allItems.Add(new("牌组操作", "添加一张稀有牌", 0, () => Placeholder("添加稀有牌")));
+        _allItems.Add(new("牌组操作", "从牌组删除一张牌", 0, () => CardOperationHelper.RemoveCardFromDeck()));
+        _allItems.Add(new("牌组操作", "添加一张普通牌", 0, () => CardOperationHelper.AddRandomCard(CardRarity.Common)));
+        _allItems.Add(new("牌组操作", "添加一张罕见牌", 0, () => CardOperationHelper.AddRandomCard(CardRarity.Uncommon)));
+        _allItems.Add(new("牌组操作", "添加一张稀有牌", 0, () => CardOperationHelper.AddRandomCard(CardRarity.Rare)));
         _allItems.Add(new("牌组操作", "添加一张其他牌", 0, () => Placeholder("添加其他牌")));
 
         // === 测试操作 (1) ===

@@ -240,6 +240,53 @@ public static class CardOperationHelper
         catch (Exception ex) { Log.Error($"Replay error: {ex.Message}"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // Phase 6: 牌组操作
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>从牌组选择一张牌删除（免费）。</summary>
+    public static async Task<bool> RemoveCardFromDeck()
+    {
+        var player = GetLocalPlayer();
+        if (player == null) return false;
+        UpgradeUIHandler.Instance?.SetUIVisible(false);
+        try
+        {
+            var card = await SelectCardFromDeck(player);
+            if (card == null) { UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+            await MegaCrit.Sts2.Core.Commands.CardPileCmd.RemoveFromDeck(card);
+            UpgradeUIHandler.Instance?.HideUI();
+            return true;
+        }
+        catch (Exception ex) { Log.Error($"RemoveCard: {ex.Message}"); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+    }
+
+    /// <summary>随机添加一张指定稀有度的牌（免费）。</summary>
+    public static async Task<bool> AddRandomCard(CardRarity rarity)
+    {
+        var player = GetLocalPlayer();
+        if (player == null) return false;
+        try
+        {
+            var pool = player.Character.CardPool;
+            var candidates = pool.GetUnlockedCards(player.UnlockState, player.RunState.CardMultiplayerConstraint)
+                .Where(c => c.Rarity == rarity).ToList();
+            if (candidates.Count == 0)
+            {
+                GD.Print($"没有可用的{rarity}卡牌。");
+                return false;
+            }
+            var rng = new System.Random();
+            var pick = candidates[rng.Next(candidates.Count)];
+            var card = pick.ToMutable();
+            card.FloorAddedToDeck = player.RunState.TotalFloor;
+            player.Deck.AddInternal(card, -1, silent: true);
+            GD.Print($"已添加{rarity}牌: {card.Id.Entry}");
+            return true;
+        }
+        catch (Exception ex) { Log.Error($"AddCard: {ex.Message}"); return false; }
+    }
+
     /// <summary>
     /// 与 PerformInfiniteUpgrade 逻辑一致：升级后恢复 originalLevel。
     /// 不追踪 — 调用方负责管理计数。
