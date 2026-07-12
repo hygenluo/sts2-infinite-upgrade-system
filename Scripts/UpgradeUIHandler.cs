@@ -66,8 +66,8 @@ public sealed partial class UpgradeUIHandler : Control
 
     public override void _Input(InputEvent @event)
     {
-        // 自动隐藏：RunState 不存在了（回到主菜单）
-        if (_isOpen && RunManager.Instance?.DebugOnlyGetState() == null)
+        // 自动隐藏：战斗结束或回到主菜单
+        if (_isOpen && (CombatManager.Instance == null || CombatManager.Instance.IsOverOrEnding))
         {
             HideUI();
             return;
@@ -399,9 +399,9 @@ public sealed partial class UpgradeUIHandler : Control
 
     private void ShowUI()
     {
-        if (RunManager.Instance?.DebugOnlyGetState() == null)
+        if (CombatManager.Instance == null || CombatManager.Instance.IsOverOrEnding)
         {
-            GD.Print("非对局中，无法打开升级系统。");
+            GD.Print("只能在战斗中打开无限升级系统。");
             return;
         }
         _isOpen = true;

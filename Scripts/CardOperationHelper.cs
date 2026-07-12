@@ -34,7 +34,7 @@ public static class CardOperationHelper
 
     public static Player? GetLocalPlayer()
     {
-        var state = RunManager.Instance?.DebugOnlyGetState();
+        var state = RunManager.Instance?.State;
         if (state == null) return null;
         return LocalContext.GetMe(state) ?? state.Players.FirstOrDefault();
     }
