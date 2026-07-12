@@ -79,41 +79,73 @@ public static class AbilityOperationHelper
 
             try
             {
-                var powerType = Type.GetType(typeName + ", sts2");
+                // 在所有已加载程序集中查找 Power 类型
+                Type? powerType = null;
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    powerType = asm.GetType(typeName);
+                    if (powerType != null) break;
+                }
+
                 if (powerType == null)
                 {
-                    Log.Warn($"InfiniteUpgrade: Power type not found: {typeName}");
+                    GD.PrintErr($"[InfiniteUpgrade] Power type not found: {typeName}");
                     continue;
                 }
 
-                // PowerCmd.Apply<T>(Creature target, decimal amount, Creature? applier, CardModel? cardSource, bool silent=false)
-                var method = typeof(PowerCmd).GetMethod("Apply",
-                    BindingFlags.Public | BindingFlags.Static,
-                    null,
-                    new[] { typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature),
-                            typeof(decimal),
-                            typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature),
-                            typeof(MegaCrit.Sts2.Core.Models.CardModel),
-                            typeof(bool) },
-                    null);
-
-                if (method == null)
+                // 查找 PowerCmd.Apply 方法 — 接受任意签名，取第一个名为 Apply 的泛型方法
+                MethodInfo? applyMethod = null;
+                foreach (var m in typeof(PowerCmd).GetMethods(BindingFlags.Public | BindingFlags.Static))
                 {
-                    // Try the 5-param version with CardModel?
-                    Log.Warn($"InfiniteUpgrade: PowerCmd.Apply method not found for {kv.Key}");
+                    if (m.Name == "Apply" && m.IsGenericMethodDefinition)
+                    {
+                        applyMethod = m;
+                        break;
+                    }
+                }
+
+                if (applyMethod == null)
+                {
+                    GD.PrintErr($"[InfiniteUpgrade] PowerCmd.Apply method not found");
                     continue;
                 }
 
-                var generic = method.MakeGenericMethod(powerType);
-                await (Task)generic.Invoke(null, new object?[]
+                // 构造泛型方法并调用
+                var genericMethod = applyMethod.MakeGenericMethod(powerType);
+                var parms = genericMethod.GetParameters();
+
+                // 按参数名匹配参数值
+                var args = new object?[parms.Length];
+                for (int i = 0; i < parms.Length; i++)
                 {
-                    player.Creature, (decimal)kv.Value, player.Creature, null, false
-                })!;
+                    var pType = parms[i].ParameterType;
+                    var pName = parms[i].Name?.ToLower() ?? "";
+
+                    if (pName.Contains("target") || (pType == typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature) && args[0] == null))
+                        args[i] = player.Creature;
+                    else if (pName.Contains("amount") || pType == typeof(decimal))
+                        args[i] = (decimal)kv.Value;
+                    else if (pName.Contains("applier") || (pType == typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature) && args[i] == null))
+                        args[i] = player.Creature;
+                    else if (pName.Contains("cardsource") || pType == typeof(MegaCrit.Sts2.Core.Models.CardModel))
+                        args[i] = null;
+                    else if (pType == typeof(bool))
+                        args[i] = false;
+                    else if (pName.Contains("silent"))
+                        args[i] = false;
+                    else
+                        args[i] = pType.IsValueType ? Activator.CreateInstance(pType) : null;
+                }
+
+                var result = genericMethod.Invoke(null, args);
+                if (result is Task t)
+                    await t;
+
                 GD.Print($"[InfiniteUpgrade] Applied {kv.Key} x{kv.Value}");
             }
             catch (Exception ex)
             {
-                Log.Error($"InfiniteUpgrade: Apply {kv.Key} error: {ex.Message}");
+                GD.PrintErr($"[InfiniteUpgrade] Apply {kv.Key} error: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
             }
         }
     }
