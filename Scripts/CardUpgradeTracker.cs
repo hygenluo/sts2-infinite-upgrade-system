@@ -127,17 +127,18 @@ public static class CardUpgradeTracker
             if (!File.Exists(path)) return;
 
             var json = File.ReadAllText(path);
-            var data = JsonSerializer.Deserialize<Dictionary<string, List<CardModEntry>>>(json, s_jsonOptions);
+            // 新格式：List<{I, T, E}> (index, templateId, entries)
+            var data = JsonSerializer.Deserialize<List<SerializableRecord>>(json, s_jsonOptions);
             if (data != null)
             {
-                foreach (var kv in data)
+                foreach (var r in data)
                 {
-                    if (int.TryParse(kv.Key, out int index) && kv.Value != null)
+                    if (r.I >= 0 && !string.IsNullOrEmpty(r.T) && r.E != null)
                     {
-                        s_records[index] = new CardModRecord
+                        s_records[r.I] = new CardModRecord
                         {
-                            TemplateId = "", // 旧格式可能没有，由后续升级更新
-                            Entries = kv.Value
+                            TemplateId = r.T,
+                            Entries = r.E
                         };
                     }
                 }
@@ -154,6 +155,40 @@ public static class CardUpgradeTracker
     // ═══════════════════════════════════════════════════════════════
     // 内部
     // ═══════════════════════════════════════════════════════════════
+
+    [Serializable]
+    private class SerializableRecord
+    {
+        public int I { get; set; }            // deck index
+        public string T { get; set; } = "";   // templateId
+        public List<CardModEntry> E { get; set; } = new(); // entries
+    }
+
+    private static void SaveToDisk(string seed)
+    {
+        try
+        {
+            var path = GetFilePath(seed);
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            var list = new List<SerializableRecord>();
+            foreach (var kv in s_records)
+                list.Add(new SerializableRecord
+                {
+                    I = kv.Key,
+                    T = kv.Value.TemplateId,
+                    E = kv.Value.Entries
+                });
+
+            File.WriteAllText(path, JsonSerializer.Serialize(list, s_jsonOptions));
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"InfiniteUpgrade: failed to save: {ex.Message}");
+        }
+    }
 
     private static void ApplyModification(CardModel card, CardModEntry entry)
     {
@@ -203,27 +238,6 @@ public static class CardUpgradeTracker
                 var cur = card.EnergyCost.Canonical;
                 if (cur > 0) card.EnergyCost.SetCustomBaseCost(cur - 1);
                 break;
-        }
-    }
-
-    private static void SaveToDisk(string seed)
-    {
-        try
-        {
-            var path = GetFilePath(seed);
-            var dir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            var serializable = new Dictionary<string, List<CardModEntry>>();
-            foreach (var kv in s_records)
-                serializable[kv.Key.ToString()] = kv.Value.Entries;
-
-            File.WriteAllText(path, JsonSerializer.Serialize(serializable, s_jsonOptions));
-        }
-        catch (Exception ex)
-        {
-            Log.Error($"InfiniteUpgrade: failed to save: {ex.Message}");
         }
     }
 
