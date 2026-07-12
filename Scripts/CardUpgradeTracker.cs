@@ -27,7 +27,6 @@ public static class CardUpgradeTracker
         BlockPlus,
         DrawPlus,
         ReplayPlus,
-        RepeatPlus,
         KeywordAdd,
         KeywordRemove,
         EnergyReduce,
@@ -236,10 +235,6 @@ public static class CardUpgradeTracker
             case ModType.ReplayPlus:
                 if (!card.IsMutable) card = card.ToMutable();
                 card.BaseReplayCount += 1;
-                break;
-            case ModType.RepeatPlus:
-                if (!card.IsMutable) card = card.ToMutable();
-                card.DynamicVars.Repeat.BaseValue += 1m;
                 break;
             case ModType.KeywordAdd:
                 if (entry.Keyword != null && Enum.TryParse<CardKeyword>(entry.Keyword, out var kwAdd))

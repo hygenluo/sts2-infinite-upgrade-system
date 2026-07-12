@@ -340,7 +340,6 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(new("卡牌操作", "集中+1", 3, () => Placeholder("集中+1")));
         _allItems.Add(new("卡牌操作", "抽牌+1", 7, () => CardOperationHelper.ModifyDrawCount(7)));
         _allItems.Add(new("卡牌操作", "重放+1", 7, () => CardOperationHelper.ModifyReplayCount(7)));
-        _allItems.Add(new("卡牌操作", "次数+1", 6, () => CardOperationHelper.ModifyRepeatCount(6)));
         _allItems.Add(new("卡牌操作", "耗能-1", 12, () => CardOperationHelper.ReduceEnergyCost(12)));
         _allItems.Add(new("卡牌操作", "无实体+1", 15, () => Placeholder("无实体+1")));
         _allItems.Add(new("卡牌操作", "获得能量+1", 15, () => Placeholder("获得能量+1")));

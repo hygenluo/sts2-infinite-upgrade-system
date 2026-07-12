@@ -240,16 +240,6 @@ public static class CardOperationHelper
         catch (Exception ex) { Log.Error($"Replay error: {ex.Message}"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
     }
 
-    public static async Task<bool> ModifyRepeatCount(int cost)
-    {
-        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
-        var result = await PickAndModifyCard("次数", c => c.DynamicVars.Repeat?.BaseValue,
-            c => c.DynamicVars.Repeat.BaseValue += 1m,
-            CardUpgradeTracker.ModType.RepeatPlus);
-        if (!result) UpgradePointManager.AddPoints(cost);
-        return result;
-    }
-
     /// <summary>
     /// 与 PerformInfiniteUpgrade 逻辑一致：升级后恢复 originalLevel。
     /// 不追踪 — 调用方负责管理计数。
