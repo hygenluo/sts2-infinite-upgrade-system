@@ -93,14 +93,18 @@ public static class AbilityOperationHelper
                     continue;
                 }
 
-                // 查找 PowerCmd.Apply 方法 — 接受任意签名，取第一个名为 Apply 的泛型方法
+                // 查找 PowerCmd.Apply 方法 — 选第一个参数是 Creature（非 IEnumerable<Creature>）的泛型重载
                 MethodInfo? applyMethod = null;
                 foreach (var m in typeof(PowerCmd).GetMethods(BindingFlags.Public | BindingFlags.Static))
                 {
                     if (m.Name == "Apply" && m.IsGenericMethodDefinition)
                     {
-                        applyMethod = m;
-                        break;
+                        var p = m.GetParameters();
+                        if (p.Length > 0 && p[0].ParameterType == typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature))
+                        {
+                            applyMethod = m;
+                            break;
+                        }
                     }
                 }
 
@@ -110,31 +114,24 @@ public static class AbilityOperationHelper
                     continue;
                 }
 
-                // 构造泛型方法并调用
                 var genericMethod = applyMethod.MakeGenericMethod(powerType);
                 var parms = genericMethod.GetParameters();
-
-                // 按参数名匹配参数值
                 var args = new object?[parms.Length];
+
+                // 按参数类型填充: Creature, decimal, Creature?, CardModel?, bool
                 for (int i = 0; i < parms.Length; i++)
                 {
-                    var pType = parms[i].ParameterType;
-                    var pName = parms[i].Name?.ToLower() ?? "";
-
-                    if (pName.Contains("target") || (pType == typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature) && args[0] == null))
+                    var pt = parms[i].ParameterType;
+                    if (pt == typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature))
                         args[i] = player.Creature;
-                    else if (pName.Contains("amount") || pType == typeof(decimal))
+                    else if (pt == typeof(decimal))
                         args[i] = (decimal)kv.Value;
-                    else if (pName.Contains("applier") || (pType == typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature) && args[i] == null))
-                        args[i] = player.Creature;
-                    else if (pName.Contains("cardsource") || pType == typeof(MegaCrit.Sts2.Core.Models.CardModel))
+                    else if (pt == typeof(MegaCrit.Sts2.Core.Models.CardModel))
                         args[i] = null;
-                    else if (pType == typeof(bool))
-                        args[i] = false;
-                    else if (pName.Contains("silent"))
+                    else if (pt == typeof(bool))
                         args[i] = false;
                     else
-                        args[i] = pType.IsValueType ? Activator.CreateInstance(pType) : null;
+                        args[i] = null; // nullable Creature? or any other type
                 }
 
                 var result = genericMethod.Invoke(null, args);
