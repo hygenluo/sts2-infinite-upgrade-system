@@ -8,24 +8,37 @@ using MegaCrit.Sts2.Core.Runs;
 namespace InfiniteUpgradeSystem;
 
 /// <summary>
-/// 游戏生命周期事件管理 + 持久化。
+/// 游戏生命周期 + 检查点持久化。
 ///
-/// 核心原理：每个 Run 有唯一的 Rng.StringSeed。
-/// 持久化文件 = points_{seed}.json + card_upgrades_{seed}.json
-/// 新局 → 新 seed → 文件不存在 → 5 点起步
-/// 读档 → 同 seed → 文件存在 → 恢复点数和升级
+/// 检查点策略：
+/// - 战斗开始 (CombatSetUp)  → 保存检查点
+/// - 战斗胜利 (CombatWon)    → 保存检查点（含奖励点数）
+/// - 新局 (RunStarted + 无文件) → 初始 5 点
+/// - 读档 (RunStarted + 有文件) → 恢复到最近检查点
 ///
-/// 完全不需要检测"新局 vs 读档"——文件系统本身就是答案。
+/// 修改只存在于内存中，仅在检查点时写盘。
+/// 退出重进 → 回到最近检查点 → 未到检查点的修改自动回滚。
 /// </summary>
 public static class RunStateHook
 {
     public static void Subscribe()
     {
+        CombatManager.Instance.CombatSetUp += OnCombatSetUp;
         CombatManager.Instance.CombatWon += OnCombatWon;
         RunManager.Instance.RunStarted += OnRunStarted;
         GD.Print("[InfiniteUpgrade] Subscribed.");
     }
 
+    /// <summary>战斗开始 → 保存检查点</summary>
+    private static void OnCombatSetUp(CombatState state)
+    {
+        UpgradePointManager.SaveCheckpoint();
+        var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
+        CardUpgradeTracker.SaveCheckpoint(seed);
+        GD.Print($"[InfiniteUpgrade] Checkpoint SAVED (combat start) — pts={UpgradePointManager.CurrentPoints}");
+    }
+
+    /// <summary>战斗胜利 → 发放点数 → 保存检查点</summary>
     private static void OnCombatWon(CombatRoom room)
     {
         if (room == null) return;
@@ -39,10 +52,12 @@ public static class RunStateHook
         };
 
         if (points > 0)
-        {
             UpgradePointManager.AddPoints(points);
-            GD.Print($"[InfiniteUpgrade] CombatWon +{points} → {UpgradePointManager.CurrentPoints}");
-        }
+
+        UpgradePointManager.SaveCheckpoint();
+        var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
+        CardUpgradeTracker.SaveCheckpoint(seed);
+        GD.Print($"[InfiniteUpgrade] Checkpoint SAVED (combat won, +{points}) — pts={UpgradePointManager.CurrentPoints}");
     }
 
     private static void OnRunStarted(RunState runState)
@@ -50,12 +65,10 @@ public static class RunStateHook
         var seed = runState.Rng.StringSeed;
         GD.Print($"[InfiniteUpgrade] RunStarted — seed={seed}");
 
-        // 加载点数（按 seed 的文件存在就恢复，不存在就是 5）
         int points = PointsPersistence.LoadPoints(seed);
         UpgradePointManager.SetPointsDirect(points);
         GD.Print($"[InfiniteUpgrade] Points = {points}");
 
-        // 恢复卡牌额外升级 + 刷新外观
         CardUpgradeTracker.Load(seed);
         var player = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault();
         if (player != null)

@@ -58,8 +58,11 @@ public static class CardUpgradeTracker
         var record = s_records[index];
         record.Count++;
         s_records[index] = record;
-        Save(seed);
+        // 不立即写盘 — 由 SaveCheckpoint 在检查点时统一保存
     }
+
+    /// <summary>保存检查点。</summary>
+    public static void SaveCheckpoint(string seed) => Save(seed);
 
     public static void ReapplyAllUpgrades(Player player)
     {
