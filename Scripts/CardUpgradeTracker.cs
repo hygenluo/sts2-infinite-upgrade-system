@@ -90,6 +90,12 @@ public static class CardUpgradeTracker
         Log.Info($"InfiniteUpgrade: reapplied upgrades to {applied} cards.");
     }
 
+    private static readonly JsonSerializerOptions s_jsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        IncludeFields = true,
+    };
+
     public static void Save(string seed)
     {
         try
@@ -99,7 +105,7 @@ public static class CardUpgradeTracker
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
 
-            // 转换为可序列化的格式
+            // 转换为可序列化的格式（int key → string key for JSON）
             var serializable = new Dictionary<string, UpgradeRecordData>();
             foreach (var kv in s_records)
                 serializable[kv.Key.ToString()] = new UpgradeRecordData
@@ -108,7 +114,7 @@ public static class CardUpgradeTracker
                     Count = kv.Value.Count
                 };
 
-            File.WriteAllText(path, JsonSerializer.Serialize(serializable));
+            File.WriteAllText(path, JsonSerializer.Serialize(serializable, s_jsonOptions));
         }
         catch (Exception ex)
         {
@@ -124,7 +130,8 @@ public static class CardUpgradeTracker
             var path = GetFilePath(seed);
             if (!File.Exists(path)) return;
 
-            var data = JsonSerializer.Deserialize<Dictionary<string, UpgradeRecordData>>(File.ReadAllText(path));
+            var data = JsonSerializer.Deserialize<Dictionary<string, UpgradeRecordData>>(
+                File.ReadAllText(path), s_jsonOptions);
             if (data != null)
             {
                 foreach (var kv in data)
