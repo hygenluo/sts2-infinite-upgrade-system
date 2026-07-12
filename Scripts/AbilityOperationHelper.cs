@@ -71,25 +71,8 @@ public static class AbilityOperationHelper
             await PlayerCmd.GainStars(stars, player);
     }
 
-    /// <summary>保存格挡值供 Postfix 恢复（Prefix/Postfix 协作）。</summary>
-    [HarmonyPatch(typeof(Creature), nameof(Creature.AfterTurnStart))]
-    [HarmonyPrefix]
-    public static void BeforeAfterTurnStart(Creature __instance, out int __state)
-    {
-        __state = __instance.Block;
-    }
-
-    /// <summary>如果购买了格挡跨回合不消失，恢复格挡。</summary>
-    [HarmonyPatch(typeof(Creature), nameof(Creature.AfterTurnStart))]
-    [HarmonyPostfix]
-    public static void AfterAfterTurnStart(Creature __instance, int __state)
-    {
-        if (GetBoost("blockKeep") > 0 && __instance.IsPlayer && __state > 0)
-        {
-            __instance.Block = __state;
-            GD.Print($"[IU] BlockKeep: restored block {__state}");
-        }
-    }
+    // 格挡跨回合不消失 — 通过 BarricadePower 实现（与壁垒卡牌相同效果），
+    // 由 ApplyInitialBoosts → ApplyOnePower("blockKeep", ...) 在战斗开始时应用。
 
     public static void ResetForNewRun() => s_appliedThisRun = false;
     public static void ResetForNextCombat() => s_appliedThisRun = false;
@@ -104,6 +87,7 @@ public static class AbilityOperationHelper
             "plating" => "MegaCrit.Sts2.Core.Models.Powers.PlatingPower",
             "thorns" => "MegaCrit.Sts2.Core.Models.Powers.ThornsPower",
             "artifact" => "MegaCrit.Sts2.Core.Models.Powers.ArtifactPower",
+            "blockKeep" => "MegaCrit.Sts2.Core.Models.Powers.BarricadePower",
             _ => null
         };
         if (typeName == null) return;
