@@ -38,7 +38,6 @@ public static class RunStateHook
         var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
         CardUpgradeTracker.SaveCheckpoint(seed);
         AbilityOperationHelper.SaveCheckpoint(seed);
-        CardExtraEffectManager.Save(seed);
         GD.Print($"[InfiniteUpgrade] Checkpoint SAVED (combat start) — pts={UpgradePointManager.CurrentPoints}");
     }
 
@@ -62,7 +61,6 @@ public static class RunStateHook
         var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
         CardUpgradeTracker.SaveCheckpoint(seed);
         AbilityOperationHelper.SaveCheckpoint(seed);
-        CardExtraEffectManager.Save(seed);
         AbilityOperationHelper.ResetForNextCombat();  // 下场战斗重新应用初始能力
         GD.Print($"[InfiniteUpgrade] Checkpoint SAVED (combat won, +{points}) — pts={UpgradePointManager.CurrentPoints}");
     }
@@ -78,7 +76,6 @@ public static class RunStateHook
 
         CardUpgradeTracker.Load(seed);
         AbilityOperationHelper.Load(seed);
-        CardExtraEffectManager.Load(seed);
         AbilityOperationHelper.ResetForNewRun();
         var player = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault();
         if (player != null)
