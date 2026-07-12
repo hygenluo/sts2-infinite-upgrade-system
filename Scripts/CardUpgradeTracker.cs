@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
@@ -9,11 +10,19 @@ using MegaCrit.Sts2.Core.Models;
 namespace InfiniteUpgradeSystem;
 
 /// <summary>
-/// 卡牌升级追踪器 — 每 Run 独立文件，通过 RunState.Rng.StringSeed 区分。
+/// 卡牌升级追踪器 — 按牌组位置（deckIndex）区分同名卡牌。
+/// 每 Run 独立文件，通过 RunState.Rng.StringSeed 区分。
 /// </summary>
 public static class CardUpgradeTracker
 {
-    private static readonly Dictionary<string, int> s_upgrades = new();
+    /// <summary>deckIndex → (templateId, count)</summary>
+    private static readonly Dictionary<int, UpgradeRecord> s_records = new();
+
+    private struct UpgradeRecord
+    {
+        public string TemplateId { get; set; }
+        public int Count { get; set; }
+    }
 
     private static string GetFilePath(string seed)
     {
@@ -24,36 +33,59 @@ public static class CardUpgradeTracker
 
     public static int GetUpgradeCount(CardModel card)
     {
-        s_upgrades.TryGetValue(card.Id.Entry, out int count);
-        return count;
+        // 通过引用查找 deck 中的位置
+        var player = CardOperationHelper.GetLocalPlayer();
+        if (player == null) return 0;
+        int index = FindCardIndex(player.Deck.Cards, card);
+        if (index < 0) return 0;
+        return s_records.TryGetValue(index, out var r) ? r.Count : 0;
     }
 
     public static void RecordUpgrade(CardModel card, string seed)
     {
-        var key = card.Id.Entry;
-        s_upgrades.TryGetValue(key, out int count);
-        s_upgrades[key] = count + 1;
+        var player = CardOperationHelper.GetLocalPlayer();
+        if (player == null) return;
+
+        int index = FindCardIndex(player.Deck.Cards, card);
+        if (index < 0)
+        {
+            Log.Warn("InfiniteUpgrade: upgraded card not found in deck, cannot track by index.");
+            return;
+        }
+
+        if (!s_records.ContainsKey(index))
+            s_records[index] = new UpgradeRecord { TemplateId = card.Id.Entry, Count = 0 };
+        var record = s_records[index];
+        record.Count++;
+        s_records[index] = record;
         Save(seed);
     }
 
     public static void ReapplyAllUpgrades(Player player)
     {
-        if (s_upgrades.Count == 0) return;
+        if (s_records.Count == 0) return;
 
+        var cards = player.Deck.Cards;
         int applied = 0;
-        foreach (var card in player.Deck.Cards)
+
+        foreach (var kv in s_records)
         {
-            if (s_upgrades.TryGetValue(card.Id.Entry, out int count) && count > 0)
-            {
-                // 去重：首次升级时 CurrentUpgradeLevel 被设为 1（视觉需要），
-                // 游戏存档也会记录 level=1。读档时游戏已自动应用了 1 次升级，
-                // 因此 CardUpgradeTracker 恢复时跳过这一次，避免重复。
-                int gameApplied = (card.CurrentUpgradeLevel > 0) ? 1 : 0;
-                int toApply = count - gameApplied;
-                for (int i = 0; i < toApply; i++)
-                    CardOperationHelper.UpgradeWithoutTracking(card);
-                applied++;
-            }
+            int index = kv.Key;
+            var record = kv.Value;
+            if (record.Count == 0) continue;
+
+            // 索引越界检查
+            if (index >= cards.Count) continue;
+
+            var card = cards[index];
+            // 模板 ID 校验：确保该位置仍是同一张牌（未被删除/替换）
+            if (card.Id.Entry != record.TemplateId) continue;
+
+            int gameApplied = (card.CurrentUpgradeLevel > 0) ? 1 : 0;
+            int toApply = record.Count - gameApplied;
+            for (int i = 0; i < toApply; i++)
+                CardOperationHelper.UpgradeWithoutTracking(card);
+            applied++;
         }
         Log.Info($"InfiniteUpgrade: reapplied upgrades to {applied} cards.");
     }
@@ -66,7 +98,17 @@ public static class CardUpgradeTracker
             var dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
-            File.WriteAllText(path, JsonSerializer.Serialize(s_upgrades));
+
+            // 转换为可序列化的格式
+            var serializable = new Dictionary<string, UpgradeRecordData>();
+            foreach (var kv in s_records)
+                serializable[kv.Key.ToString()] = new UpgradeRecordData
+                {
+                    TemplateId = kv.Value.TemplateId,
+                    Count = kv.Value.Count
+                };
+
+            File.WriteAllText(path, JsonSerializer.Serialize(serializable));
         }
         catch (Exception ex)
         {
@@ -76,19 +118,51 @@ public static class CardUpgradeTracker
 
     public static void Load(string seed)
     {
-        s_upgrades.Clear();
+        s_records.Clear();
         try
         {
             var path = GetFilePath(seed);
             if (!File.Exists(path)) return;
 
-            var data = JsonSerializer.Deserialize<Dictionary<string, int>>(File.ReadAllText(path));
+            var data = JsonSerializer.Deserialize<Dictionary<string, UpgradeRecordData>>(File.ReadAllText(path));
             if (data != null)
-                foreach (var kv in data) s_upgrades[kv.Key] = kv.Value;
+            {
+                foreach (var kv in data)
+                {
+                    if (int.TryParse(kv.Key, out int index) && kv.Value != null)
+                    {
+                        s_records[index] = new UpgradeRecord
+                        {
+                            TemplateId = kv.Value.TemplateId,
+                            Count = kv.Value.Count
+                        };
+                    }
+                }
+            }
         }
         catch (Exception ex)
         {
             Log.Warn($"InfiniteUpgrade: failed to load card upgrades: {ex.Message}");
         }
+    }
+
+    public static void Delete()
+    {
+        s_records.Clear();
+    }
+
+    private static int FindCardIndex(IReadOnlyList<CardModel> cards, CardModel target)
+    {
+        for (int i = 0; i < cards.Count; i++)
+            if (ReferenceEquals(cards[i], target))
+                return i;
+        return -1;
+    }
+
+    /// <summary>JSON 序列化用。</summary>
+    private class UpgradeRecordData
+    {
+        public string TemplateId { get; set; } = "";
+        public int Count { get; set; }
     }
 }
