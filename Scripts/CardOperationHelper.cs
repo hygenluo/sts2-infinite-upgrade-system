@@ -264,7 +264,9 @@ public static class CardOperationHelper
     /// <summary>从指定卡牌池随机添加一张牌到牌组（免费）。</summary>
     public static async Task<bool> AddCardFromPool(string poolKey)
     {
+        GD.Print($"[IU] AddCardFromPool START: key={poolKey}");
         var player = GetLocalPlayer();
+        GD.Print($"[IU] AddCardFromPool player={player != null}");
         if (player == null) return false;
         try
         {

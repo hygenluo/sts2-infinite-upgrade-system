@@ -22,6 +22,6 @@ public static class Entry
         // Create the UI overlay and attach it to the scene tree
         UpgradeUIHandler.CreateInstance();
 
-        Log.Info("InfiniteUpgradeSystem mod initialized.");
+        Log.Info("InfiniteUpgradeSystem mod initialized. BUILD=v23-20260712");
     }
 }

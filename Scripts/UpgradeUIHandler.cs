@@ -372,13 +372,6 @@ public sealed partial class UpgradeUIHandler : Control
 
         // === 牌组操作 (5) ===
         _allItems.Add(new("牌组操作", "从牌组删除一张牌", 0, () => CardOperationHelper.RemoveCardFromDeck()));
-        _allItems.Add(new("牌组操作", "添加一张红色牌", 0, () => CardOperationHelper.AddCardFromPool("red")));
-        _allItems.Add(new("牌组操作", "添加一张绿色牌", 0, () => CardOperationHelper.AddCardFromPool("green")));
-        _allItems.Add(new("牌组操作", "添加一张蓝色牌", 0, () => CardOperationHelper.AddCardFromPool("blue")));
-        _allItems.Add(new("牌组操作", "添加一张紫色牌", 0, () => CardOperationHelper.AddCardFromPool("purple")));
-        _allItems.Add(new("牌组操作", "添加一张橙色牌", 0, () => CardOperationHelper.AddCardFromPool("orange")));
-        _allItems.Add(new("牌组操作", "添加一张无色牌", 0, () => CardOperationHelper.AddCardFromPool("colorless")));
-        _allItems.Add(new("牌组操作", "添加一张诅咒牌", 0, () => CardOperationHelper.AddCardFromPool("curse")));
 
         // === 测试操作 (1) ===
         _allItems.Add(new("测试操作", "点数+999", 0, () =>
