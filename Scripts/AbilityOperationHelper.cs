@@ -62,26 +62,25 @@ public static class AbilityOperationHelper
         }
     }
 
-    /// <summary>每回合开始时应用辉星+铸造效果。</summary>
-    public static async void ApplyPerTurnBoosts()
+    /// <summary>CombatSetUp时应用辉星（一次性，非每回合）。</summary>
+    public static async void ApplyStarsAtCombatStart()
     {
         var player = CardOperationHelper.GetLocalPlayer();
-        if (player?.Creature == null) return;
-
+        if (player == null) return;
         if (s_boosts.TryGetValue("stars", out int stars) && stars > 0)
             await PlayerCmd.GainStars(stars, player);
-
-        // 铸造+5 每回合 — 留空待查 ForgeCmd API
     }
 
-    /// <summary>Harmony: 阻止格挡清除（如果购买了格挡不消失）。</summary>
-    [HarmonyPatch(typeof(Creature), nameof(Creature.ClearBlock))]
-    [HarmonyPrefix]
-    public static bool PatchClearBlock(Creature __instance)
+    /// <summary>Harmony Postfix: 如果购买了格挡不消失，阻止格挡清除。</summary>
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Hooks.Hook), nameof(MegaCrit.Sts2.Core.Hooks.Hook.ShouldClearBlock))]
+    [HarmonyPostfix]
+    public static void PatchShouldClearBlock(MegaCrit.Sts2.Core.Combat.CombatState combatState, Creature creature, ref bool __result, ref MegaCrit.Sts2.Core.Models.AbstractModel? preventer)
     {
-        if (GetBoost("blockKeep") > 0 && __instance.IsPlayer)
-            return false; // 跳过清除
-        return true;
+        if (GetBoost("blockKeep") > 0 && creature.IsPlayer)
+        {
+            __result = false;
+            preventer = null;
+        }
     }
 
     public static void ResetForNewRun() => s_appliedThisRun = false;

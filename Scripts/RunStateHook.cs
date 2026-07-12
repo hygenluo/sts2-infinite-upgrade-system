@@ -33,6 +33,7 @@ public static class RunStateHook
     private static void OnCombatSetUp(CombatState state)
     {
         AbilityOperationHelper.ApplyInitialBoosts();
+        AbilityOperationHelper.ApplyStarsAtCombatStart();
         UpgradePointManager.SaveCheckpoint();
         var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
         CardUpgradeTracker.SaveCheckpoint(seed);
