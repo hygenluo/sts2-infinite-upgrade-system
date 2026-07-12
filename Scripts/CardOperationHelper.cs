@@ -261,6 +261,30 @@ public static class CardOperationHelper
         catch (Exception ex) { Log.Error($"RemoveCard: {ex.Message}"); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // Phase 4: 卡牌额外效果
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>给选中的卡牌添加额外效果（易伤/虚弱等），打出时生效。</summary>
+    public static async Task<bool> AddExtraEffect(CardExtraEffectManager.EffectType effect, int cost)
+    {
+        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
+        var player = GetLocalPlayer();
+        if (player == null) return false;
+        UpgradeUIHandler.Instance?.SetUIVisible(false);
+        try
+        {
+            var card = await SelectCardFromDeck(player);
+            if (card == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+            var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
+            CardExtraEffectManager.AddEffect(card, seed, effect);
+            UpgradeUIHandler.Instance?.RefreshPointsLabel();
+            UpgradeUIHandler.Instance?.HideUI();
+            return true;
+        }
+        catch (Exception ex) { Log.Error($"AddEffect {effect}: {ex.Message}"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+    }
+
     /// <summary>从指定卡牌池随机添加一张牌到牌组（免费）。</summary>
     public static async Task<bool> AddCardFromPool(string poolKey)
     {
