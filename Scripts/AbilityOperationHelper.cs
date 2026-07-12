@@ -6,6 +6,9 @@ using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Godot;
+using HarmonyLib;
+using MegaCrit.Sts2.Core.Commands;
+using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Logging;
 
 namespace InfiniteUpgradeSystem;
@@ -24,6 +27,8 @@ public static class AbilityOperationHelper
         return true;
     }
 
+    public static int GetBoost(string key) => s_boosts.TryGetValue(key, out int v) ? v : 0;
+
     public static async Task ApplyImmediate(string key)
     {
         var player = CardOperationHelper.GetLocalPlayer();
@@ -34,25 +39,21 @@ public static class AbilityOperationHelper
         {
             case "hp":
                 if (player.Creature == null) return;
-                await MegaCrit.Sts2.Core.Commands.CreatureCmd.GainMaxHp(player.Creature, count);
-                await MegaCrit.Sts2.Core.Commands.CreatureCmd.Heal(player.Creature, count);
+                await CreatureCmd.GainMaxHp(player.Creature, count);
+                await CreatureCmd.Heal(player.Creature, count);
                 break;
             case "energy": player.MaxEnergy += count; break;
             case "orbSlot": player.BaseOrbSlotCount += count; break;
         }
     }
 
-    /// <summary>CombatSetUp时应用初始能力（只执行一次）。</summary>
     public static async void ApplyInitialBoosts()
     {
         if (s_appliedThisRun) return;
         s_appliedThisRun = true;
-
         var player = CardOperationHelper.GetLocalPlayer();
-        if (player?.Creature == null) { GD.Print("[IU] No creature yet"); return; }
-
+        if (player?.Creature == null) return;
         var creature = player.Creature;
-        GD.Print($"[IU] Creature: {creature.GetType().Name}, CanReceivePowers={creature.CanReceivePowers}, CombatState={creature.CombatState != null}");
 
         foreach (var kv in s_boosts)
         {
@@ -61,7 +62,32 @@ public static class AbilityOperationHelper
         }
     }
 
-    private static async Task ApplyOnePower(MegaCrit.Sts2.Core.Entities.Creatures.Creature creature, string key, int count)
+    /// <summary>每回合开始时应用辉星+铸造效果。</summary>
+    public static async void ApplyPerTurnBoosts()
+    {
+        var player = CardOperationHelper.GetLocalPlayer();
+        if (player?.Creature == null) return;
+
+        if (s_boosts.TryGetValue("stars", out int stars) && stars > 0)
+            await PlayerCmd.GainStars(stars, player);
+
+        // 铸造+5 每回合 — 留空待查 ForgeCmd API
+    }
+
+    /// <summary>Harmony: 阻止格挡清除（如果购买了格挡不消失）。</summary>
+    [HarmonyPatch(typeof(Creature), nameof(Creature.ClearBlock))]
+    [HarmonyPrefix]
+    public static bool PatchClearBlock(Creature __instance)
+    {
+        if (GetBoost("blockKeep") > 0 && __instance.IsPlayer)
+            return false; // 跳过清除
+        return true;
+    }
+
+    public static void ResetForNewRun() => s_appliedThisRun = false;
+    public static void ResetForNextCombat() => s_appliedThisRun = false;
+
+    private static async Task ApplyOnePower(Creature creature, string key, int count)
     {
         var typeName = key switch
         {
@@ -74,67 +100,33 @@ public static class AbilityOperationHelper
             _ => null
         };
         if (typeName == null) return;
-
         try
         {
-            // 1. 查找类型
             Type? powerType = null;
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                powerType = asm.GetType(typeName);
-                if (powerType != null) break;
-            }
-            if (powerType == null) { GD.PrintErr($"[IU] Type {typeName} not found"); return; }
-            GD.Print($"[IU] Found type: {powerType.FullName}");
+            { powerType = asm.GetType(typeName); if (powerType != null) break; }
+            if (powerType == null) return;
 
-            // 2. ModelDb.Power<T>()
             var modelDb = Type.GetType("MegaCrit.Sts2.Core.Models.ModelDb, sts2");
-            if (modelDb == null) { foreach (var a in AppDomain.CurrentDomain.GetAssemblies()) { modelDb = a.GetType("MegaCrit.Sts2.Core.Models.ModelDb"); if (modelDb != null) break; } }
-            if (modelDb == null) { GD.PrintErr("[IU] ModelDb not found"); return; }
+            if (modelDb == null) foreach (var a in AppDomain.CurrentDomain.GetAssemblies()) { modelDb = a.GetType("MegaCrit.Sts2.Core.Models.ModelDb"); if (modelDb != null) break; }
+            if (modelDb == null) return;
 
             var powerGetter = modelDb.GetMethod("Power", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null);
-            if (powerGetter == null) { GD.PrintErr("[IU] ModelDb.Power() not found"); return; }
-            var genericGetter = powerGetter.MakeGenericMethod(powerType);
-            var template = genericGetter.Invoke(null, null);
-            if (template == null) { GD.PrintErr($"[IU] Power<T>() returned null for {key}"); return; }
-            GD.Print($"[IU] Template: {template.GetType().Name}");
+            if (powerGetter == null) return;
+            var template = powerGetter.MakeGenericMethod(powerType).Invoke(null, null);
+            if (template == null) return;
 
-            // 3. MutableClone() — AbstractModel 上的 public 方法
-            var cloneMethod = template.GetType().GetMethod("MutableClone",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (cloneMethod == null) { GD.PrintErr("[IU] MutableClone not found"); return; }
+            var cloneMethod = template.GetType().GetMethod("MutableClone", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (cloneMethod == null) return;
             var mutable = cloneMethod.Invoke(template, null);
-            if (mutable == null) { GD.PrintErr("[IU] MutableClone null"); return; }
-            GD.Print($"[IU] Mutable: {mutable.GetType().Name}");
+            if (mutable == null) return;
 
-            // 4. ApplyInternal(Creature, decimal, bool)
-            var applyMethod = mutable.GetType().GetMethod("ApplyInternal",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (applyMethod == null) { GD.PrintErr("[IU] ApplyInternal not found"); return; }
-            GD.Print($"[IU] ApplyInternal params: {string.Join(",", applyMethod.GetParameters().Select(p => p.ParameterType.Name))}");
-
+            var applyMethod = mutable.GetType().GetMethod("ApplyInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (applyMethod == null) return;
             applyMethod.Invoke(mutable, new object[] { creature, (decimal)count, false });
-            GD.Print($"[IU] ✓ Applied {key} x{count}");
-
-            // 5. 验证
-            var hasPowerMethod = creature.GetType().GetMethod("HasPower", Type.EmptyTypes);
-            if (hasPowerMethod != null)
-            {
-                var genericHas = hasPowerMethod.MakeGenericMethod(powerType);
-                var has = (bool)genericHas.Invoke(creature, null)!;
-                GD.Print($"[IU] HasPower<{key}> = {has}");
-            }
         }
-        catch (Exception ex)
-        {
-            GD.PrintErr($"[IU] {key}: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
-        }
+        catch (Exception ex) { GD.PrintErr($"[IU] ApplyPower {key}: {ex.Message}"); }
     }
-
-    public static void ResetForNewRun() => s_appliedThisRun = false;
-
-    /// <summary>战斗结束后重置，确保下场战斗重新应用初始能力。</summary>
-    public static void ResetForNextCombat() => s_appliedThisRun = false;
 
     public static void SaveCheckpoint(string seed)
     {
@@ -143,8 +135,7 @@ public static class AbilityOperationHelper
             var modDir = Path.GetDirectoryName(typeof(Entry).Assembly.Location) ?? ".";
             var dir = Path.Combine(modDir, "runs");
             if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            File.WriteAllText(Path.Combine(dir, $"abilities_{seed}.json"),
-                JsonSerializer.Serialize(s_boosts, s_jsonOptions));
+            File.WriteAllText(Path.Combine(dir, $"abilities_{seed}.json"), JsonSerializer.Serialize(s_boosts, s_jsonOptions));
         }
         catch (Exception ex) { Log.Error($"Ability save: {ex.Message}"); }
     }

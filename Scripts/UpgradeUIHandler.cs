@@ -362,13 +362,13 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(new("能力操作", "初始集中+1", 15, () => { if (AbilityOperationHelper.TryPurchase("focus", 15)) RefreshPointsLabel(); return Task.CompletedTask; }));
         _allItems.Add(new("能力操作", "生命+1", 5, async () => { if (AbilityOperationHelper.TryPurchase("hp", 5)) { await AbilityOperationHelper.ApplyImmediate("hp"); RefreshPointsLabel(); } }));
         _allItems.Add(new("能力操作", "每回合能量+1", 40, async () => { if (AbilityOperationHelper.TryPurchase("energy", 40)) { await AbilityOperationHelper.ApplyImmediate("energy"); RefreshPointsLabel(); } }));
-        _allItems.Add(new("能力操作", "每回合辉星+1", 20, () => Placeholder("每回合辉星+1")));
-        _allItems.Add(new("能力操作", "每回合铸造+5", 20, () => Placeholder("每回合铸造+5")));
+        _allItems.Add(new("能力操作", "每回合辉星+1", 20, () => { if (AbilityOperationHelper.TryPurchase("stars", 20)) RefreshPointsLabel(); return Task.CompletedTask; }));
+        _allItems.Add(new("能力操作", "每回合铸造+5", 20, () => { if (AbilityOperationHelper.TryPurchase("forge", 20)) RefreshPointsLabel(); return Task.CompletedTask; }));
         _allItems.Add(new("能力操作", "初始覆甲+1", 15, () => { if (AbilityOperationHelper.TryPurchase("plating", 15)) RefreshPointsLabel(); return Task.CompletedTask; }));
         _allItems.Add(new("能力操作", "初始荆棘+1", 10, () => { if (AbilityOperationHelper.TryPurchase("thorns", 10)) RefreshPointsLabel(); return Task.CompletedTask; }));
         _allItems.Add(new("能力操作", "初始人工制品+1", 20, () => { if (AbilityOperationHelper.TryPurchase("artifact", 20)) RefreshPointsLabel(); return Task.CompletedTask; }));
         _allItems.Add(new("能力操作", "充能球栏位+1", 15, async () => { if (AbilityOperationHelper.TryPurchase("orbSlot", 15)) { await AbilityOperationHelper.ApplyImmediate("orbSlot"); RefreshPointsLabel(); } }));
-        _allItems.Add(new("能力操作", "格挡不消失", 40, () => Placeholder("格挡不消失")));
+        _allItems.Add(new("能力操作", "格挡不消失", 40, () => { if (AbilityOperationHelper.TryPurchase("blockKeep", 40)) RefreshPointsLabel(); return Task.CompletedTask; }));
 
         // === 牌组操作 (5) ===
         _allItems.Add(new("牌组操作", "从牌组删除一张牌", 0, () => CardOperationHelper.RemoveCardFromDeck()));
