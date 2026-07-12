@@ -29,13 +29,14 @@ public static class AbilityOperationHelper
     public static async Task ApplyImmediate(string key)
     {
         var player = CardOperationHelper.GetLocalPlayer();
-        if (player?.Creature == null) return;
+        if (player == null) return;
         s_boosts.TryGetValue(key, out int count);
         if (count <= 0) return;
 
         switch (key)
         {
             case "hp":
+                if (player.Creature == null) return;
                 await CreatureCmd.GainMaxHp(player.Creature, count);
                 await CreatureCmd.Heal(player.Creature, count);
                 break;
@@ -49,7 +50,7 @@ public static class AbilityOperationHelper
     }
 
     /// <summary>战斗开始时应用所有已购买的能力（幂等，由 AbilityTracker 追踪已应用次数）。</summary>
-    public static async void ApplyAllOnCombatStart()
+    public static void ApplyAllOnCombatStart()
     {
         var player = CardOperationHelper.GetLocalPlayer();
         if (player?.Creature == null) return;

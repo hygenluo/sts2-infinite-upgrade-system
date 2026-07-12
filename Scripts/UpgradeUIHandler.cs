@@ -359,7 +359,7 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(new("能力操作", "力量+1", 10, () => { if (AbilityOperationHelper.TryPurchase("strength", 10)) { RefreshPointsLabel(); return Task.CompletedTask; } return Task.CompletedTask; }));
         _allItems.Add(new("能力操作", "敏捷+1", 10, () => { if (AbilityOperationHelper.TryPurchase("dexterity", 10)) { RefreshPointsLabel(); return Task.CompletedTask; } return Task.CompletedTask; }));
         _allItems.Add(new("能力操作", "集中+1", 15, () => { if (AbilityOperationHelper.TryPurchase("focus", 15)) { RefreshPointsLabel(); return Task.CompletedTask; } return Task.CompletedTask; }));
-        _allItems.Add(new("能力操作", "生命+1", 2, async () => { if (AbilityOperationHelper.TryPurchase("hp", 2)) { await AbilityOperationHelper.ApplyImmediate("hp"); RefreshPointsLabel(); } }));
+        _allItems.Add(new("能力操作", "生命+1", 5, async () => { if (AbilityOperationHelper.TryPurchase("hp", 5)) { await AbilityOperationHelper.ApplyImmediate("hp"); RefreshPointsLabel(); } }));
         _allItems.Add(new("能力操作", "每回合能量+1", 40, async () => { if (AbilityOperationHelper.TryPurchase("energy", 40)) { await AbilityOperationHelper.ApplyImmediate("energy"); RefreshPointsLabel(); } }));
         _allItems.Add(new("能力操作", "每回合辉星+1", 20, () => Placeholder("每回合辉星+1")));
         _allItems.Add(new("能力操作", "每回合铸造+5", 20, () => Placeholder("每回合铸造+5")));
