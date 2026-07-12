@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using Godot;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Logging;
@@ -101,12 +102,31 @@ public static class CardUpgradeTracker
             int index = kv.Key;
             var record = kv.Value;
             if (record.Entries.Count == 0) continue;
-            if (index >= cards.Count) continue;
+            if (index >= cards.Count)
+            {
+                Log.Warn($"InfiniteUpgrade: ReapplyAll skip index={index} >= count={cards.Count}");
+                continue;
+            }
 
             var card = cards[index];
-            if (card.Id.Entry != record.TemplateId) continue;
+            if (card.Id.Entry != record.TemplateId)
+            {
+                Log.Warn($"InfiniteUpgrade: ReapplyAll skip index={index} template mismatch: card={card.Id.Entry} vs record={record.TemplateId}");
+                continue;
+            }
 
-            // 重放所有修改
+            GD.Print($"[InfiniteUpgrade] Reapplying {record.Entries.Count} mods to {card.Id.Entry} at index {index}");
+
+            // 确保卡牌可变
+            if (!card.IsMutable)
+            {
+                card = card.ToMutable();
+                // 替换牌组中的引用
+                var deckList = player.Deck.Cards as IList<CardModel>;
+                if (deckList != null && !deckList.IsReadOnly)
+                    deckList[index] = card;
+            }
+
             foreach (var entry in record.Entries)
             {
                 ApplyModification(card, entry);
@@ -114,6 +134,7 @@ public static class CardUpgradeTracker
             applied++;
         }
         Log.Info($"InfiniteUpgrade: reapplied modifications to {applied} cards.");
+        GD.Print($"[InfiniteUpgrade] ReapplyAll done: {applied} cards.");
     }
 
     public static void SaveCheckpoint(string seed) => SaveToDisk(seed);
@@ -197,6 +218,7 @@ public static class CardUpgradeTracker
         switch (type)
         {
             case ModType.Upgrade:
+                if (!card.IsMutable) card = card.ToMutable();
                 CardOperationHelper.UpgradeWithoutTracking(card);
                 break;
             case ModType.DamagePlus:
