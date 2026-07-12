@@ -93,17 +93,20 @@ public static class AbilityOperationHelper
                     continue;
                 }
 
-                // 查找 PowerCmd.Apply 方法 — 选第一个参数是 Creature（非 IEnumerable<Creature>）的泛型重载
+                // 调试：列出 PowerCmd.Apply 所有重载
                 MethodInfo? applyMethod = null;
                 foreach (var m in typeof(PowerCmd).GetMethods(BindingFlags.Public | BindingFlags.Static))
                 {
                     if (m.Name == "Apply" && m.IsGenericMethodDefinition)
                     {
+                        var ps = string.Join(", ", m.GetParameters().Select(pp => $"{pp.ParameterType.Name} {pp.Name}"));
+                        GD.Print($"[InfiniteUpgrade] PowerCmd.Apply<{m.GetGenericArguments()[0].Name}>({ps})");
                         var p = m.GetParameters();
-                        if (p.Length > 0 && p[0].ParameterType == typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature))
+                        // 选第一个参数是 Creature 且参数数量最少的（避免 IEnumerable 重载）
+                        if (p.Length > 0 && p[0].ParameterType == typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature)
+                            && (applyMethod == null || p.Length < applyMethod.GetParameters().Length))
                         {
                             applyMethod = m;
-                            break;
                         }
                     }
                 }
