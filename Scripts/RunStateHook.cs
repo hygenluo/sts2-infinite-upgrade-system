@@ -32,7 +32,7 @@ public static class RunStateHook
     /// <summary>战斗开始 → 应用能力 + 保存检查点</summary>
     private static void OnCombatSetUp(CombatState state)
     {
-        AbilityOperationHelper.ApplyAllOnCombatStart();
+        AbilityOperationHelper.ApplyInitialBoosts();
         UpgradePointManager.SaveCheckpoint();
         var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
         CardUpgradeTracker.SaveCheckpoint(seed);
@@ -74,6 +74,7 @@ public static class RunStateHook
 
         CardUpgradeTracker.Load(seed);
         AbilityOperationHelper.Load(seed);
+        AbilityOperationHelper.ResetForNewRun();
         var player = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault();
         if (player != null)
         {

@@ -356,16 +356,16 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(new("卡牌操作", "移除永恒", 30, () => CardOperationHelper.ToggleKeyword(30, CardKeyword.Eternal, false)));
 
         // === 能力操作 (12) ===
-        _allItems.Add(new("能力操作", "力量+1", 10, () => { if (AbilityOperationHelper.TryPurchase("strength", 10)) { RefreshPointsLabel(); return Task.CompletedTask; } return Task.CompletedTask; }));
-        _allItems.Add(new("能力操作", "敏捷+1", 10, () => { if (AbilityOperationHelper.TryPurchase("dexterity", 10)) { RefreshPointsLabel(); return Task.CompletedTask; } return Task.CompletedTask; }));
-        _allItems.Add(new("能力操作", "集中+1", 15, () => { if (AbilityOperationHelper.TryPurchase("focus", 15)) { RefreshPointsLabel(); return Task.CompletedTask; } return Task.CompletedTask; }));
+        _allItems.Add(new("能力操作", "初始力量+1", 10, () => { if (AbilityOperationHelper.TryPurchase("strength", 10)) RefreshPointsLabel(); return Task.CompletedTask; }));
+        _allItems.Add(new("能力操作", "初始敏捷+1", 10, () => { if (AbilityOperationHelper.TryPurchase("dexterity", 10)) RefreshPointsLabel(); return Task.CompletedTask; }));
+        _allItems.Add(new("能力操作", "初始集中+1", 15, () => { if (AbilityOperationHelper.TryPurchase("focus", 15)) RefreshPointsLabel(); return Task.CompletedTask; }));
         _allItems.Add(new("能力操作", "生命+1", 5, async () => { if (AbilityOperationHelper.TryPurchase("hp", 5)) { await AbilityOperationHelper.ApplyImmediate("hp"); RefreshPointsLabel(); } }));
         _allItems.Add(new("能力操作", "每回合能量+1", 40, async () => { if (AbilityOperationHelper.TryPurchase("energy", 40)) { await AbilityOperationHelper.ApplyImmediate("energy"); RefreshPointsLabel(); } }));
         _allItems.Add(new("能力操作", "每回合辉星+1", 20, () => Placeholder("每回合辉星+1")));
         _allItems.Add(new("能力操作", "每回合铸造+5", 20, () => Placeholder("每回合铸造+5")));
-        _allItems.Add(new("能力操作", "覆甲+1", 15, () => { if (AbilityOperationHelper.TryPurchase("plating", 15)) RefreshPointsLabel(); return Task.CompletedTask; }));
-        _allItems.Add(new("能力操作", "荆棘+1", 10, () => { if (AbilityOperationHelper.TryPurchase("thorns", 10)) RefreshPointsLabel(); return Task.CompletedTask; }));
-        _allItems.Add(new("能力操作", "人工制品+1", 20, () => { if (AbilityOperationHelper.TryPurchase("artifact", 20)) RefreshPointsLabel(); return Task.CompletedTask; }));
+        _allItems.Add(new("能力操作", "初始覆甲+1", 15, () => { if (AbilityOperationHelper.TryPurchase("plating", 15)) RefreshPointsLabel(); return Task.CompletedTask; }));
+        _allItems.Add(new("能力操作", "初始荆棘+1", 10, () => { if (AbilityOperationHelper.TryPurchase("thorns", 10)) RefreshPointsLabel(); return Task.CompletedTask; }));
+        _allItems.Add(new("能力操作", "初始人工制品+1", 20, () => { if (AbilityOperationHelper.TryPurchase("artifact", 20)) RefreshPointsLabel(); return Task.CompletedTask; }));
         _allItems.Add(new("能力操作", "充能球栏位+1", 15, async () => { if (AbilityOperationHelper.TryPurchase("orbSlot", 15)) { await AbilityOperationHelper.ApplyImmediate("orbSlot"); RefreshPointsLabel(); } }));
         _allItems.Add(new("能力操作", "格挡不消失", 40, () => Placeholder("格挡不消失")));
 

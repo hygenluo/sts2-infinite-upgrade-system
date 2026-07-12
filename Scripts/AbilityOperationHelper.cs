@@ -10,19 +10,11 @@ using MegaCrit.Sts2.Core.Logging;
 
 namespace InfiniteUpgradeSystem;
 
-/// <summary>
-/// 能力操作引擎。
-/// 通过 ModelDb.Power<T>() → ToMutable() → ApplyInternal(creature, amount)
-/// 直接在 Creature 上添加 Power，完全绕过 PowerCmd（其运行时签名需要 PlayerChoiceContext）。
-/// </summary>
 public static class AbilityOperationHelper
 {
     private static readonly Dictionary<string, int> s_boosts = new();
     private static readonly JsonSerializerOptions s_jsonOptions = new() { PropertyNameCaseInsensitive = true };
-
-    // Power 类信息
-    private static readonly Dictionary<string, (string typeName, MethodInfo? applyMethod)> s_powerCache = new();
-    private static MethodInfo? s_modelDbPowerGetter;
+    private static bool s_appliedThisRun;
 
     public static bool TryPurchase(string key, int cost)
     {
@@ -38,7 +30,6 @@ public static class AbilityOperationHelper
         if (player == null) return;
         s_boosts.TryGetValue(key, out int count);
         if (count <= 0) return;
-
         switch (key)
         {
             case "hp":
@@ -46,72 +37,32 @@ public static class AbilityOperationHelper
                 await MegaCrit.Sts2.Core.Commands.CreatureCmd.GainMaxHp(player.Creature, count);
                 await MegaCrit.Sts2.Core.Commands.CreatureCmd.Heal(player.Creature, count);
                 break;
-            case "energy":
-                player.MaxEnergy += count;
-                break;
-            case "orbSlot":
-                player.BaseOrbSlotCount += count;
-                break;
+            case "energy": player.MaxEnergy += count; break;
+            case "orbSlot": player.BaseOrbSlotCount += count; break;
         }
     }
 
-    public static void ApplyAllOnCombatStart()
+    /// <summary>CombatSetUp时应用初始能力（只执行一次）。</summary>
+    public static async void ApplyInitialBoosts()
     {
+        if (s_appliedThisRun) return;
+        s_appliedThisRun = true;
+
         var player = CardOperationHelper.GetLocalPlayer();
-        if (player?.Creature == null) return;
+        if (player?.Creature == null) { GD.Print("[IU] No creature yet"); return; }
+
+        var creature = player.Creature;
+        GD.Print($"[IU] Creature: {creature.GetType().Name}, CanReceivePowers={creature.CanReceivePowers}, CombatState={creature.CombatState != null}");
 
         foreach (var kv in s_boosts)
         {
             if (kv.Value <= 0) continue;
-            var key = kv.Key;
-            int count = kv.Value;
-
-            try
-            {
-                if (!s_powerCache.TryGetValue(key, out var entry))
-                {
-                    // 查找 Power 类型对应的 ApplyInternal 方法
-                    var typeName = key switch
-                    {
-                        "strength" => "MegaCrit.Sts2.Core.Models.Powers.StrengthPower",
-                        "dexterity" => "MegaCrit.Sts2.Core.Models.Powers.DexterityPower",
-                        "focus" => "MegaCrit.Sts2.Core.Models.Powers.FocusPower",
-                        "plating" => "MegaCrit.Sts2.Core.Models.Powers.PlatingPower",
-                        "thorns" => "MegaCrit.Sts2.Core.Models.Powers.ThornsPower",
-                        "artifact" => "MegaCrit.Sts2.Core.Models.Powers.ArtifactPower",
-                        _ => null
-                    };
-                    if (typeName == null) continue;
-
-                    var powerType = FindType(typeName);
-                    if (powerType == null) continue;
-
-                    entry = (typeName, null);
-                    s_powerCache[key] = entry;
-                }
-
-                // 通过 ModelDb.Power<T>().ToMutable().ApplyInternal(...)
-                ApplyPower(player.Creature, key, count);
-            }
-            catch (Exception ex)
-            {
-                GD.PrintErr($"[InfiniteUpgrade] Apply {key}: {ex.GetType().Name}: {ex.Message}");
-            }
+            await ApplyOnePower(creature, kv.Key, kv.Value);
         }
     }
 
-    private static void ApplyPower(MegaCrit.Sts2.Core.Entities.Creatures.Creature creature, string key, int count)
+    private static async Task ApplyOnePower(MegaCrit.Sts2.Core.Entities.Creatures.Creature creature, string key, int count)
     {
-        // 1. 获取 Power 模板: ModelDb.Power<T>()
-        if (s_modelDbPowerGetter == null)
-        {
-            var modelDbType = FindType("MegaCrit.Sts2.Core.Models.ModelDb");
-            if (modelDbType == null) { GD.PrintErr("[IU] ModelDb not found"); return; }
-            s_modelDbPowerGetter = modelDbType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .FirstOrDefault(m => m.Name == "Power" && m.IsGenericMethod && m.GetParameters().Length == 0);
-            if (s_modelDbPowerGetter == null) { GD.PrintErr("[IU] ModelDb.Power<T>() not found"); return; }
-        }
-
         var typeName = key switch
         {
             "strength" => "MegaCrit.Sts2.Core.Models.Powers.StrengthPower",
@@ -124,42 +75,62 @@ public static class AbilityOperationHelper
         };
         if (typeName == null) return;
 
-        var powerType = FindType(typeName);
-        if (powerType == null) { GD.PrintErr($"[IU] Type not found: {typeName}"); return; }
-
-        var getter = s_modelDbPowerGetter.MakeGenericMethod(powerType);
-        var template = getter.Invoke(null, null);
-        if (template == null) { GD.PrintErr($"[IU] Power template null for {key}"); return; }
-
-        // 2. ToMutable()
-        var toMutable = template.GetType().GetMethod("ToMutable", Type.EmptyTypes);
-        if (toMutable == null) { GD.PrintErr($"[IU] ToMutable not found"); return; }
-        var mutable = toMutable.Invoke(template, null);
-        if (mutable == null) { GD.PrintErr($"[IU] ToMutable returned null"); return; }
-
-        // 3. ApplyInternal(Creature owner, decimal amount, bool silent=false)
-        var applyInternal = mutable.GetType().GetMethod("ApplyInternal",
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            null, new[] { typeof(MegaCrit.Sts2.Core.Entities.Creatures.Creature), typeof(decimal), typeof(bool) }, null);
-        if (applyInternal == null) { GD.PrintErr($"[IU] ApplyInternal not found"); return; }
-
-        applyInternal.Invoke(mutable, new object[] { creature, (decimal)count, false });
-        GD.Print($"[InfiniteUpgrade] Applied {key} x{count}");
-    }
-
-    private static Type? FindType(string name)
-    {
-        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        try
         {
-            var t = asm.GetType(name);
-            if (t != null) return t;
+            // 1. 查找类型
+            Type? powerType = null;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                powerType = asm.GetType(typeName);
+                if (powerType != null) break;
+            }
+            if (powerType == null) { GD.PrintErr($"[IU] Type {typeName} not found"); return; }
+            GD.Print($"[IU] Found type: {powerType.FullName}");
+
+            // 2. ModelDb.Power<T>()
+            var modelDb = Type.GetType("MegaCrit.Sts2.Core.Models.ModelDb, sts2");
+            if (modelDb == null) { foreach (var a in AppDomain.CurrentDomain.GetAssemblies()) { modelDb = a.GetType("MegaCrit.Sts2.Core.Models.ModelDb"); if (modelDb != null) break; } }
+            if (modelDb == null) { GD.PrintErr("[IU] ModelDb not found"); return; }
+
+            var powerGetter = modelDb.GetMethod("Power", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null);
+            if (powerGetter == null) { GD.PrintErr("[IU] ModelDb.Power() not found"); return; }
+            var genericGetter = powerGetter.MakeGenericMethod(powerType);
+            var template = genericGetter.Invoke(null, null);
+            if (template == null) { GD.PrintErr($"[IU] Power<T>() returned null for {key}"); return; }
+            GD.Print($"[IU] Template: {template.GetType().Name}");
+
+            // 3. ToMutable()
+            var toMutable = template.GetType().GetMethod("ToMutable", Type.EmptyTypes);
+            if (toMutable == null) { GD.PrintErr("[IU] ToMutable not found"); return; }
+            var mutable = toMutable.Invoke(template, null);
+            if (mutable == null) { GD.PrintErr("[IU] ToMutable null"); return; }
+            GD.Print($"[IU] Mutable: {mutable.GetType().Name}, IsMutable={((dynamic)mutable).IsMutable}");
+
+            // 4. ApplyInternal(Creature, decimal, bool)
+            var applyMethod = mutable.GetType().GetMethod("ApplyInternal",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (applyMethod == null) { GD.PrintErr("[IU] ApplyInternal not found"); return; }
+            GD.Print($"[IU] ApplyInternal params: {string.Join(",", applyMethod.GetParameters().Select(p => p.ParameterType.Name))}");
+
+            applyMethod.Invoke(mutable, new object[] { creature, (decimal)count, false });
+            GD.Print($"[IU] ✓ Applied {key} x{count}");
+
+            // 5. 验证
+            var hasPowerMethod = creature.GetType().GetMethod("HasPower", Type.EmptyTypes);
+            if (hasPowerMethod != null)
+            {
+                var genericHas = hasPowerMethod.MakeGenericMethod(powerType);
+                var has = (bool)genericHas.Invoke(creature, null)!;
+                GD.Print($"[IU] HasPower<{key}> = {has}");
+            }
         }
-        return null;
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[IU] {key}: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+        }
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // 持久化
-    // ═══════════════════════════════════════════════════════════════
+    public static void ResetForNewRun() => s_appliedThisRun = false;
 
     public static void SaveCheckpoint(string seed)
     {
@@ -177,14 +148,14 @@ public static class AbilityOperationHelper
     public static void Load(string seed)
     {
         s_boosts.Clear();
+        s_appliedThisRun = false;
         try
         {
             var modDir = Path.GetDirectoryName(typeof(Entry).Assembly.Location) ?? ".";
             var path = Path.Combine(modDir, "runs", $"abilities_{seed}.json");
             if (!File.Exists(path)) return;
             var data = JsonSerializer.Deserialize<Dictionary<string, int>>(File.ReadAllText(path), s_jsonOptions);
-            if (data != null)
-                foreach (var kv in data) s_boosts[kv.Key] = kv.Value;
+            if (data != null) foreach (var kv in data) s_boosts[kv.Key] = kv.Value;
         }
         catch (Exception ex) { Log.Warn($"Ability load: {ex.Message}"); }
     }
