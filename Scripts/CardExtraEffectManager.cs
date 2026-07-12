@@ -21,19 +21,13 @@ namespace InfiniteUpgradeSystem;
 /// </summary>
 public static class CardExtraEffectManager
 {
-    /// <summary>deckIndex → (templateId, effects list)</summary>
-    private static readonly Dictionary<int, EffectRecord> s_records = new();
+    /// <summary>cardId.Entry → effects list (按模板ID追踪，同一模板的所有牌共享效果)</summary>
+    private static readonly Dictionary<string, List<string>> s_records = new();
     private static readonly JsonSerializerOptions s_jsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     public enum EffectType
     {
         Vulnerable, Weak, Poison, Heal, Forge, Vigor, Calamity, Focus, Intangible, GainEnergy
-    }
-
-    private struct EffectRecord
-    {
-        public string TemplateId;
-        public List<string> Effects; // EffectType name list
     }
 
     private static string GetFilePath(string seed)
@@ -44,38 +38,26 @@ public static class CardExtraEffectManager
 
     public static void AddEffect(CardModel card, string seed, EffectType type)
     {
-        var player = CardOperationHelper.GetLocalPlayer();
-        if (player == null) return;
-        int index = FindCardIndex(player.Deck.Cards, card);
-        if (index < 0) return;
-
-        if (!s_records.ContainsKey(index))
-            s_records[index] = new EffectRecord { TemplateId = card.Id.Entry, Effects = new List<string>() };
-        var r = s_records[index];
-        r.Effects.Add(type.ToString());
-        s_records[index] = r;
+        var key = card.Id.Entry;
+        if (!s_records.ContainsKey(key))
+            s_records[key] = new List<string>();
+        s_records[key].Add(type.ToString());
         Save(seed);
     }
 
     public static int GetEffectCount(CardModel card)
-    {
-        var player = CardOperationHelper.GetLocalPlayer();
-        if (player == null) return 0;
-        int index = FindCardIndex(player.Deck.Cards, card);
-        return index >= 0 && s_records.TryGetValue(index, out var r) ? r.Effects.Count : 0;
-    }
+        => s_records.TryGetValue(card.Id.Entry, out var list) ? list.Count : 0;
 
-    /// <summary>Harmony Postfix: 卡牌打出后注入额外效果。</summary>
+    /// <summary>Harmony Postfix: 卡牌打出后注入额外效果（按模板ID匹配）。</summary>
     [HarmonyPatch(typeof(CardModel), nameof(CardModel.OnPlayWrapper))]
     [HarmonyPostfix]
     public static async void InjectExtraEffects(CardModel __instance)
     {
         var player = __instance.Owner;
         if (player == null) return;
-        int index = FindCardIndex(player.Deck.Cards, __instance);
-        if (index < 0 || !s_records.TryGetValue(index, out var record)) return;
+        if (!s_records.TryGetValue(__instance.Id.Entry, out var effects)) return;
 
-        foreach (var effStr in record.Effects)
+        foreach (var effStr in effects)
         {
             if (!Enum.TryParse<EffectType>(effStr, out var effect)) continue;
             try
@@ -147,13 +129,6 @@ public static class CardExtraEffectManager
         return null;
     }
 
-    private static int FindCardIndex(IReadOnlyList<CardModel> cards, CardModel target)
-    {
-        for (int i = 0; i < cards.Count; i++)
-            if (ReferenceEquals(cards[i], target)) return i;
-        return -1;
-    }
-
     public static void Save(string seed)
     {
         try
@@ -161,10 +136,7 @@ public static class CardExtraEffectManager
             var path = GetFilePath(seed);
             var dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            var data = new Dictionary<string, EffectRecordData>();
-            foreach (var kv in s_records)
-                data[kv.Key.ToString()] = new EffectRecordData { T = kv.Value.TemplateId, E = kv.Value.Effects };
-            File.WriteAllText(path, JsonSerializer.Serialize(data, s_jsonOptions));
+            File.WriteAllText(path, JsonSerializer.Serialize(s_records, s_jsonOptions));
         }
         catch (Exception ex) { Log.Error($"CardEffect save: {ex.Message}"); }
     }
@@ -176,14 +148,10 @@ public static class CardExtraEffectManager
         {
             var path = GetFilePath(seed);
             if (!File.Exists(path)) return;
-            var data = JsonSerializer.Deserialize<Dictionary<string, EffectRecordData>>(File.ReadAllText(path), s_jsonOptions);
+            var data = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(File.ReadAllText(path), s_jsonOptions);
             if (data != null)
-                foreach (var kv in data)
-                    if (int.TryParse(kv.Key, out int i) && kv.Value != null)
-                        s_records[i] = new EffectRecord { TemplateId = kv.Value.T, Effects = kv.Value.E };
+                foreach (var kv in data) s_records[kv.Key] = kv.Value;
         }
         catch (Exception ex) { Log.Warn($"CardEffect load: {ex.Message}"); }
     }
-
-    private class EffectRecordData { public string T { get; set; } = ""; public List<string> E { get; set; } = new(); }
 }
