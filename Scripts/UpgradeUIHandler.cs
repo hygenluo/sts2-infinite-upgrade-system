@@ -372,10 +372,12 @@ public sealed partial class UpgradeUIHandler : Control
 
         // === 牌组操作 (5) ===
         _allItems.Add(new("牌组操作", "从牌组删除一张牌", 0, () => CardOperationHelper.RemoveCardFromDeck()));
-        _allItems.Add(new("牌组操作", "添加一张普通牌", 0, () => CardOperationHelper.AddRandomCard(CardRarity.Common)));
-        _allItems.Add(new("牌组操作", "添加一张罕见牌", 0, () => CardOperationHelper.AddRandomCard(CardRarity.Uncommon)));
-        _allItems.Add(new("牌组操作", "添加一张稀有牌", 0, () => CardOperationHelper.AddRandomCard(CardRarity.Rare)));
-        _allItems.Add(new("牌组操作", "添加一张其他牌", 0, () => Placeholder("添加其他牌")));
+        _allItems.Add(new("牌组操作", "添加一张红色牌", 0, () => CardOperationHelper.AddRandomCardFromPool("red")));
+        _allItems.Add(new("牌组操作", "添加一张绿色牌", 0, () => CardOperationHelper.AddRandomCardFromPool("green")));
+        _allItems.Add(new("牌组操作", "添加一张蓝色牌", 0, () => CardOperationHelper.AddRandomCardFromPool("blue")));
+        _allItems.Add(new("牌组操作", "添加一张紫色牌", 0, () => CardOperationHelper.AddRandomCardFromPool("purple")));
+        _allItems.Add(new("牌组操作", "添加一张无色牌", 0, () => CardOperationHelper.AddRandomCardFromPool("colorless")));
+        _allItems.Add(new("牌组操作", "添加一张诅咒牌", 0, () => CardOperationHelper.AddRandomCardFromPool("curse")));
 
         // === 测试操作 (1) ===
         _allItems.Add(new("测试操作", "点数+999", 0, () =>
