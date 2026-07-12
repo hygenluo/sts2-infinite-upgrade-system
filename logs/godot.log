@@ -17,11 +17,11 @@ FMOD Sound System: Successfully initialized
 [INFO] Looking for mods to load from Steam Workshop mod 3750879024 in D:\Program Files (x86)\Steam\steamapps\workshop\content\2868840\3750879024 (size 124117, last modified 1782306433)
 [INFO] Found mod manifest file D:\Program Files (x86)\Steam\steamapps\workshop\content\2868840\3750879024\EnchantmentCompendium.json
 [Sentry.GDExtension] Initialized: env=playtesters, release=v0.107.1
-[INFO] MuteInBackground: FocusIn received [tween=False, msSinceFocusOut=1706, windowFocused=True]
+[INFO] MuteInBackground: FocusIn received [tween=False, msSinceFocusOut=1705, windowFocused=True]
 [INFO] Looking for mods to load from Steam Workshop mod 3747575739 in D:\Program Files (x86)\Steam\steamapps\workshop\content\2868840\3747575739 (size 10266033, last modified 1783059418)
 [INFO] Found mod manifest file D:\Program Files (x86)\Steam\steamapps\workshop\content\2868840\3747575739\MoreEnchantments.json
 [INFO] === Godot OS Debug Information ===
-Timestamp: 07/12/2026 15:55:32
+Timestamp: 07/12/2026 16:01:58
 OS: Windows
 OS Version: 10.0.22631
 Distribution Name: Windows
@@ -58,7 +58,7 @@ Screen info (primary 0):
 Video Memory Used: 0.0B
 Memory Info:
   physical: 15.8GB
-  free: 3.8GB
+  free: 3.6GB
   available: 47.7GB
   stack: 8.0MB
   Static Memory Usage: 0.0B
@@ -538,10 +538,10 @@ Common Incompatible Mods:
 [INFO] [Sentry.NET] Shutting down
 [INFO] [com.ritsukage.sts2-RitsuLib] [SentryCompat] Skipped native Sentry GDExtension shutdown for STS2 0.107.1+ workaround.
 [INFO] [BaseLib] Adding 0 custom acts to act list.
-[INFO] [BaseLib] Result: ACT.OVERGROWTH (35100503),ACT.UNDERDOCKS (47469079),ACT.HIVE (24568527),ACT.GLORY (19790153)
+[INFO] [BaseLib] Result: ACT.OVERGROWTH (22136376),ACT.UNDERDOCKS (65009660),ACT.HIVE (48216033),ACT.GLORY (31291121)
 [INFO] AtlasManager: Loaded controller_atlas with 112 sprites
 [INFO] SteamStatsManager: User stats received
-[INFO] SteamStatsManager: Global stats received (found=True), architect damage = 303198180273
+[INFO] SteamStatsManager: Global stats received (found=True), architect damage = 303205700533
 [WARN] [MultiEnchantmentMod] [MultiEnchantment] is-check rewrite: could not read IL of BaseLib.Utils.AncientOption`1.get_ModelForOption (BaseLib): Specified method is not supported.. That check only sees the card's PRIMARY enchantment, so this mod may fail to detect enchantments in additional slots (enchantment-dependent behavior may silently not trigger). Mod author fix: replace 'card.Enchantment is X' with the no-dependency compatibility bridge — https://github.com/1939323749/MultiEnchantmentMod/wiki/Integrating-MultiEnchantmentMod ("Optional: No Hard Dependency" section).
 [WARN] [MultiEnchantmentMod] [MultiEnchantment] is-check rewrite: could not read IL of BaseLib.Utils.CommonActions.Apply (BaseLib): Specified method is not supported.. That check only sees the card's PRIMARY enchantment, so this mod may fail to detect enchantments in additional slots (enchantment-dependent behavior may silently not trigger). Mod author fix: replace 'card.Enchantment is X' with the no-dependency compatibility bridge — https://github.com/1939323749/MultiEnchantmentMod/wiki/Integrating-MultiEnchantmentMod ("Optional: No Hard Dependency" section).
 [WARN] [MultiEnchantmentMod] [MultiEnchantment] is-check rewrite: could not read IL of BaseLib.Utils.CustomAnimation.FindNode (BaseLib): Specified method is not supported.. That check only sees the card's PRIMARY enchantment, so this mod may fail to detect enchantments in additional slots (enchantment-dependent behavior may silently not trigger). Mod author fix: replace 'card.Enchantment is X' with the no-dependency compatibility bridge — https://github.com/1939323749/MultiEnchantmentMod/wiki/Integrating-MultiEnchantmentMod ("Optional: No Hard Dependency" section).
@@ -594,9 +594,9 @@ Common Incompatible Mods:
 [INFO] Preloading 'IntroLogo' assets... count=3 vfx=0
 [INFO] [sts2.piyixiajiuhenfen.modconfig] Registered config: SpeedX (41 entries)
 [INFO] [sts2.piyixiajiuhenfen.speedx] Registered with ModConfig
-[INFO] Preloading 'IntroLogo' Complete: assets=3 time_elapsed=156ms
+[INFO] Preloading 'IntroLogo' Complete: assets=3 time_elapsed=165ms
 [INFO] Preloading 'MainMenuEssentials' assets... count=5 vfx=0
-[INFO] Preloading 'MainMenuEssentials' Complete: assets=5 time_elapsed=252ms
+[INFO] Preloading 'MainMenuEssentials' Complete: assets=5 time_elapsed=264ms
 [WARN] Asset not cached: res://debug_audio/SOTE_Logo_Echoing_ShortTail.mp3
 [INFO] [sts2.piyixiajiuhenfen.modconfig] Mods tab injected into settings screen!
 [INFO] [com.ritsukage.sts2-RitsuLib] [RitsuLib-ModSettings] Loaded translations: language='zhs', fallback='eng', entries=758, local=758, fallbackEntries=0, sources=2 (local=1, fallback=1)
@@ -604,7 +604,7 @@ Common Incompatible Mods:
 [WARN] Asset not cached: res://themes/settings_screen_line_header.tres
 [WARN] Asset not cached: res://images/ui/reward_screen/reward_skip_button.png
 [WARN] Asset not cached: res://scenes/ui/selection_reticle.tscn
-[INFO] [Startup] Time to main menu (Godot ticks): 21781ms
+[INFO] [Startup] Time to main menu (Godot ticks): 25966ms
 [INFO] [BaseLib] Adding custom save data to SerializableRun.
 [INFO] [BaseLib] Added 0 new properties to SerializableRun
 [INFO] [BaseLib] Adding custom save data to SerializableCard.
@@ -618,8 +618,8 @@ Common Incompatible Mods:
 [INFO] [BaseLib] Adding custom save data to SerializableReward.
 [INFO] [BaseLib] Added 0 new properties to SerializableReward
 [WARN] Asset not cached: res://images/ui/top_panel/character_icon_defect.png
-[INFO] [Startup] Time to main menu: 22,088ms
-[INFO] [Startup] Resource stats (main menu loaded (essential)): StaticMem=0B, VRAM=2.6GB, Objects=10,721, Resources=1,698, Nodes=1,889, CachedAssets=15
+[INFO] [Startup] Time to main menu: 26,284ms
+[INFO] [Startup] Resource stats (main menu loaded (essential)): StaticMem=0B, VRAM=2.6GB, Objects=10,808, Resources=1,698, Nodes=1,889, CachedAssets=15
 [INFO] AtlasManager: Loaded epoch_atlas with 57 sprites
 [INFO] AtlasManager: Loaded relic_atlas with 341 sprites
 [INFO] AtlasManager: Loaded relic_outline_atlas with 341 sprites
@@ -642,38 +642,38 @@ Common Incompatible Mods:
 [INFO] [com.ritsukage.sts2-RitsuLib] 
 === RitsuLib Startup Audit: launch to main menu ===
   harmonyPatchAllTypeLoadGuard: 1.2 ms
-  harmonyInitSetterCompat: 11.6 ms
-  settingsStore: 536.9 ms
-  debugLogViewer: 15.7 ms
-  modSettingsBootstrap: 40.6 ms
-  telemetryBootstrap: 1.8 ms
+  harmonyInitSetterCompat: 12.0 ms
+  settingsStore: 465.8 ms
+  debugLogViewer: 14.9 ms
+  modSettingsBootstrap: 42.1 ms
+  telemetryBootstrap: 1.9 ms
   mobileSteamRuntime: 0.0 ms
-  imageResourceLoader: 4.3 ms
+  imageResourceLoader: 4.5 ms
   godotNodeFactories: 2.7 ms
   modTypeDiscoveryBuiltIns: 0.8 ms
-  secondaryResourceLocalization: 1.6 ms
-  secondaryResourceCloneBridge: 1.2 ms
-  frameworkBuiltIns: 0.2 ms (inclusive 10.8 ms)
-  registerPatches: 65.4 ms
-  patchAll.Core(401): 509.8 ms
-  patchAll.SettingsUi(8): 12.4 ms
-  patchAll.ContentAssets(116): 93.9 ms
-  patchAll.CharacterAssets(52): 78.2 ms
-  patchAll.ContentRegistry(26): 23.2 ms
+  secondaryResourceLocalization: 1.8 ms
+  secondaryResourceCloneBridge: 1.3 ms
+  frameworkBuiltIns: 0.2 ms (inclusive 11.2 ms)
+  registerPatches: 66.2 ms
+  patchAll.Core(401): 520.2 ms
+  patchAll.SettingsUi(8): 12.8 ms
+  patchAll.ContentAssets(116): 96.7 ms
+  patchAll.CharacterAssets(52): 82.0 ms
+  patchAll.ContentRegistry(26): 23.7 ms
   patchAll.Persistence(3): 2.0 ms
-  patchAll.Unlocks(22): 22.2 ms
-  patchAll: 1.4 ms (inclusive 743.0 ms)
-  runtimeServices: 14.1 ms
-  modTypeDiscovery.runOnce: 38.2 ms
+  patchAll.Unlocks(22): 23.2 ms
+  patchAll: 1.4 ms (inclusive 761.9 ms)
+  runtimeServices: 15.4 ms
+  modTypeDiscovery.runOnce: 37.8 ms
   flushDeferredContentPacks: 1.2 ms
-  modelDb.validateCollisions: 14.8 ms
-  modelDb.injectDynamicModels: 2.9 ms
-  modelDb.warmResolvedCaches: 2.7 ms
-  modelDb.validateBaseLibDynamicEnums: 32.2 ms
+  modelDb.validateCollisions: 14.2 ms
+  modelDb.injectDynamicModels: 2.8 ms
+  modelDb.warmResolvedCaches: 2.8 ms
+  modelDb.validateBaseLibDynamicEnums: 32.8 ms
   modelDb.warmResolvedCaches: 0.0 ms
-  runtimeDetourCompatibilityScan: 5.4 ms
+  runtimeDetourCompatibilityScan: 5.1 ms
   ---
-  RitsuLib exclusive self-time total: 1538.4 ms
+  RitsuLib exclusive self-time total: 1489.4 ms
 [INFO] [com.ritsukage.sts2-RitsuLib] [UpdateCheck] RitsuLib external update check skipped: loaded from Steam Workshop.
 [INFO] [com.ritsukage.sts2-RitsuLib] [SteamWorkshopUpdate] Auto check requested.
 [INFO] [com.ritsukage.sts2-RitsuLib] [SteamWorkshopUpdate] Starting Auto check. SteamInitialized=True.
@@ -685,7 +685,7 @@ Common Incompatible Mods:
 [INFO] [com.ritsukage.sts2-RitsuLib] [ATA-Silent-Settings-I18N] Subscribed to locale change notifications
 [INFO] [com.ritsukage.sts2-RitsuLib] [Persistence] [runtime_reflection_spine_profile_auto] Using default values: File not found
 [INFO] Preloading 'Common' assets... count=686 vfx=92
-[INFO] [Startup] Resource stats (main menu loaded (complete)): StaticMem=0B, VRAM=2.8GB, Objects=10,594, Resources=1,696, Nodes=1,887, CachedAssets=5
+[INFO] [Startup] Resource stats (main menu loaded (complete)): StaticMem=0B, VRAM=2.8GB, Objects=10,593, Resources=1,696, Nodes=1,887, CachedAssets=5
 [INFO] [com.ritsukage.sts2-RitsuLib] [SteamWorkshopUpdate] Refreshed Workshop details for 16/16 subscribed item(s).
 [INFO] [com.ritsukage.sts2-RitsuLib] [SteamWorkshopUpdate] Using Workshop update scope 'steam:production:host:v0.107.1' (production).
 [INFO] [com.ritsukage.sts2-RitsuLib] [SteamWorkshopUpdate] Workshop item 3747679239 needs update. State=5, LocalTimestamp=1783263758, RemoteUpdated=1783337727.
@@ -698,89 +698,76 @@ Common Incompatible Mods:
 [INFO] Player already has Epoch: OROBAS_EPOCH
 [INFO] Wrote 80540 bytes to path=user://steam/76561198995205184/modded/profile2\saves\progress.save save_dir=user://steam/76561198995205184
 [INFO] Wrote 80540 bytes to modded/profile2/saves/progress.save in steam remote store
-[INFO] Wrote 6592 bytes to path=user://steam/76561198995205184/modded/profile2\saves\history\1783842585.run save_dir=user://steam/76561198995205184
-[INFO] Wrote 6592 bytes to modded/profile2/saves/history/1783842585.run in steam remote store
-[INFO] Saved run history: 1783842585.run
+[INFO] Wrote 6549 bytes to path=user://steam/76561198995205184/modded/profile2\saves\history\1783842960.run save_dir=user://steam/76561198995205184
+[INFO] Wrote 6549 bytes to modded/profile2/saves/history/1783842960.run in steam remote store
+[INFO] Saved run history: 1783842960.run
 [INFO] Created Run History entry!
 [WARN] Asset not cached: res://scenes/screens/singleplayer_submenu.tscn
 [INFO] [com.ritsukage.sts2-RitsuLib] [Sidecar] Session unbound epoch=1
 [INFO] Max ascension changed to 0
 [INFO] Max ascension changed to 10
 [INFO] [StartRunLobby (1)] CHARACTER.IRONCLAD ascension set to preferred: 10
-[INFO] Preloading 'Common' Complete: assets=778 time_elapsed=4,428ms
 [INFO] Max ascension changed to 10
 [INFO] [StartRunLobby (1)] CHARACTER.DEFECT ascension set to preferred: 10
 [INFO] [StartRunLobby (1)] Local player 1 is ready
-[INFO] Embarking on a singleplayer DEFECT run. Ascension: 10 Seed: A8Z1EJY77E
+[INFO] Embarking on a singleplayer DEFECT run. Ascension: 10 Seed: TGNZ22P5SJ
+[INFO] Preloading 'Common' Complete: assets=778 time_elapsed=4,323ms
 [INFO] [ShopEnhancement] Registered GiftItemMessage and SyncConfigMessage handler.
 [INFO] Preloading 'characters=DEFECT' assets... count=167 vfx=6
 [INFO] Preloading 'characters=DEFECT' Complete: assets=173 time_elapsed=317ms
 [INFO] Preloading 'Act=UNDERDOCKS' assets... count=8 vfx=0
-[INFO] Preloading 'Act=UNDERDOCKS' Complete: assets=8 time_elapsed=34ms
-[InfiniteUpgrade] RunStarted — seed=A8Z1EJY77E
-[INFO] InfiniteUpgrade: no file for seed=A8Z1EJY77E, defaulting to 5.
+[INFO] Preloading 'Act=UNDERDOCKS' Complete: assets=8 time_elapsed=40ms
+[InfiniteUpgrade] RunStarted — seed=TGNZ22P5SJ
+[INFO] InfiniteUpgrade: no file for seed=TGNZ22P5SJ, defaulting to 5.
 [InfiniteUpgrade] Points = 5
 [INFO] [MoreEnchantments] Granted Enchanter's Table at run start.
 [INFO] [sts2.piyixiajiuhenfen.modconfig] Mods tab injected into settings screen!
 [WARN] Asset not cached: res://themes/settings_screen_line_header.tres
 [WARN] Asset not cached: res://images/ui/reward_screen/reward_skip_button.png
 [WARN] Asset not cached: res://scenes/ui/selection_reticle.tscn
-[INFO] [com.ritsukage.sts2-RitsuLib] [SteamWorkshopUpdate] Download monitor completed without observed Steam download activity or local install timestamp changes.
 [INFO] Preloading 'Act=UNDERDOCKS' assets... count=0 vfx=0
-[INFO] Preloading 'Act=UNDERDOCKS' Complete: assets=0 time_elapsed=18ms
+[INFO] Preloading 'Act=UNDERDOCKS' Complete: assets=0 time_elapsed=17ms
 [INFO] Wrote 80540 bytes to path=user://steam/76561198995205184/modded/profile2\saves\progress.save save_dir=user://steam/76561198995205184
 [INFO] Wrote 80540 bytes to modded/profile2/saves/progress.save in steam remote store
-[INFO] Wrote 44429 bytes to path=user://steam/76561198995205184/modded/profile2\saves\current_run.save save_dir=user://steam/76561198995205184
-[INFO] Wrote 44429 bytes to modded/profile2/saves/current_run.save in steam remote store
+[INFO] Wrote 47398 bytes to path=user://steam/76561198995205184/modded/profile2\saves\current_run.save save_dir=user://steam/76561198995205184
+[INFO] Wrote 47398 bytes to modded/profile2/saves/current_run.save in steam remote store
 [INFO] Unloading 4 missed cache assets
 [INFO] Preloading 'Event Room' assets... count=2 vfx=0
-[INFO] Preloading 'Event Room' Complete: assets=2 time_elapsed=142ms
+[INFO] Preloading 'Event Room' Complete: assets=2 time_elapsed=276ms
+[INFO] [com.ritsukage.sts2-RitsuLib] [SteamWorkshopUpdate] Download monitor completed without observed Steam download activity or local install timestamp changes.
 [INFO] [BaseLib] Checking for additional interactions with NEOW
 [WARN] Asset not cached: res://scenes/events/ancient_dialogue_line.tscn
 [InfiniteUpgrade] Clicked: 点数+999
 [InfiniteUpgrade] +999 points → 1004
-[InfiniteUpgrade] Clicked: 力量+1
-[InfiniteUpgrade] Clicked: 敏捷+1
-[InfiniteUpgrade] Clicked: 集中+1
+[InfiniteUpgrade] Clicked: 点数+999
+[InfiniteUpgrade] +999 points → 2003
 [InfiniteUpgrade] Clicked: 覆甲+1
 [InfiniteUpgrade] Clicked: 荆棘+1
 [InfiniteUpgrade] Clicked: 人工制品+1
+[InfiniteUpgrade] Clicked: 力量+1
+[InfiniteUpgrade] Clicked: 敏捷+1
+[InfiniteUpgrade] Clicked: 集中+1
+[WARN] Asset not cached: res://images/relics/whetstone.png
+[INFO] Player 1 obtained RELIC.WHETSTONE from relic reward
 [INFO] Wrote 80540 bytes to path=user://steam/76561198995205184/modded/profile2\saves\progress.save save_dir=user://steam/76561198995205184
 [INFO] Wrote 80540 bytes to modded/profile2/saves/progress.save in steam remote store
 [INFO] [sts2.piyixiajiuhenfen.speedx] [AutoProceed] schedule Neow.Proceed
-[INFO] Wrote 46679 bytes to path=user://steam/76561198995205184/modded/profile2\saves\current_run.save save_dir=user://steam/76561198995205184
-[INFO] Wrote 46679 bytes to modded/profile2/saves/current_run.save in steam remote store
+[INFO] Wrote 50137 bytes to path=user://steam/76561198995205184/modded/profile2\saves\current_run.save save_dir=user://steam/76561198995205184
+[INFO] Wrote 50137 bytes to modded/profile2/saves/current_run.save in steam remote store
 [INFO] [sts2.piyixiajiuhenfen.speedx] [AutoProceed] Neow.Proceed state=Ready
 [INFO] [sts2.piyixiajiuhenfen.speedx] [AutoProceed] Neow.Proceed fire
 [INFO] Player vote changed for 1: ->MapVote (gen: 1 coord: (6, 1))
 [INFO] Wrote 80540 bytes to path=user://steam/76561198995205184/modded/profile2\saves\progress.save save_dir=user://steam/76561198995205184
 [INFO] Wrote 80540 bytes to modded/profile2/saves/progress.save in steam remote store
-[INFO] Wrote 46735 bytes to path=user://steam/76561198995205184/modded/profile2\saves\current_run.save save_dir=user://steam/76561198995205184
-[INFO] Wrote 46735 bytes to modded/profile2/saves/current_run.save in steam remote store
-[INFO] Unloading 1 missed cache assets
+[INFO] Wrote 49980 bytes to path=user://steam/76561198995205184/modded/profile2\saves\current_run.save save_dir=user://steam/76561198995205184
+[INFO] Wrote 49980 bytes to modded/profile2/saves/current_run.save in steam remote store
+[INFO] Unloading 2 missed cache assets
 [INFO] Preloading 'Combat Room' assets... count=10 vfx=0
 [INFO] Preloading 'Combat Room' Complete: assets=10 time_elapsed=100ms
-[INFO] Creating NCombatRoom with mode=ActiveCombat encounter=SLUDGE_SPINNER_WEAK.
-[InfiniteUpgrade] PowerCmd.Apply<T>(PlayerChoiceContext choiceContext, IEnumerable`1 targets, Decimal amount, Creature applier, CardModel cardSource, Boolean silent)
-[InfiniteUpgrade] PowerCmd.Apply<T>(PlayerChoiceContext choiceContext, Creature target, Decimal amount, Creature applier, CardModel cardSource, Boolean silent)
-[InfiniteUpgrade] PowerCmd.Apply method not found
-[InfiniteUpgrade] PowerCmd.Apply<T>(PlayerChoiceContext choiceContext, IEnumerable`1 targets, Decimal amount, Creature applier, CardModel cardSource, Boolean silent)
-[InfiniteUpgrade] PowerCmd.Apply<T>(PlayerChoiceContext choiceContext, Creature target, Decimal amount, Creature applier, CardModel cardSource, Boolean silent)
-[InfiniteUpgrade] PowerCmd.Apply method not found
-[InfiniteUpgrade] PowerCmd.Apply<T>(PlayerChoiceContext choiceContext, IEnumerable`1 targets, Decimal amount, Creature applier, CardModel cardSource, Boolean silent)
-[InfiniteUpgrade] PowerCmd.Apply<T>(PlayerChoiceContext choiceContext, Creature target, Decimal amount, Creature applier, CardModel cardSource, Boolean silent)
-[InfiniteUpgrade] PowerCmd.Apply method not found
-[InfiniteUpgrade] PowerCmd.Apply<T>(PlayerChoiceContext choiceContext, IEnumerable`1 targets, Decimal amount, Creature applier, CardModel cardSource, Boolean silent)
-[InfiniteUpgrade] PowerCmd.Apply<T>(PlayerChoiceContext choiceContext, Creature target, Decimal amount, Creature applier, CardModel cardSource, Boolean silent)
-[InfiniteUpgrade] PowerCmd.Apply method not found
-[InfiniteUpgrade] PowerCmd.Apply<T>(PlayerChoiceContext choiceContext, IEnumerable`1 targets, Decimal amount, Creature applier, CardModel cardSource, Boolean silent)
-[InfiniteUpgrade] PowerCmd.Apply<T>(PlayerChoiceContext choiceContext, Creature target, Decimal amount, Creature applier, CardModel cardSource, Boolean silent)
-[InfiniteUpgrade] PowerCmd.Apply method not found
-[InfiniteUpgrade] PowerCmd.Apply<T>(PlayerChoiceContext choiceContext, IEnumerable`1 targets, Decimal amount, Creature applier, CardModel cardSource, Boolean silent)
-[InfiniteUpgrade] PowerCmd.Apply<T>(PlayerChoiceContext choiceContext, Creature target, Decimal amount, Creature applier, CardModel cardSource, Boolean silent)
-[InfiniteUpgrade] PowerCmd.Apply method not found
-[INFO] InfiniteUpgrade: SAVED 924 pts → seed=A8Z1EJY77E
-[InfiniteUpgrade] Checkpoint SAVED (combat start) — pts=924
+[INFO] Creating NCombatRoom with mode=ActiveCombat encounter=SEAPUNK_WEAK.
+[InfiniteUpgrade] PowerCmd.Apply(PowerModel,...) not found
+[INFO] InfiniteUpgrade: SAVED 1923 pts → seed=TGNZ22P5SJ
+[InfiniteUpgrade] Checkpoint SAVED (combat start) — pts=1923
 [INFO] [MultiEnchantmentMod] [MultiEnchantment] PengoTarot.Enchantments.TarChariotReversedEnchantment hasn't declared a stack behavior, so it's treated as one-per-card (DisallowDuplicate) — the safe default, and usually exactly what's wanted.
 [INFO] [MultiEnchantmentMod] [MultiEnchantment] PengoTarot.Enchantments.TarChariotUprightEnchantment hasn't declared a stack behavior, so it's treated as one-per-card (DisallowDuplicate) — the safe default, and usually exactly what's wanted.
 [INFO] [MultiEnchantmentMod] [MultiEnchantment] PengoTarot.Enchantments.TarDeathReversedEnchantment hasn't declared a stack behavior, so it's treated as one-per-card (DisallowDuplicate) — the safe default, and usually exactly what's wanted.
@@ -916,31 +903,18 @@ Common Incompatible Mods:
 [WARN] Asset not cached: res://scenes/orbs/orb_visuals/lightning_orb.tscn
 [WARN] Asset not cached: res://images/orbs/lightning_orb.png
 战斗中无法打开无限升级系统。
-[INFO] MuteInBackground: environment [displayServer=Windows, os=Windows]
-[INFO] MuteInBackground: FocusOut received [tween=False, windowFocused=False]
-[INFO] Limiting background FPS to 30
-[INFO] MuteInBackground: FocusIn received [tween=True, msSinceFocusOut=7703, windowFocused=True]
-[INFO] MuteInBackground: Unmuted, restored volume to 1
-[INFO] Restored foreground FPS
-[WARN] [BaseLib] GetRawText: Key 'DECIMILLIPEDE_SEGMENT_FRONT.name' not found in table 'monsters'
-[WARN] [BaseLib] GetRawText: Key 'DECIMILLIPEDE_SEGMENT_MIDDLE.name' not found in table 'monsters'
-[WARN] [BaseLib] GetRawText: Key 'DECIMILLIPEDE_SEGMENT_BACK.name' not found in table 'monsters'
-[INFO] MuteInBackground: FocusOut received [tween=False, windowFocused=False]
-[INFO] Limiting background FPS to 30
-[INFO] MuteInBackground: FocusIn received [tween=True, msSinceFocusOut=1769, windowFocused=True]
-[INFO] MuteInBackground: Unmuted, restored volume to 1
-[INFO] Restored foreground FPS
 [INFO] [QuickRestart] Creating a new restart button
 [INFO] Unloading 2 missed cache assets
 [INFO] Preloading 'Common' assets... count=125 vfx=1
 [WARN] Warning: Packet writer is growing from 1024 bytes to 2048 bytes!
+[WARN] Warning: Packet writer is growing from 2048 bytes to 4096 bytes!
 [WARN] Asset not cached: res://scenes/screens/main_menu.tscn
 [INFO] [sts2.piyixiajiuhenfen.modconfig] Mods tab injected into settings screen!
 [WARN] Asset not cached: res://themes/settings_screen_line_header.tres
 [WARN] Asset not cached: res://images/ui/reward_screen/reward_skip_button.png
 [WARN] Asset not cached: res://scenes/ui/selection_reticle.tscn
-[INFO] [Startup] Time to main menu (Godot ticks): 88285ms
-[INFO] Preloading 'Common' Complete: assets=125 time_elapsed=810ms
+[INFO] [Startup] Time to main menu (Godot ticks): 69404ms
+[INFO] Preloading 'Common' Complete: assets=125 time_elapsed=808ms
 [INFO] Quit button pressed
 [INFO] Quit confirmed
 [INFO] [BaseLib] NGame.Quit(): saving all ModConfigs
@@ -967,10 +941,10 @@ ERROR: 1 shaders of type ParticlesShaderRD were never freed
 ERROR: 25 RID allocations of type 'N10RendererRD11MeshStorage4MeshE' were leaked at exit.
 ERROR: 82 RID allocations of type 'N10RendererRD15MaterialStorage8MaterialE' were leaked at exit.
 ERROR: 6 RID allocations of type 'N10RendererRD15MaterialStorage6ShaderE' were leaked at exit.
-ERROR: 223 RID allocations of type 'N10RendererRD14TextureStorage7TextureE' were leaked at exit.
+ERROR: 222 RID allocations of type 'N10RendererRD14TextureStorage7TextureE' were leaked at exit.
 WARNING: 157 RIDs of type "UniformBuffer" were leaked.
    at: _free_rids (servers/rendering/rendering_device.cpp:6981)
-WARNING: 437 RIDs of type "Texture" were leaked.
+WARNING: 436 RIDs of type "Texture" were leaked.
    at: finalize (servers/rendering/rendering_device.cpp:7191)
 ERROR: 300 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
 ERROR: 14 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
