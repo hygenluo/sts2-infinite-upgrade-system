@@ -244,21 +244,23 @@ public static class CardOperationHelper
     // Phase 6: 牌组操作
     // ═══════════════════════════════════════════════════════════════
 
-    /// <summary>从牌组选择一张牌删除（免费）。</summary>
-    public static async Task<bool> RemoveCardFromDeck()
+    /// <summary>从牌组选择一张牌删除。</summary>
+    public static async Task<bool> RemoveCardFromDeck(int cost)
     {
+        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
         var player = GetLocalPlayer();
-        if (player == null) return false;
+        if (player == null) { UpgradePointManager.AddPoints(cost); return false; }
         UpgradeUIHandler.Instance?.SetUIVisible(false);
         try
         {
             var card = await SelectCardFromDeck(player);
-            if (card == null) { UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+            if (card == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
             await MegaCrit.Sts2.Core.Commands.CardPileCmd.RemoveFromDeck(card);
+            UpgradeUIHandler.Instance?.RefreshPointsLabel();
             UpgradeUIHandler.Instance?.HideUI();
             return true;
         }
-        catch (Exception ex) { Log.Error($"RemoveCard: {ex.Message}"); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+        catch (Exception ex) { Log.Error($"RemoveCard: {ex.Message}"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
     }
 
     /// <summary>从指定卡牌池随机添加一张牌到牌组（免费）。</summary>
