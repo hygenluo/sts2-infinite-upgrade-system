@@ -261,20 +261,20 @@ public static class CardOperationHelper
         catch (Exception ex) { Log.Error($"RemoveCard: {ex.Message}"); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
     }
 
-    /// <summary>随机添加一张指定卡牌池中的牌（免费）。使用 CardPileCmd.Add 正确触发牌组更新。</summary>
-    public static async Task<bool> AddRandomCardFromPool(string poolKey)
+    /// <summary>从指定卡牌池随机添加一张牌到牌组（免费）。</summary>
+    public static async Task<bool> AddCardFromPool(string poolKey)
     {
         var player = GetLocalPlayer();
         if (player == null) return false;
         try
         {
-            // 通过 ModelDb.CardPool<T>() 获取池实例（Reflection）
             var poolTypeName = poolKey switch
             {
                 "red" => "MegaCrit.Sts2.Core.Models.CardPools.IroncladCardPool",
                 "green" => "MegaCrit.Sts2.Core.Models.CardPools.SilentCardPool",
                 "blue" => "MegaCrit.Sts2.Core.Models.CardPools.DefectCardPool",
                 "purple" => "MegaCrit.Sts2.Core.Models.CardPools.NecrobinderCardPool",
+                "orange" => "MegaCrit.Sts2.Core.Models.CardPools.RegentCardPool",
                 "colorless" => "MegaCrit.Sts2.Core.Models.CardPools.ColorlessCardPool",
                 "curse" => "MegaCrit.Sts2.Core.Models.CardPools.CurseCardPool",
                 _ => null
@@ -284,21 +284,19 @@ public static class CardOperationHelper
             Type? poolType = null;
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             { poolType = asm.GetType(poolTypeName); if (poolType != null) break; }
-            if (poolType == null) { GD.PrintErr($"[IU] Pool type not found: {poolTypeName}"); return false; }
+            if (poolType == null) { GD.PrintErr($"Pool type not found: {poolTypeName}"); return false; }
 
-            // ModelDb.CardPool<T>()
             var modelDb = typeof(MegaCrit.Sts2.Core.Models.ModelDb);
-            var poolGetter = modelDb.GetMethod("CardPool", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null);
-            if (poolGetter == null) { GD.PrintErr("[IU] ModelDb.CardPool<T>() not found"); return false; }
-            var genericGetter = poolGetter.MakeGenericMethod(poolType);
-            var pool = genericGetter.Invoke(null, null) as MegaCrit.Sts2.Core.Models.CardPoolModel;
-            if (pool == null) { GD.PrintErr($"[IU] Pool null for {poolKey}"); return false; }
+            var poolGetter = modelDb.GetMethod("CardPool", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null)!;
+            var pool = poolGetter.MakeGenericMethod(poolType).Invoke(null, null) as MegaCrit.Sts2.Core.Models.CardPoolModel;
+            if (pool == null) { GD.PrintErr($"Pool null for {poolKey}"); return false; }
 
             var candidates = pool.GetUnlockedCards(player.UnlockState, player.RunState.CardMultiplayerConstraint).ToList();
-            if (candidates.Count == 0) { GD.Print($"没有可用的{poolKey}卡牌。"); return false; }
+            if (candidates.Count == 0) { GD.Print($"没有{poolKey}卡牌。"); return false; }
 
             var pick = candidates[new System.Random().Next(candidates.Count)];
             var card = pick.ToMutable();
+            card.Owner = player;  // 必须设置 Owner，否则 CardPileCmd.Add 抛异常
             card.FloorAddedToDeck = player.RunState.TotalFloor;
             await MegaCrit.Sts2.Core.Commands.CardPileCmd.Add(card, MegaCrit.Sts2.Core.Entities.Cards.PileType.Deck);
             GD.Print($"已添加{poolKey}牌: {card.Id.Entry}");
