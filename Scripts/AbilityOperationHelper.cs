@@ -74,12 +74,12 @@ public static class AbilityOperationHelper
     /// <summary>Harmony Postfix: 如果购买了格挡不消失，阻止格挡清除。</summary>
     [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Hooks.Hook), nameof(MegaCrit.Sts2.Core.Hooks.Hook.ShouldClearBlock))]
     [HarmonyPostfix]
-    public static void PatchShouldClearBlock(MegaCrit.Sts2.Core.Combat.CombatState combatState, Creature creature, ref bool __result, ref MegaCrit.Sts2.Core.Models.AbstractModel? preventer)
+    public static void PatchShouldClearBlock(Creature creature, ref bool __result)
     {
         if (GetBoost("blockKeep") > 0 && creature.IsPlayer)
         {
+            GD.Print($"[IU] BlockKeep: preventing clear for {creature.IsPlayer}");
             __result = false;
-            preventer = null;
         }
     }
 
