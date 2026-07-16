@@ -13,32 +13,15 @@ namespace InfiniteUpgradeSystem;
 /// </summary>
 public static class PointsPersistence
 {
-    private static string? s_modDir;
     private static readonly JsonSerializerOptions s_jsonOptions = new() { WriteIndented = false };
 
-    private static string GetModDir()
-    {
-        if (s_modDir != null) return s_modDir;
-        s_modDir = Path.GetDirectoryName(typeof(Entry).Assembly.Location);
-        if (string.IsNullOrEmpty(s_modDir))
-            s_modDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return s_modDir;
-    }
-
-    private static string GetFilePath(string seed)
-    {
-        var dir = Path.Combine(GetModDir(), "runs");
-        return Path.Combine(dir, $"points_{seed}.json");
-    }
+    private static string GetFilePath(string seed) => SavePaths.GetFilePath("points", seed);
 
     public static void SavePoints(int points, string seed)
     {
         try
         {
             var path = GetFilePath(seed);
-            var dir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
 
             var data = new PointsData { Points = points };
             File.WriteAllText(path, JsonSerializer.Serialize(data, s_jsonOptions));

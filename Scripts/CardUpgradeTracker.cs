@@ -86,7 +86,7 @@ public static class CardUpgradeTracker
         var entry = new CardModEntry { Type = type.ToString() };
         if (keyword != null) entry.Keyword = keyword;
         s_records[index].Entries.Add(entry);
-        // 不立即写盘 — SaveCheckpoint 在检查点时保存
+        SaveToDisk(seed); // 每次修改立即写盘，避免中途退出丢失
     }
 
     public static void ReapplyAll(Player player)
@@ -137,6 +137,27 @@ public static class CardUpgradeTracker
     }
 
     public static void SaveCheckpoint(string seed) => SaveToDisk(seed);
+
+    /// <summary>
+    /// 删牌后修正按下标记录的修改：删除该卡的记录，其后的记录下标前移 1。
+    /// 不修正的话读档重放会错位（template mismatch 跳过，或应用到错的卡）。
+    /// </summary>
+    public static void OnCardRemoved(int removedIndex, string seed)
+    {
+        if (removedIndex < 0) return;
+
+        var shifted = new Dictionary<int, CardModRecord>();
+        foreach (var kv in s_records)
+        {
+            if (kv.Key == removedIndex) continue;          // 被删卡的记录丢弃
+            int newKey = kv.Key > removedIndex ? kv.Key - 1 : kv.Key;
+            shifted[newKey] = kv.Value;
+        }
+        s_records.Clear();
+        foreach (var kv in shifted) s_records[kv.Key] = kv.Value;
+
+        SaveToDisk(seed);
+    }
 
     public static void Load(string seed)
     {
@@ -189,9 +210,6 @@ public static class CardUpgradeTracker
         try
         {
             var path = GetFilePath(seed);
-            var dir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
 
             var list = new List<SerializableRecord>();
             foreach (var kv in s_records)
@@ -214,56 +232,46 @@ public static class CardUpgradeTracker
     {
         if (!Enum.TryParse<ModType>(entry.Type, out var type)) return;
 
+        // ReapplyAll 已保证卡牌可变且写回牌组；此处 ToMutable 只会产生孤儿副本，直接跳过
+        if (!card.IsMutable)
+        {
+            Log.Warn($"InfiniteUpgrade: ApplyModification skip {entry.Type} on immutable card {card.Id.Entry}.");
+            return;
+        }
+
         switch (type)
         {
             case ModType.Upgrade:
-                if (!card.IsMutable) card = card.ToMutable();
                 CardOperationHelper.UpgradeWithoutTracking(card);
                 break;
             case ModType.DamagePlus:
-                if (!card.IsMutable) card = card.ToMutable();
                 card.DynamicVars.Damage.BaseValue += 1m;
                 break;
             case ModType.BlockPlus:
-                if (!card.IsMutable) card = card.ToMutable();
                 card.DynamicVars.Block.BaseValue += 1m;
                 break;
             case ModType.DrawPlus:
-                if (!card.IsMutable) card = card.ToMutable();
                 card.DynamicVars.Cards.BaseValue += 1m;
                 break;
             case ModType.ReplayPlus:
-                if (!card.IsMutable) card = card.ToMutable();
                 card.BaseReplayCount += 1;
                 break;
             case ModType.KeywordAdd:
                 if (entry.Keyword != null && Enum.TryParse<CardKeyword>(entry.Keyword, out var kwAdd))
-                {
-                    if (!card.IsMutable) card = card.ToMutable();
                     card.AddKeyword(kwAdd);
-                }
                 break;
             case ModType.KeywordRemove:
                 if (entry.Keyword != null && Enum.TryParse<CardKeyword>(entry.Keyword, out var kwRem))
-                {
-                    if (!card.IsMutable) card = card.ToMutable();
                     card.RemoveKeyword(kwRem);
-                }
                 break;
             case ModType.EnergyReduce:
-                if (!card.IsMutable) card = card.ToMutable();
                 var cur = card.EnergyCost.Canonical;
                 if (cur > 0) card.EnergyCost.SetCustomBaseCost(cur - 1);
                 break;
         }
     }
 
-    private static string GetFilePath(string seed)
-    {
-        var modDir = Path.GetDirectoryName(typeof(Entry).Assembly.Location) ?? ".";
-        var dir = Path.Combine(modDir, "runs");
-        return Path.Combine(dir, $"card_upgrades_{seed}.json");
-    }
+    private static string GetFilePath(string seed) => SavePaths.GetFilePath("card_upgrades", seed);
 
     private static int FindCardIndex(IReadOnlyList<CardModel> cards, CardModel target)
     {

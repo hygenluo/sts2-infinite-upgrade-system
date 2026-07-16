@@ -26,6 +26,7 @@ public static class UpgradePointManager
         if (amount < 0)
             throw new ArgumentException("Amount must be non-negative.", nameof(amount));
         CurrentPoints += amount;
+        SaveCheckpoint(); // 点数变化立即写盘，避免中途退出丢失
     }
 
     public static bool TrySpendPoints(int amount)
@@ -35,6 +36,7 @@ public static class UpgradePointManager
         if (CurrentPoints >= amount)
         {
             CurrentPoints -= amount;
+            SaveCheckpoint(); // 点数变化立即写盘，避免中途退出丢失
             return true;
         }
         return false;

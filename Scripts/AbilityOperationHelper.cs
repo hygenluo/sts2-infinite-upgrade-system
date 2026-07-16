@@ -24,6 +24,9 @@ public static class AbilityOperationHelper
         if (!UpgradePointManager.TrySpendPoints(cost)) return false;
         s_boosts.TryGetValue(key, out int cur);
         s_boosts[key] = cur + 1;
+        // 每次购买立即写盘，避免中途退出丢失
+        var seed = MegaCrit.Sts2.Core.Runs.RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
+        SaveCheckpoint(seed);
         return true;
     }
 
@@ -123,10 +126,7 @@ public static class AbilityOperationHelper
     {
         try
         {
-            var modDir = Path.GetDirectoryName(typeof(Entry).Assembly.Location) ?? ".";
-            var dir = Path.Combine(modDir, "runs");
-            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            File.WriteAllText(Path.Combine(dir, $"abilities_{seed}.json"), JsonSerializer.Serialize(s_boosts, s_jsonOptions));
+            File.WriteAllText(SavePaths.GetFilePath("abilities", seed), JsonSerializer.Serialize(s_boosts, s_jsonOptions));
         }
         catch (Exception ex) { Log.Error($"Ability save: {ex.Message}"); }
     }
@@ -137,8 +137,7 @@ public static class AbilityOperationHelper
         s_appliedThisRun = false;
         try
         {
-            var modDir = Path.GetDirectoryName(typeof(Entry).Assembly.Location) ?? ".";
-            var path = Path.Combine(modDir, "runs", $"abilities_{seed}.json");
+            var path = SavePaths.GetFilePath("abilities", seed);
             if (!File.Exists(path)) return;
             var data = JsonSerializer.Deserialize<Dictionary<string, int>>(File.ReadAllText(path), s_jsonOptions);
             if (data != null) foreach (var kv in data) s_boosts[kv.Key] = kv.Value;

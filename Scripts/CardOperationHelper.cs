@@ -39,6 +39,28 @@ public static class CardOperationHelper
         return LocalContext.GetMe(state) ?? state.Players.FirstOrDefault();
     }
 
+    /// <summary>
+    /// 确保卡牌可变，且可变副本被写回牌组。
+    /// 直接 ToMutable() 而不写回会导致修改作用于孤儿副本：
+    /// 牌组里的原卡不变，且 RecordModification 按引用找卡会失败。
+    /// </summary>
+    public static CardModel EnsureMutableInDeck(Player player, CardModel card)
+    {
+        if (card.IsMutable) return card;
+
+        var cards = player.Deck.Cards;
+        int index = -1;
+        for (int i = 0; i < cards.Count; i++)
+            if (ReferenceEquals(cards[i], card)) { index = i; break; }
+
+        var mutable = card.ToMutable();
+        if (index >= 0 && player.Deck.Cards is IList<CardModel> deckList && !deckList.IsReadOnly)
+            deckList[index] = mutable;
+        else
+            Log.Warn($"InfiniteUpgrade: cannot write mutable copy of {card.Id.Entry} back to deck (index={index}); modification may not persist.");
+        return mutable;
+    }
+
     public static async Task<CardModel?> SelectCardFromDeck(Player player, string builtInPromptKey = "")
     {
         var prefs = string.IsNullOrEmpty(builtInPromptKey)
@@ -115,7 +137,7 @@ public static class CardOperationHelper
         {
             var card = await SelectCardFromDeck(player);
             if (card == null) { UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
-            if (!card.IsMutable) card = card.ToMutable();
+            card = EnsureMutableInDeck(player, card);
             if (getter(card) == null)
             {
                 GD.Print($"此卡牌没有{propName}属性。");
@@ -154,7 +176,7 @@ public static class CardOperationHelper
         {
             var card = await SelectCardFromDeck(player);
             if (card == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
-            if (!card.IsMutable) card = card.ToMutable();
+            card = EnsureMutableInDeck(player, card);
 
             if (add)
             {
@@ -192,7 +214,7 @@ public static class CardOperationHelper
         {
             var card = await SelectCardFromDeck(player);
             if (card == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
-            if (!card.IsMutable) card = card.ToMutable();
+            card = EnsureMutableInDeck(player, card);
             var cur = card.EnergyCost.Canonical;
             if (cur <= 0) { GD.Print("此卡牌已是0费。"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
             card.EnergyCost.SetCustomBaseCost(cur - 1);
@@ -229,7 +251,7 @@ public static class CardOperationHelper
         {
             var card = await SelectCardFromDeck(player);
             if (card == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
-            if (!card.IsMutable) card = card.ToMutable();
+            card = EnsureMutableInDeck(player, card);
             card.BaseReplayCount += 1;
             var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
             CardUpgradeTracker.RecordModification(card, seed, CardUpgradeTracker.ModType.ReplayPlus);
@@ -255,7 +277,18 @@ public static class CardOperationHelper
         {
             var card = await SelectCardFromDeck(player);
             if (card == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+
+            // 删除前记下标，删除后修正 CardUpgradeTracker 的按下标记录
+            var deckCards = player.Deck.Cards;
+            int removedIndex = -1;
+            for (int i = 0; i < deckCards.Count; i++)
+                if (ReferenceEquals(deckCards[i], card)) { removedIndex = i; break; }
+
             await MegaCrit.Sts2.Core.Commands.CardPileCmd.RemoveFromDeck(card);
+
+            var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
+            CardUpgradeTracker.OnCardRemoved(removedIndex, seed);
+
             UpgradeUIHandler.Instance?.RefreshPointsLabel();
             UpgradeUIHandler.Instance?.HideUI();
             return true;
