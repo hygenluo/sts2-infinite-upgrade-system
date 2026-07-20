@@ -21,3 +21,4 @@ Thumbs.db
 ## Build artifacts
 *.nupkg
 logs/
+mod-uploader.log

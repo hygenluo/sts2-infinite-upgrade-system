@@ -8,6 +8,7 @@ using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Runs;
 
 namespace InfiniteUpgradeSystem;
 
@@ -94,44 +95,101 @@ public static class CardUpgradeTracker
         if (s_records.Count == 0) return;
 
         var cards = player.Deck.Cards;
-        int applied = 0;
+        var matchedDeckIndices = new HashSet<int>();
+        var matchPlan = new List<(int OldIndex, CardModRecord Record, int NewIndex, CardModel Card)>();
+        bool anyIndexRemapped = false;
 
-        foreach (var kv in s_records)
+        // ═══ 阶段 1：建立匹配计划 ═══
+        // 按原始 index 排序，保证同名卡匹配的确定性
+        foreach (var kv in s_records.OrderBy(kv => kv.Key))
         {
-            int index = kv.Key;
+            int oldIndex = kv.Key;
             var record = kv.Value;
             if (record.Entries.Count == 0) continue;
-            if (index >= cards.Count)
+
+            int actualIndex = -1;
+            CardModel? card = null;
+
+            // 优先精确匹配：原下标处的卡牌 TemplateId 一致且未被占用
+            if (oldIndex < cards.Count
+                && cards[oldIndex].Id.Entry == record.TemplateId
+                && !matchedDeckIndices.Contains(oldIndex))
             {
-                Log.Warn($"InfiniteUpgrade: ReapplyAll skip index={index} >= count={cards.Count}");
-                continue;
+                card = cards[oldIndex];
+                actualIndex = oldIndex;
+            }
+            else
+            {
+                // 回退：全牌组搜索匹配的 TemplateId（跳过已被匹配的下标）
+                for (int i = 0; i < cards.Count; i++)
+                {
+                    if (cards[i].Id.Entry == record.TemplateId && !matchedDeckIndices.Contains(i))
+                    {
+                        card = cards[i];
+                        actualIndex = i;
+                        break;
+                    }
+                }
+
+                if (card == null)
+                {
+                    Log.Warn($"InfiniteUpgrade: ReapplyAll cannot find card {record.TemplateId} (was at index={oldIndex}); modifications lost.");
+                    continue;
+                }
+
+                anyIndexRemapped = true;
+                Log.Info($"InfiniteUpgrade: ReapplyAll remapped {record.TemplateId}: index {oldIndex} → {actualIndex}");
             }
 
-            var card = cards[index];
-            if (card.Id.Entry != record.TemplateId)
-            {
-                Log.Warn($"InfiniteUpgrade: ReapplyAll skip index={index} template mismatch: card={card.Id.Entry} vs record={record.TemplateId}");
-                continue;
-            }
+            matchedDeckIndices.Add(actualIndex);
+            matchPlan.Add((oldIndex, record, actualIndex, card));
+        }
 
-            GD.Print($"[InfiniteUpgrade] Reapplying {record.Entries.Count} mods to {card.Id.Entry} at index {index}");
+        // ═══ 阶段 2：应用修改 ═══
+        int applied = 0;
+        foreach (var (_, record, actualIndex, card) in matchPlan)
+        {
+            GD.Print($"[InfiniteUpgrade] Reapplying {record.Entries.Count} mods to {card.Id.Entry} at index {actualIndex}");
 
-            // 确保卡牌可变
-            if (!card.IsMutable)
+            var mutableCard = card;
+            if (!mutableCard.IsMutable)
             {
-                card = card.ToMutable();
-                // 替换牌组中的引用
+                mutableCard = mutableCard.ToMutable();
                 var deckList = player.Deck.Cards as IList<CardModel>;
                 if (deckList != null && !deckList.IsReadOnly)
-                    deckList[index] = card;
+                    deckList[actualIndex] = mutableCard;
             }
 
             foreach (var entry in record.Entries)
             {
-                ApplyModification(card, entry);
+                ApplyModification(mutableCard, entry);
             }
             applied++;
         }
+
+        // ═══ 阶段 3：重建索引（当发生重映射时） ═══
+        if (anyIndexRemapped)
+        {
+            var newRecords = new Dictionary<int, CardModRecord>();
+            foreach (var (_, record, newIndex, _) in matchPlan)
+                newRecords[newIndex] = record;
+
+            s_records.Clear();
+            foreach (var kv in newRecords)
+                s_records[kv.Key] = kv.Value;
+
+            // 索引变更后立即写盘，下次 ReapplyAll 走精确匹配快速路径
+            try
+            {
+                var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
+                SaveToDisk(seed);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"InfiniteUpgrade: ReapplyAll failed to save remapped indices: {ex.Message}");
+            }
+        }
+
         Log.Info($"InfiniteUpgrade: reapplied modifications to {applied} cards.");
         GD.Print($"[InfiniteUpgrade] ReapplyAll done: {applied} cards.");
     }
