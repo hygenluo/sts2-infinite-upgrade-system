@@ -76,10 +76,13 @@ public static class CardOperationHelper
         EnsureOverlayOnTop();
 
         var selected = (await selectTask).ToList();
+        RestoreOverlayPosition(); // 恢复原位，避免打乱 GlobalUi 场景树结构
         return selected.Count > 0 ? selected[0] : null;
     }
 
-    /// <summary>将 NOverlayStack 提升到其父节点子列表末尾，确保卡牌选择界面渲染在最顶层。</summary>
+    private static int s_overlayOriginalIndex = -1;
+
+    /// <summary>临时将 NOverlayStack 提升到其父节点子列表末尾，确保卡牌选择界面渲染在最顶层。</summary>
     private static void EnsureOverlayOnTop()
     {
         try
@@ -88,11 +91,34 @@ public static class CardOperationHelper
             if (overlays == null) return;
             var parent = overlays.GetParent();
             if (parent != null)
-                parent.MoveChild(overlays, parent.GetChildCount() - 1);
+            {
+                s_overlayOriginalIndex = overlays.GetIndex();
+                if (s_overlayOriginalIndex < parent.GetChildCount() - 1)
+                    parent.MoveChild(overlays, parent.GetChildCount() - 1);
+            }
         }
         catch (Exception)
         {
             // 非致命：图层提升失败不影响核心功能
+        }
+    }
+
+    /// <summary>将 NOverlayStack 恢复到提升前的位置，避免破坏游戏 UI 层级结构。</summary>
+    private static void RestoreOverlayPosition()
+    {
+        try
+        {
+            if (s_overlayOriginalIndex < 0) return;
+            var overlays = NRun.Instance?.GlobalUi?.Overlays;
+            if (overlays == null) return;
+            var parent = overlays.GetParent();
+            if (parent != null)
+                parent.MoveChild(overlays, s_overlayOriginalIndex);
+            s_overlayOriginalIndex = -1;
+        }
+        catch (Exception)
+        {
+            // 非致命
         }
     }
 

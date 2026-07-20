@@ -421,6 +421,9 @@ public sealed partial class UpgradeUIHandler : Control
     {
         Visible = visible;
         MouseFilter = visible ? MouseFilterEnum.Stop : MouseFilterEnum.Ignore;
+        // 隐藏时将 CanvasLayer 降到最底层，避免干扰其他 UI 的输入事件
+        if (s_canvasLayer != null)
+            s_canvasLayer.Layer = visible ? 128 : -1;
     }
 
     public void RefreshPointsLabel()
