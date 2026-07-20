@@ -26,7 +26,7 @@ Scripts/
 | `RunStateHook.cs` | 生命周期控制 | `Subscribe()` — 订阅 CombatSetUp/CombatWon/RunStarted |
 | `UpgradeUIHandler.cs` | UI 面板 | `BuildUI()`, `PopulateItems()`, 搜索/拖拽/29按钮 |
 | `CardOperationHelper.cs` | 卡牌操作 | `PerformInfiniteUpgrade()`, `ModifyDamage()`, `ToggleKeyword()` 等 |
-| `CardUpgradeTracker.cs` | 修改追踪 | `RecordModification()`, `ReapplyAll()`, 按 deckIndex 追踪 |
+| `CardUpgradeTracker.cs` | 修改追踪 | `RecordModification()`, `ReapplyAll()`, 按 cardIdentity (TemplateId__实例序号) 追踪 |
 | `AbilityOperationHelper.cs` | 能力操作 | `TryPurchase()`, `ApplyInitialBoosts()`, `ApplyOnePower()` |
 
 ## 核心流程

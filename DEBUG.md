@@ -1,5 +1,38 @@
 # DEBUG 记录 (InfiniteUpgradeSystem)
 
+## v25: 快速重启后丢失升级的修复
+
+- **日期**: 2026-07-20
+- **现象**: 快速重启（退出到主菜单再继续）后，之前花费点数购买的卡牌修改（升级、减费、加伤等）部分丢失
+- **复现**: 战斗中修改多张卡牌 → 退出到主菜单 → 继续游戏 → 部分修改消失
+- **日志特征**:
+  ```
+  [WARN] InfiniteUpgrade: ReapplyAll cannot find card BASH (was at index=8); modifications lost.
+  [WARN] InfiniteUpgrade: ReapplyAll cannot find card BASH (was at index=9); modifications lost.
+  [WARN] InfiniteUpgrade: ReapplyAll cannot find card BREAK (was at index=13); modifications lost.
+  [WARN] InfiniteUpgrade: ReapplyAll cannot find card BREAK (was at index=16); modifications lost.
+  ```
+- **原因**:
+  1. `CardUpgradeTracker` 使用牌组下标 (deck index) 作为记录的 key
+  2. 同一张卡在不同时间被修改时，如果下标发生变化（被其他卡牌增删挤到不同位置），会产生多条记录
+  3. 快速重启后游戏从检查点重建牌组，卡牌顺序与修改时的下标不一致
+  4. `ReapplyAll` 的匹配算法对每张牌只能匹配一条记录（用 `matchedDeckIndices` 去重），导致同一张卡的多条记录只有第一条能匹配，其余全部丢失
+- **修改**:
+  - **`CardUpgradeTracker.cs`** (完全重写):
+    - 存储 key 从 `int deckIndex` 改为 `string cardIdentity = "{TemplateId}__{实例序号}"`
+    - 实例序号 = 在牌组中从头扫描，到目标卡为止同类卡牌的计数 (0-based)
+    - 同一张卡的所有修改合并在一条记录中（不再按多次下标分散）
+    - `ReapplyAll` 改用身份精确匹配 + TemplateId 回退匹配（处理向后兼容和边界情况）
+    - 保存格式 v2: `{"Id":"BASH__0","T":"BASH","E":[...]}` (v1 `{"I":9,...}` 向后兼容)
+    - v1 旧格式加载时自动按 TemplateId 合并多条记录
+    - `OnCardRemoved` 重写：删牌后按新牌组顺序重建身份
+    - `GetCardIdentity()`: 用 ReferenceEquals 找到目标卡在牌组中的位置，计算同类序号
+  - **`Entry.cs`**: BUILD 版本号更新为 v25-20260720
+  - **`mod_manifest.json`**: 版本 1.0.3 → 1.0.4
+- **验证结果**: 编译通过 (0 errors)。需在游戏内测试：修改卡牌 → 退出到主菜单 → 继续 → 确认所有修改保留。
+
+---
+
 ## 持久化方案演进
 
 ### v1-v5: 全局文件
