@@ -1,5 +1,19 @@
 # DEBUG 记录 (InfiniteUpgradeSystem)
 
+## v26: 新增"能量跨回合不消失"能力
+
+- **日期**: 2026-07-21
+- **功能**: 消耗 25 点，购买后未使用的能量在回合结束时保留，参考原版 IceCream 遗物
+- **实现**: Harmony Postfix on `Hook.ShouldPlayerResetEnergy` → 检查 `s_boosts["energyKeep"]`
+- **修改**:
+  - `Scripts/Patches/EnergyKeepPatch.cs` — 新建，Harmony Postfix
+  - `Scripts/UpgradeUIHandler.cs` — 新增 UI 按钮（25 点）
+  - `Entry.cs` — BUILD=v26-20260721
+  - `mod_manifest.json` — 1.0.4 → 1.0.5
+- **技术决策**: 选择 Harmony 补丁而非自定义 PowerModel，因为 ApplyOnePower 使用反射从游戏程序集加载类型，自定义 mod Power 无法被 `ModelDb.Power<T>()` 发现
+
+---
+
 ## v25: 快速重启后丢失升级的修复
 
 - **日期**: 2026-07-20

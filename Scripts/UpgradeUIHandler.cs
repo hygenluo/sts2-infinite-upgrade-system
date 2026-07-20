@@ -356,6 +356,7 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(new("能力操作", "初始人工制品+1", 20, () => { if (AbilityOperationHelper.TryPurchase("artifact", 20)) RefreshPointsLabel(); return Task.CompletedTask; }));
         _allItems.Add(new("能力操作", "充能球栏位+1", 10, async () => { if (AbilityOperationHelper.TryPurchase("orbSlot", 10)) { await AbilityOperationHelper.ApplyImmediate("orbSlot"); RefreshPointsLabel(); } }));
         _allItems.Add(new("能力操作", "格挡跨回合不消失", 25, () => { if (AbilityOperationHelper.TryPurchase("blockKeep", 25)) RefreshPointsLabel(); return Task.CompletedTask; }));
+        _allItems.Add(new("能力操作", "能量跨回合不消失", 25, () => { if (AbilityOperationHelper.TryPurchase("energyKeep", 25)) RefreshPointsLabel(); return Task.CompletedTask; }));
 
         // === 牌组操作 (5) ===
         _allItems.Add(new("牌组操作", "从牌组删除一张牌", 20, () => CardOperationHelper.RemoveCardFromDeck(20)));

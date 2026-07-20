@@ -12,8 +12,10 @@ Scripts/
 ├── AbilityOperationHelper.cs     # 能力操作引擎 (11项 + Power 应用)
 ├── RunStateHook.cs               # 游戏生命周期 + 检查点持久化
 ├── PointsPersistence.cs          # 点数 JSON 持久化
-└── UiComponents/
-    └── UpgradeItemData.cs        # UI 操作项数据模型
+├── UiComponents/
+│   └── UpgradeItemData.cs        # UI 操作项数据模型
+└── Patches/
+    └── EnergyKeepPatch.cs        # Harmony Postfix: 能量跨回合保留
 ```
 
 ## 文件导航
@@ -28,6 +30,7 @@ Scripts/
 | `CardOperationHelper.cs` | 卡牌操作 | `PerformInfiniteUpgrade()`, `ModifyDamage()`, `ToggleKeyword()` 等 |
 | `CardUpgradeTracker.cs` | 修改追踪 | `RecordModification()`, `ReapplyAll()`, 按 cardIdentity (TemplateId__实例序号) 追踪 |
 | `AbilityOperationHelper.cs` | 能力操作 | `TryPurchase()`, `ApplyInitialBoosts()`, `ApplyOnePower()` |
+| `Patches/EnergyKeepPatch.cs` | 能量保留 | Harmony Postfix on `Hook.ShouldPlayerResetEnergy` → 否决能量重置 |
 
 ## 核心流程
 
