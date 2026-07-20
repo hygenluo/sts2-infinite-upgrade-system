@@ -1,5 +1,7 @@
+using System;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using Godot;
 using MegaCrit.Sts2.Core.CardSelection;
 using MegaCrit.Sts2.Core.Commands;
@@ -12,6 +14,7 @@ using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Nodes.Cards;
+using MegaCrit.Sts2.Core.Nodes.Screens.Overlays;
 using MegaCrit.Sts2.Core.Nodes.Vfx;
 using MegaCrit.Sts2.Core.Runs;
 
@@ -66,8 +69,31 @@ public static class CardOperationHelper
         var prefs = string.IsNullOrEmpty(builtInPromptKey)
             ? new CardSelectorPrefs(CardSelectorPrefs.UpgradeSelectionPrompt, 1)
             : new CardSelectorPrefs(new LocString("cards", builtInPromptKey), 1);
-        var selected = (await CardSelectCmd.FromDeckGeneric(player, prefs)).ToList();
+
+        // 启动卡牌选择后延迟一帧，确保 NOverlayStack.Push 已完成并将 UI 节点加入场景树
+        var selectTask = CardSelectCmd.FromDeckGeneric(player, prefs);
+        await Task.Delay(33); // 2 帧 — Push() + 子节点 _Ready()
+        EnsureOverlayOnTop();
+
+        var selected = (await selectTask).ToList();
         return selected.Count > 0 ? selected[0] : null;
+    }
+
+    /// <summary>将 NOverlayStack 提升到其父节点子列表末尾，确保卡牌选择界面渲染在最顶层。</summary>
+    private static void EnsureOverlayOnTop()
+    {
+        try
+        {
+            var overlays = NRun.Instance?.GlobalUi?.Overlays;
+            if (overlays == null) return;
+            var parent = overlays.GetParent();
+            if (parent != null)
+                parent.MoveChild(overlays, parent.GetChildCount() - 1);
+        }
+        catch (Exception)
+        {
+            // 非致命：图层提升失败不影响核心功能
+        }
     }
 
     public static void PerformInfiniteUpgrade(CardModel card)

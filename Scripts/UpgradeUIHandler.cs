@@ -19,6 +19,8 @@ public sealed partial class UpgradeUIHandler : Control
     private const float PanelHeight = 620f;
 
     private static UpgradeUIHandler? s_instance;
+    private static CanvasLayer? s_canvasLayer;
+    public static CanvasLayer? CanvasLayer => s_canvasLayer;
 
     // UI 组件
     private ColorRect? _background;
@@ -42,8 +44,10 @@ public sealed partial class UpgradeUIHandler : Control
     {
         if (s_instance != null) return;
         s_instance = new UpgradeUIHandler { Name = "InfiniteUpgradeUI" };
+        s_canvasLayer = new CanvasLayer { Name = "InfiniteUpgradeCanvasLayer", Layer = 128 };
+        s_canvasLayer.AddChild(s_instance);
         var tree = (SceneTree?)Engine.GetMainLoop();
-        tree?.Root?.CallDeferred(Node.MethodName.AddChild, s_instance);
+        tree?.Root?.CallDeferred(Node.MethodName.AddChild, s_canvasLayer);
     }
 
     public static UpgradeUIHandler? Instance => s_instance;
@@ -328,7 +332,7 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(new("卡牌操作", "重放+1", 7, () => CardOperationHelper.ModifyReplayCount(7)));
         _allItems.Add(new("卡牌操作", "耗能-1", 12, () => CardOperationHelper.ReduceEnergyCost(12)));
         _allItems.Add(new("卡牌操作", "添加消耗", 12, () => CardOperationHelper.ToggleKeyword(12, CardKeyword.Exhaust, true)));
-        _allItems.Add(new("卡牌操作", "移除消耗", 20, () => CardOperationHelper.ToggleKeyword(20, CardKeyword.Exhaust, false)));
+        _allItems.Add(new("卡牌操作", "移除消耗", 15, () => CardOperationHelper.ToggleKeyword(15, CardKeyword.Exhaust, false)));
         _allItems.Add(new("卡牌操作", "添加奇巧", 7, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Sly, true)));
         _allItems.Add(new("卡牌操作", "添加保留", 7, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Retain, true)));
         _allItems.Add(new("卡牌操作", "移除保留", 7, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Retain, false)));
@@ -337,31 +341,42 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(new("卡牌操作", "添加虚无", 8, () => CardOperationHelper.ToggleKeyword(8, CardKeyword.Ethereal, true)));
         _allItems.Add(new("卡牌操作", "移除虚无", 8, () => CardOperationHelper.ToggleKeyword(8, CardKeyword.Ethereal, false)));
         _allItems.Add(new("卡牌操作", "添加永恒", 10, () => CardOperationHelper.ToggleKeyword(10, CardKeyword.Eternal, true)));
-        _allItems.Add(new("卡牌操作", "移除永恒", 30, () => CardOperationHelper.ToggleKeyword(30, CardKeyword.Eternal, false)));
+        _allItems.Add(new("卡牌操作", "移除永恒", 15, () => CardOperationHelper.ToggleKeyword(15, CardKeyword.Eternal, false)));
 
         // === 能力操作 (12) ===
         _allItems.Add(new("能力操作", "初始力量+1", 10, () => { if (AbilityOperationHelper.TryPurchase("strength", 10)) RefreshPointsLabel(); return Task.CompletedTask; }));
         _allItems.Add(new("能力操作", "初始敏捷+1", 10, () => { if (AbilityOperationHelper.TryPurchase("dexterity", 10)) RefreshPointsLabel(); return Task.CompletedTask; }));
         _allItems.Add(new("能力操作", "初始集中+1", 15, () => { if (AbilityOperationHelper.TryPurchase("focus", 15)) RefreshPointsLabel(); return Task.CompletedTask; }));
         _allItems.Add(new("能力操作", "生命+1", 5, async () => { if (AbilityOperationHelper.TryPurchase("hp", 5)) { await AbilityOperationHelper.ApplyImmediate("hp"); RefreshPointsLabel(); } }));
-        _allItems.Add(new("能力操作", "每回合能量+1", 40, async () => { if (AbilityOperationHelper.TryPurchase("energy", 40)) { await AbilityOperationHelper.ApplyImmediate("energy"); RefreshPointsLabel(); } }));
-        _allItems.Add(new("能力操作", "每回合辉星+1", 20, () => { if (AbilityOperationHelper.TryPurchase("stars", 20)) RefreshPointsLabel(); return Task.CompletedTask; }));
-        _allItems.Add(new("能力操作", "每回合铸造+5", 20, () => { if (AbilityOperationHelper.TryPurchase("forge", 20)) RefreshPointsLabel(); return Task.CompletedTask; }));
-        _allItems.Add(new("能力操作", "初始覆甲+1", 10, () => { if (AbilityOperationHelper.TryPurchase("plating", 10)) RefreshPointsLabel(); return Task.CompletedTask; }));
+        _allItems.Add(new("能力操作", "每回合能量+1", 30, async () => { if (AbilityOperationHelper.TryPurchase("energy", 30)) { await AbilityOperationHelper.ApplyImmediate("energy"); RefreshPointsLabel(); } }));
+        _allItems.Add(new("能力操作", "每回合辉星+1", 15, () => { if (AbilityOperationHelper.TryPurchase("stars", 15)) RefreshPointsLabel(); return Task.CompletedTask; }));
+        _allItems.Add(new("能力操作", "每回合铸造+5", 15, () => { if (AbilityOperationHelper.TryPurchase("forge", 15)) RefreshPointsLabel(); return Task.CompletedTask; }));
+        _allItems.Add(new("能力操作", "初始覆甲+1", 8, () => { if (AbilityOperationHelper.TryPurchase("plating", 8)) RefreshPointsLabel(); return Task.CompletedTask; }));
         _allItems.Add(new("能力操作", "初始荆棘+1", 10, () => { if (AbilityOperationHelper.TryPurchase("thorns", 10)) RefreshPointsLabel(); return Task.CompletedTask; }));
         _allItems.Add(new("能力操作", "初始人工制品+1", 20, () => { if (AbilityOperationHelper.TryPurchase("artifact", 20)) RefreshPointsLabel(); return Task.CompletedTask; }));
-        _allItems.Add(new("能力操作", "充能球栏位+1", 15, async () => { if (AbilityOperationHelper.TryPurchase("orbSlot", 15)) { await AbilityOperationHelper.ApplyImmediate("orbSlot"); RefreshPointsLabel(); } }));
-        _allItems.Add(new("能力操作", "格挡跨回合不消失", 30, () => { if (AbilityOperationHelper.TryPurchase("blockKeep", 30)) RefreshPointsLabel(); return Task.CompletedTask; }));
+        _allItems.Add(new("能力操作", "充能球栏位+1", 10, async () => { if (AbilityOperationHelper.TryPurchase("orbSlot", 10)) { await AbilityOperationHelper.ApplyImmediate("orbSlot"); RefreshPointsLabel(); } }));
+        _allItems.Add(new("能力操作", "格挡跨回合不消失", 25, () => { if (AbilityOperationHelper.TryPurchase("blockKeep", 25)) RefreshPointsLabel(); return Task.CompletedTask; }));
 
         // === 牌组操作 (5) ===
         _allItems.Add(new("牌组操作", "从牌组删除一张牌", 20, () => CardOperationHelper.RemoveCardFromDeck(20)));
 
-        // === 测试操作 (1) ===
-        _allItems.Add(new("测试操作", "点数+999", 0, () =>
+        // === 测试操作 (3) ===
+        _allItems.Add(new("测试操作", "点数+1", 0, () =>
         {
-            UpgradePointManager.AddPoints(999);
+            UpgradePointManager.AddPoints(1);
             RefreshPointsLabel();
-            GD.Print($"[InfiniteUpgrade] +999 points → {UpgradePointManager.CurrentPoints}");
+            return Task.CompletedTask;
+        }));
+        _allItems.Add(new("测试操作", "点数+5", 0, () =>
+        {
+            UpgradePointManager.AddPoints(5);
+            RefreshPointsLabel();
+            return Task.CompletedTask;
+        }));
+        _allItems.Add(new("测试操作", "点数+10", 0, () =>
+        {
+            UpgradePointManager.AddPoints(10);
+            RefreshPointsLabel();
             return Task.CompletedTask;
         }));
     }

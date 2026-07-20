@@ -40,8 +40,8 @@ public static class PointsPersistence
             var path = GetFilePath(seed);
             if (!File.Exists(path))
             {
-                Log.Info($"InfiniteUpgrade: no file for seed={seed}, defaulting to 5.");
-                return 5;
+                Log.Info($"InfiniteUpgrade: no file for seed={seed}, defaulting to 6.");
+                return 6;
             }
 
             var data = JsonSerializer.Deserialize<PointsData>(File.ReadAllText(path), s_jsonOptions);
@@ -56,11 +56,11 @@ public static class PointsPersistence
             Log.Error($"InfiniteUpgrade: FAILED to load points: {ex.GetType().Name} — {ex.Message}");
         }
 
-        return 5;
+        return 6;
     }
 
     private class PointsData
     {
-        public int Points { get; set; } = 5;
+        public int Points { get; set; } = 6;
     }
 }
