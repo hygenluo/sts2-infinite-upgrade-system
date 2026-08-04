@@ -17,17 +17,19 @@ public static class UpgradeTheme
 {
     // ═══════════════════════════════════════════════════════════════
     // 色板（UI 设计.md §Phase 0 基建）
+    // v2.1 风格调整（2026-08-04 用户确认）：强调色由金色改为浅灰。
+    // 常量名保留历史命名（TitleGold 等），当前值均为浅灰系 —— 改风格只动这里。
     // ═══════════════════════════════════════════════════════════════
 
-    public static readonly Color PanelBg = new("1e1b16");        // 面板底：暗羊皮纸褐
-    public static readonly Color PanelBgAlt = new("262019");     // 分区头/次级底色
-    public static readonly Color PanelBorder = new("c9a45c");    // 金边
-    public static readonly Color TitleGold = new("e8c97a");      // 标题金
-    public static readonly Color TextMain = new("e8e2d4");       // 正文
-    public static readonly Color TextSecondary = new("9a927f");  // 次级文字
-    public static readonly Color CostColor = new("a9a193");      // 成本小字
-    public static readonly Color Danger = new("d46a5a");         // 危险红（点数不足）
-    public static readonly Color HoverGlow = new("f0d48a");      // 悬停发光金
+    public static readonly Color PanelBg = new("1e1b16");        // 面板底：暗羊皮纸褐（保持）
+    public static readonly Color PanelBgAlt = new("262019");     // 分区头/次级底色（保持）
+    public static readonly Color PanelBorder = new("9c9c9c");    // 边框/箭头：浅灰（原金 #c9a45c）
+    public static readonly Color TitleGold = new("d6d6d6");      // 标题/强调：亮浅灰（原金 #e8c97a）
+    public static readonly Color TextMain = new("e8e2d4");       // 正文（保持暖白）
+    public static readonly Color TextSecondary = new("9a927f");  // 次级文字（保持）
+    public static readonly Color CostColor = new("a9a193");      // 成本小字（保持）
+    public static readonly Color Danger = new("d46a5a");         // 危险红（点数不足，保持）
+    public static readonly Color HoverGlow = new("e8e8e8");      // 悬停发光：浅灰（原金 #f0d48a）
 
     // ═══════════════════════════════════════════════════════════════
     // 字体

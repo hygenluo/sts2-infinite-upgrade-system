@@ -15,10 +15,11 @@ namespace InfiniteUpgradeSystem.UiComponents;
 public sealed partial class UpgradeItemRow : HBoxContainer
 {
     private readonly UpgradeItemDef _def;
+    private readonly RichTextLabel _nameLabel;
     private readonly Label _valueLabel;
     private readonly Label _costLabel;
     private readonly Button _plusButton;
-    private readonly Label _maxBadge;
+    private readonly PanelContainer _maxBadge;
 
     public UpgradeItemDef Def => _def;
 
@@ -27,18 +28,21 @@ public sealed partial class UpgradeItemRow : HBoxContainer
         _def = def;
         AddThemeConstantOverride("separation", 8);
 
-        // 名称（占满剩余宽度；不用 TrimEllipsis —— CJK + 0 宽分配时会整段消失，
-        // 宁可溢出也不隐藏，待 Phase 3 宽度探针确认后决定是否恢复）
-        var nameLabel = new Label
+        // 名称（占满剩余宽度）。Label 不支持 BBCode（Godot 4.5 官方文档确认），
+        // 搜索命中高亮需要 RichTextLabel —— BbcodeEnabled + FitContent 与 Label 等宽等高。
+        _nameLabel = new RichTextLabel
         {
-            Text = def.DisplayName,
+            BbcodeEnabled = true,
+            FitContent = true,
+            ScrollActive = false,
+            MouseFilter = MouseFilterEnum.Ignore,
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            VerticalAlignment = VerticalAlignment.Center,
+            Text = def.DisplayName,
         };
-        nameLabel.AddThemeFontOverride("font", UpgradeTheme.Regular);
-        nameLabel.AddThemeFontSizeOverride("font_size", 15);
-        nameLabel.AddThemeColorOverride("font_color", UpgradeTheme.TextMain);
-        AddChild(nameLabel);
+        _nameLabel.AddThemeFontOverride("normal_font", UpgradeTheme.Regular);
+        _nameLabel.AddThemeFontSizeOverride("normal_font_size", 15);
+        _nameLabel.AddThemeColorOverride("default_color", UpgradeTheme.TextMain);
+        AddChild(_nameLabel);
 
         // 当前值
         _valueLabel = new Label
@@ -81,20 +85,59 @@ public sealed partial class UpgradeItemRow : HBoxContainer
         AddChild(_plusButton);
 
         // MAX 徽标（满级时替代加号）
-        _maxBadge = new Label
+        // 用 PanelContainer（panel 样式框是真实主题项）包 Label —— 之前把 StyleBoxFlat
+        // 挂到 Label 的 "normal" 项上（Label 无此主题项），背景/文字颜色均不可靠，
+        // 落成游戏默认近白文字 + 浅底 = 白底白字。
+        _maxBadge = new PanelContainer
+        {
+            Visible = false,
+            CustomMinimumSize = new Vector2(30, 26),
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        var badgeStyle = new StyleBoxFlat
+        {
+            BgColor = new Color("b8b8b8"), // 中浅灰底（区别于面板与强调色）
+            CornerRadiusTopLeft = 4,
+            CornerRadiusTopRight = 4,
+            CornerRadiusBottomLeft = 4,
+            CornerRadiusBottomRight = 4,
+        };
+        _maxBadge.AddThemeStyleboxOverride("panel", badgeStyle);
+        var badgeLabel = new Label
         {
             Text = "MAX",
-            Visible = false,
-            CustomMinimumSize = new Vector2(28, 26),
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        _maxBadge.AddThemeFontOverride("font", UpgradeTheme.SemiBold);
-        _maxBadge.AddThemeFontSizeOverride("font_size", 13);
-        _maxBadge.AddThemeColorOverride("font_color", new Color(0x26, 0x20, 0x19)); // 深字
-        var badgeStyle = new StyleBoxFlat { BgColor = UpgradeTheme.TitleGold, CornerRadiusTopLeft = 4, CornerRadiusTopRight = 4, CornerRadiusBottomLeft = 4, CornerRadiusBottomRight = 4 };
-        _maxBadge.AddThemeStyleboxOverride("normal", badgeStyle);
+        badgeLabel.AddThemeFontOverride("font", UpgradeTheme.SemiBold);
+        badgeLabel.AddThemeFontSizeOverride("font_size", 13);
+        badgeLabel.AddThemeColorOverride("font_color", new Color("262019")); // 深字
+        _maxBadge.AddChild(badgeLabel);
+        badgeLabel.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(_maxBadge);
+    }
+
+    /// <summary>
+    /// 搜索命中高亮（Phase 3）：命中片段用亮金色 BBCode 标出；query 为空恢复原文。
+    /// 仅在显示名包含查询词时生效（中英搜索词都可能命中 SearchText，但显示名只有一种语言）。
+    /// </summary>
+    public void SetSearchHighlight(string? query)
+    {
+        var text = _def.DisplayName;
+        if (string.IsNullOrEmpty(query))
+        {
+            _nameLabel.Text = text; // Godot 4.3+ BBCode 恒开，无标签即原文
+            return;
+        }
+        var idx = text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0)
+        {
+            _nameLabel.Text = text;
+            return;
+        }
+        var matched = text.Substring(idx, query.Length);
+        // 高亮用纯白：浅灰主题下比正文（#e8e2d4）更亮，保证可见
+        _nameLabel.Text = $"{text[..idx]}[color=#ffffff]{matched}[/color]{text[(idx + query.Length)..]}";
     }
 
     /// <summary>按当前点数刷新状态：值文本 / 满级徽标 / 成本颜色 / 加号可用性。</summary>

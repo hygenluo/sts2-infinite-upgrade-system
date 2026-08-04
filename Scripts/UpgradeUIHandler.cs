@@ -38,9 +38,14 @@ public sealed partial class UpgradeUIHandler : Control
     private VBoxContainer? _cardOpsContent;
     private Button? _deckEntryRow;
     private Label? _deckCountLabel;
+    private Label? _emptyLabel;
+    private Label? _cardOpsEmptyLabel;
     private readonly Dictionary<UpgradeItemDef, CollapsibleSection> _sectionOf = new();
     private readonly Dictionary<UpgradeItemDef, UpgradeItemRow> _cardOpsRows = new();
     private bool _isOpen;
+
+    /// <summary>面板位置记忆（运行期间跨打开/关闭保持；NaN = 尚未拖拽，使用居中）。</summary>
+    private static Vector2 s_panelPosition = new(float.NaN, float.NaN);
 
     // 拖拽
     private bool _isDragging;
@@ -122,6 +127,7 @@ public sealed partial class UpgradeUIHandler : Control
                 else
                 {
                     _isDragging = false;
+                    s_panelPosition = _mainPanel.Position; // 记忆拖拽后的位置
                 }
             }
 
@@ -265,9 +271,26 @@ public sealed partial class UpgradeUIHandler : Control
         outerVBox.AddChild(_cardOpsScroll);
         _cardOpsScroll.Visible = false;
 
-        // 生成牌组子面板 + 主视图分区（默认全部收起）
+        // 生成牌组子面板 + 主视图分区（默认全部收起）+ 空态标签
         BuildCardOpsView();
         BuildSections();
+        _emptyLabel = BuildEmptyLabel();
+        _scrollContent!.AddChild(_emptyLabel);
+    }
+
+    /// <summary>搜索空态标签（未找到相关项目）。</summary>
+    private static Label BuildEmptyLabel()
+    {
+        var label = new Label
+        {
+            Text = "未找到相关项目",
+            Visible = false,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        label.AddThemeFontOverride("font", UpgradeTheme.Regular);
+        label.AddThemeFontSizeOverride("font_size", 13);
+        label.AddThemeColorOverride("font_color", UpgradeTheme.TextSecondary);
+        return label;
     }
 
     /// <summary>
@@ -297,6 +320,9 @@ public sealed partial class UpgradeUIHandler : Control
             _cardOpsRows[item] = row;
             _cardOpsContent.AddChild(row);
         }
+
+        _cardOpsEmptyLabel = BuildEmptyLabel();
+        _cardOpsContent.AddChild(_cardOpsEmptyLabel);
     }
 
     /// <summary>选牌进行中：面板隐藏但 _isOpen 保持（此时不响应 P/Esc，避免抢走游戏选牌界面的按键）。</summary>
@@ -312,6 +338,18 @@ public sealed partial class UpgradeUIHandler : Control
         if (_searchBox != null) _searchBox.Text = "";
         ResetRowsFilter(view);
         RefreshAllRows();
+    }
+
+    /// <summary>重置两视图全部行：可见 + 高亮清除 + 空态隐藏（ShowUI 打开时调用）。</summary>
+    private void ResetAllRowsFilter()
+    {
+        foreach (var row in _itemControls.Values)
+        {
+            row.Visible = true;
+            row.SetSearchHighlight(null);
+        }
+        if (_emptyLabel != null) _emptyLabel.Visible = false;
+        if (_cardOpsEmptyLabel != null) _cardOpsEmptyLabel.Visible = false;
     }
 
     /// <summary>
@@ -438,33 +476,73 @@ public sealed partial class UpgradeUIHandler : Control
     {
         var filter = text.Trim().ToLower();
 
-        // 牌组子面板视图：过滤操作行（无分区概念）
+        // 牌组子面板视图：过滤 + 高亮 + 空态 + 滚动定位
         if (_currentView == UiView.CardOps)
         {
-            foreach (var item in _cardOpsRows.Keys)
-            {
-                if (_cardOpsRows.TryGetValue(item, out var row))
-                    row.Visible = string.IsNullOrEmpty(filter) || item.SearchText.Contains(filter);
-            }
+            UpdateFilteredList(_cardOpsRows, filter, _cardOpsEmptyLabel, _cardOpsScroll);
             return;
         }
 
         // 主视图：分区过滤 + 自动展开命中分区
         var matchesInSection = new HashSet<CollapsibleSection>();
+        UpgradeItemRow? firstMatch = null;
         foreach (var item in _allItems)
         {
-            if (!_itemControls.TryGetValue(item, out var control)) continue;
+            if (!_itemControls.TryGetValue(item, out var row)) continue;
             var match = string.IsNullOrEmpty(filter) || item.SearchText.Contains(filter);
-            control.Visible = match;
-            if (match && _sectionOf.TryGetValue(item, out var section))
-                matchesInSection.Add(section);
+            row.Visible = match;
+            row.SetSearchHighlight(match ? filter : null);
+            if (match)
+            {
+                firstMatch ??= row;
+                if (_sectionOf.TryGetValue(item, out var section))
+                    matchesInSection.Add(section);
+            }
         }
-        // 搜索时自动展开含命中的分区（Phase 3 追加滚动定位与命中高亮）
         if (!string.IsNullOrEmpty(filter))
         {
             foreach (var section in matchesInSection)
                 if (section.Collapsed) section.SetCollapsed(false);
         }
+        var totalVisible = _itemControls.Count(kv => !_cardOpsRows.ContainsKey(kv.Key) && kv.Value.Visible);
+        _emptyLabel!.Visible = !string.IsNullOrEmpty(filter) && totalVisible == 0;
+        ScrollToFirstMatch(firstMatch, _scrollContainer);
+    }
+
+    /// <summary>统一的行过滤/高亮/空态/滚动定位（子面板用）。</summary>
+    private void UpdateFilteredList(
+        Dictionary<UpgradeItemDef, UpgradeItemRow> rows, string filter,
+        Label? emptyLabel, ScrollContainer? scroll)
+    {
+        UpgradeItemRow? firstMatch = null;
+        var visible = 0;
+        foreach (var (item, row) in rows)
+        {
+            var match = string.IsNullOrEmpty(filter) || item.SearchText.Contains(filter);
+            row.Visible = match;
+            row.SetSearchHighlight(match ? filter : null);
+            if (match)
+            {
+                visible++;
+                firstMatch ??= row;
+            }
+        }
+        if (emptyLabel != null)
+            emptyLabel.Visible = !string.IsNullOrEmpty(filter) && visible == 0;
+        ScrollToFirstMatch(firstMatch, scroll);
+    }
+
+    /// <summary>滚动定位到首个命中行（延迟一帧，等分区展开动画开始后定位）。</summary>
+    private void ScrollToFirstMatch(UpgradeItemRow? firstMatch, ScrollContainer? scroll)
+    {
+        if (firstMatch == null || scroll == null) return;
+        CallDeferred(nameof(DeferredScrollTo), firstMatch, scroll);
+    }
+
+    private void DeferredScrollTo(UpgradeItemRow row, ScrollContainer scroll)
+    {
+        if (GodotObject.IsInstanceValid(row) && GodotObject.IsInstanceValid(scroll))
+            scroll.EnsureControlVisible(row);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -678,6 +756,9 @@ public sealed partial class UpgradeUIHandler : Control
         }
         _isOpen = true;
         RefreshPointsLabel();
+        // 打开时显式重置搜索状态（不依赖 TextChanged 事件链）：
+        // 所有行可见 + 高亮清除 + 空态隐藏 —— 关闭前搜索过的页面重开必须是完整列表
+        ResetAllRowsFilter();
         if (_searchBox != null) _searchBox.Text = "";
         SetUIVisible(true);
         ResizeBackground();
@@ -734,8 +815,9 @@ public sealed partial class UpgradeUIHandler : Control
     {
         if (_mainPanel == null) return;
         var vpSize = GetViewportRect().Size;
-        _mainPanel.Position = new Vector2(
-            (vpSize.X - PanelWidth) / 2,
-            (vpSize.Y - PanelHeight) / 2);
+        _mainPanel.Position = float.IsNaN(s_panelPosition.X)
+            ? new Vector2((vpSize.X - PanelWidth) / 2, (vpSize.Y - PanelHeight) / 2)
+            : s_panelPosition;
+        ClampPanelToScreen(); // 防止记忆位置在分辨率变化后出屏
     }
 }
