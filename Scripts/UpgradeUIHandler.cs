@@ -584,43 +584,43 @@ public sealed partial class UpgradeUIHandler : Control
 
         // === 卡牌操作 (17)：Phase 2 移入牌组子面板 ===
         _allItems.Add(ActionItem("卡牌操作", "升级卡牌", UpgradeLoc.ItemCardUpgrade, CardOperationHelper.UpgradeCost,
-            UpgradeLoc.PromptCardUpgrade, UpgradeCardFlow));
+            UpgradeLoc.PromptCardUpgrade, pk => UpgradeCardFlow(pk)));
         _allItems.Add(ActionItem("卡牌操作", "攻击+1", UpgradeLoc.ItemAttackPlus, 1,
-            UpgradeLoc.PromptAttackPlus, () => CardOperationHelper.ModifyDamage(1)));
+            UpgradeLoc.PromptAttackPlus, pk => CardOperationHelper.ModifyDamage(1, pk)));
         _allItems.Add(ActionItem("卡牌操作", "格挡+1", UpgradeLoc.ItemBlockPlus, 1,
-            UpgradeLoc.PromptBlockPlus, () => CardOperationHelper.ModifyBlock(1)));
+            UpgradeLoc.PromptBlockPlus, pk => CardOperationHelper.ModifyBlock(1, pk)));
         _allItems.Add(ActionItem("卡牌操作", "抽牌+1", UpgradeLoc.ItemDrawPlus, 7,
-            UpgradeLoc.PromptDrawPlus, () => CardOperationHelper.ModifyDrawCount(7)));
+            UpgradeLoc.PromptDrawPlus, pk => CardOperationHelper.ModifyDrawCount(7, pk)));
         _allItems.Add(ActionItem("卡牌操作", "重放+1", UpgradeLoc.ItemReplayPlus, 7,
-            UpgradeLoc.PromptReplayPlus, () => CardOperationHelper.ModifyReplayCount(7)));
+            UpgradeLoc.PromptReplayPlus, pk => CardOperationHelper.ModifyReplayCount(7, pk)));
         _allItems.Add(ActionItem("卡牌操作", "耗能-1", UpgradeLoc.ItemCostMinus, 12,
-            UpgradeLoc.PromptCostMinus, () => CardOperationHelper.ReduceEnergyCost(12)));
+            UpgradeLoc.PromptCostMinus, pk => CardOperationHelper.ReduceEnergyCost(12, pk)));
         _allItems.Add(ActionItem("卡牌操作", "添加消耗", UpgradeLoc.ItemAddExhaust, 12,
-            UpgradeLoc.PromptAddExhaust, () => CardOperationHelper.ToggleKeyword(12, CardKeyword.Exhaust, true)));
+            UpgradeLoc.PromptAddExhaust, pk => CardOperationHelper.ToggleKeyword(12, CardKeyword.Exhaust, true, pk)));
         _allItems.Add(ActionItem("卡牌操作", "移除消耗", UpgradeLoc.ItemRemoveExhaust, 15,
-            UpgradeLoc.PromptRemoveExhaust, () => CardOperationHelper.ToggleKeyword(15, CardKeyword.Exhaust, false)));
+            UpgradeLoc.PromptRemoveExhaust, pk => CardOperationHelper.ToggleKeyword(15, CardKeyword.Exhaust, false, pk)));
         _allItems.Add(ActionItem("卡牌操作", "添加奇巧", UpgradeLoc.ItemAddSly, 7,
-            UpgradeLoc.PromptAddSly, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Sly, true)));
+            UpgradeLoc.PromptAddSly, pk => CardOperationHelper.ToggleKeyword(7, CardKeyword.Sly, true, pk)));
         _allItems.Add(ActionItem("卡牌操作", "添加保留", UpgradeLoc.ItemAddRetain, 7,
-            UpgradeLoc.PromptAddRetain, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Retain, true)));
+            UpgradeLoc.PromptAddRetain, pk => CardOperationHelper.ToggleKeyword(7, CardKeyword.Retain, true, pk)));
         _allItems.Add(ActionItem("卡牌操作", "移除保留", UpgradeLoc.ItemRemoveRetain, 7,
-            UpgradeLoc.PromptRemoveRetain, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Retain, false)));
+            UpgradeLoc.PromptRemoveRetain, pk => CardOperationHelper.ToggleKeyword(7, CardKeyword.Retain, false, pk)));
         _allItems.Add(ActionItem("卡牌操作", "添加固有", UpgradeLoc.ItemAddInnate, 7,
-            UpgradeLoc.PromptAddInnate, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Innate, true)));
+            UpgradeLoc.PromptAddInnate, pk => CardOperationHelper.ToggleKeyword(7, CardKeyword.Innate, true, pk)));
         _allItems.Add(ActionItem("卡牌操作", "移除固有", UpgradeLoc.ItemRemoveInnate, 7,
-            UpgradeLoc.PromptRemoveInnate, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Innate, false)));
+            UpgradeLoc.PromptRemoveInnate, pk => CardOperationHelper.ToggleKeyword(7, CardKeyword.Innate, false, pk)));
         _allItems.Add(ActionItem("卡牌操作", "添加虚无", UpgradeLoc.ItemAddEthereal, 8,
-            UpgradeLoc.PromptAddEthereal, () => CardOperationHelper.ToggleKeyword(8, CardKeyword.Ethereal, true)));
+            UpgradeLoc.PromptAddEthereal, pk => CardOperationHelper.ToggleKeyword(8, CardKeyword.Ethereal, true, pk)));
         _allItems.Add(ActionItem("卡牌操作", "移除虚无", UpgradeLoc.ItemRemoveEthereal, 8,
-            UpgradeLoc.PromptRemoveEthereal, () => CardOperationHelper.ToggleKeyword(8, CardKeyword.Ethereal, false)));
+            UpgradeLoc.PromptRemoveEthereal, pk => CardOperationHelper.ToggleKeyword(8, CardKeyword.Ethereal, false, pk)));
         _allItems.Add(ActionItem("卡牌操作", "添加永恒", UpgradeLoc.ItemAddEternal, 10,
-            UpgradeLoc.PromptAddEternal, () => CardOperationHelper.ToggleKeyword(10, CardKeyword.Eternal, true)));
+            UpgradeLoc.PromptAddEternal, pk => CardOperationHelper.ToggleKeyword(10, CardKeyword.Eternal, true, pk)));
         _allItems.Add(ActionItem("卡牌操作", "移除永恒", UpgradeLoc.ItemRemoveEternal, 15,
-            UpgradeLoc.PromptRemoveEternal, () => CardOperationHelper.ToggleKeyword(15, CardKeyword.Eternal, false)));
+            UpgradeLoc.PromptRemoveEternal, pk => CardOperationHelper.ToggleKeyword(15, CardKeyword.Eternal, false, pk)));
 
         // === 牌组操作 (1) ===
         _allItems.Add(ActionItem("牌组操作", "从牌组删除一张牌", UpgradeLoc.ItemDeckRemove, 20,
-            UpgradeLoc.PromptDeckRemove, () => CardOperationHelper.RemoveCardFromDeck(20)));
+            UpgradeLoc.PromptDeckRemove, pk => CardOperationHelper.RemoveCardFromDeck(20, pk)));
 
         // === 测试操作 (3) ===
         _allItems.Add(TestItem("点数+1", UpgradeLoc.ItemTestP1, 1));
@@ -644,9 +644,9 @@ public sealed partial class UpgradeUIHandler : Control
         SearchText = BuildSearchText(category, locKey, fallbackName),
     };
 
-    /// <summary>动作型条目构建（卡牌操作，含选牌提示 key）。</summary>
+    /// <summary>动作型条目构建（卡牌操作，含选牌提示 key；onClick 接收 promptKey 并透传）。</summary>
     private UpgradeItemDef ActionItem(string category, string fallbackName, string locKey, int cost,
-        string promptKey, Func<Task<bool>> onClick) => new()
+        string promptKey, Func<string, Task<bool>> onClick) => new()
     {
         Category = category,
         DisplayName = UpgradeLoc.ResolveDisplayName(locKey, fallbackName),
@@ -654,7 +654,7 @@ public sealed partial class UpgradeUIHandler : Control
         Cost = cost,
         Kind = UpgradeItemKind.Action,
         PromptKey = promptKey,
-        OnClick = onClick,
+        OnClick = () => onClick(promptKey),
         SearchText = BuildSearchText(category, locKey, fallbackName),
     };
 
@@ -693,7 +693,7 @@ public sealed partial class UpgradeUIHandler : Control
     };
 
     /// <summary>升级卡牌流程（选牌取消自动退款并恢复面板）。</summary>
-    private async Task<bool> UpgradeCardFlow()
+    private async Task<bool> UpgradeCardFlow(string promptKey)
     {
         if (!UpgradePointManager.TrySpendPoints(CardOperationHelper.UpgradeCost)) return false;
         var player = CardOperationHelper.GetLocalPlayer();
@@ -701,7 +701,7 @@ public sealed partial class UpgradeUIHandler : Control
         SetUIVisible(false);
         try
         {
-            var card = await CardOperationHelper.SelectCardFromDeck(player);
+            var card = await CardOperationHelper.SelectCardFromDeck(player, promptKey);
             if (card == null)
             {
                 UpgradePointManager.AddPoints(CardOperationHelper.UpgradeCost);
