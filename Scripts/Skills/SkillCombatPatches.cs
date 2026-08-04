@@ -23,6 +23,7 @@ public static class SkillCardPlayPatch
     // Harmony 按参数名绑定原方法参数 —— 必须与原签名一致（combatState/choiceContext/cardPlay）
     public static void Postfix(ICombatState combatState, PlayerChoiceContext choiceContext, CardPlay cardPlay)
     {
+        SkillContextCache.Last = choiceContext;
         var player = cardPlay?.Player;
         var card = cardPlay?.Card;
         if (player == null || card == null || combatState == null) return;

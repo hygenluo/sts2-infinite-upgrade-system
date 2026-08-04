@@ -12,6 +12,10 @@ Scripts/
 ├── AbilityOperationHelper.cs     # 能力操作引擎 (11项 + Power 应用)
 ├── RunStateHook.cs               # 游戏生命周期 + 检查点持久化
 ├── PointsPersistence.cs          # 点数 JSON 持久化
+├── Skills/
+│   ├── SkillRegistry.cs          # 技能注册表（等级化 + 计数 + skills_<seed>.json 持久化）
+│   ├── SkillCombatPatches.cs     # 打出牌触发类 9 项（AfterCardPlayed/AfterHandEmptied）
+│   └── SkillEventPatches.cs      # 事件触发类 7 项（消耗/弃牌/受伤/中毒/回合/休息处）
 ├── UiComponents/
 │   ├── UpgradeItemData.cs        # 数据模型 UpgradeItemDef（Kind/MaxLevel/等级化）
 │   ├── UpgradeLoc.cs             # 自包含双语本地化 + key 常量

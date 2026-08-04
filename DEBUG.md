@@ -1,5 +1,24 @@
 # DEBUG 记录 (InfiniteUpgradeSystem)
 
+## 技能系统实施记录（Phase S1-S4，2026-08-04）
+
+- **S1** SkillRegistry（等级化 Dictionary<string,int>，MaxLevel=1）+ skills_<seed>.json 检查点持久化 + 技能分区标签页 UI
+- **S2** 打出牌触发 9 项：
+  - **Harmony 参数名绑定坑**：Postfix 参数名必须与原方法一致（combatState/choiceContext/cardPlay），
+    否则抛 `Parameter "state" not found` 导致 PatchAll 失败、整个模组初始化中止
+  - **Power 叠加修复（IL 反汇编实锤）**：`Creature.ApplyPowerInternal` 对已存在同类 Power 抛异常
+    （重复应用检查）——第二次触发同类技能失败。修复：`HasPower<T>()` 已有则 `SetAmount` 叠加
+    （触发 PowerModified 更新显示与数值）
+- **S2.5** 局内只读面板：战斗内 P 可开、加号隐藏不可操作；计数类技能值列显示 **N%4** 余数
+- **S3** 事件触发 6 项：消耗/弃牌/受伤/中毒/回合开始/回合结束（AfterSideTurnStart + CombatSide.Enemy 判定）
+  - 部分钩子无 PlayerChoiceContext → `SkillContextCache` 复用最近一次事件的 context
+  - block_on_poison 数值：1 格挡 → 3 格挡（用户调整，一次施加多层只触发 1 次）
+- **S4** 休息处任意选项：Postfix on `Hook.ShouldDisableRemainingRestSiteOptions` → 技能已购时强制 false
+  （与微型帐篷 MiniatureTent 同机制）
+- 技能均为本局有效（按 seed 持久化）；新增技能流程见 UI设计.md §六
+
+---
+
 ## UI v2 重构技术决策记录（Phase 2-5，2026-08-04）
 
 本段汇总 UI v2 重构中踩过的坑与最终方案（供后续维护参考）：
