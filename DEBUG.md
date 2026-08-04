@@ -1,5 +1,49 @@
 # DEBUG 记录 (InfiniteUpgradeSystem)
 
+## UI v2 重构技术决策记录（Phase 2-5，2026-08-04）
+
+本段汇总 UI v2 重构中踩过的坑与最终方案（供后续维护参考）：
+
+### 1. 折叠分区渲染不可靠 → 可见性切换
+- 症状：逻辑层全对（调试日志证明行数/高度/在树），但「裁剪容器 + min-size Tween」方案内容不显示
+- 结论：min-size/Tween/锚点组合在模组环境下渲染不可靠，弃用
+- 最终：内容直接子节点 + `Visible` 切换（容器自动重排）+ `modulate` 淡入 + 箭头绕中心旋转
+
+### 2. Button 无文本时最小尺寸 ≈12px
+- 症状：标题文字溢出按钮矩形、点击落在按钮外 → Pressed 不触发
+- 修复：显式 `CustomMinimumSize (0, 34)`；**凡"无文本按钮 + 子节点提供视觉"必须显式给高度**
+
+### 3. ScrollContainer 子节点必须显式撑宽
+- 症状：行内 ExpandFill 名称标签被压到 0 宽（只有数字/加号可见——它们有最小尺寸）
+- 修复：`SizeFlagsHorizontal = ExpandFill`
+
+### 4. 游戏 CancelSelection 空选牌必炸（游戏本体 bug）
+- IL 反汇编：`CancelSelection` 对已选牌集合调 `First()`，0 张时抛 `Sequence contains no elements`，
+  异常中断任务完成 → 选牌屏永远关不掉（返回图标同样触发）
+- 最终：自接管取消链路 —— `Task.WhenAny(游戏任务, 取消信号)`；Esc → 强制 `Remove` 选牌屏 + 触发信号；
+  选牌发起时隐藏游戏返回按钮（防挂起陷阱）
+
+### 5. 游戏不加载我们的本地化表（无 pck）
+- BaseLib 文件夹本地化不生效（manifest 扫描会跳过非 manifest 的 json）
+- LocString 解析失败返回 "Missing localization key" 占位文本；`GetTable` 未知表返回空表但 `GetRawText` 仍返回错误文本
+- 最终：`LocStringPromptPatch`（Harmony Postfix on `GetFormattedText`）——key 带 `INFINITEUPGRADESYSTEM-` 前缀时用 `UpgradeLoc` 解析
+
+### 6. Label 不支持 BBCode（Godot 4.5 官方文档确认）
+- 搜索高亮必须用 RichTextLabel（`BbcodeEnabled` + `FitContent` + `ScrollActive=false` 与 Label 等宽等高）
+
+### 7. 拖拽逻辑吞掉顶栏按钮点击
+- 症状：✕ 关闭按钮无反应——顶栏 40px 内所有按下都命中拖拽命中区并被 `SetInputAsHandled`
+- 修复：拖拽命中排除 `CloseButton` 区域；**顶栏新增交互控件必须同步排除**
+
+### 8. 常用 Godot 4.5 API 勘误
+- `Transform2D.GetScale()` 不存在 → 用基底向量长度
+- `CallDeferred(Callable)` 不存在 → `CallDeferred(StringName, args)` 具名方法
+- `Label.BbcodeEnabled` 不存在（Label 无 BBCode）
+- `FontFile` 无 `BaseSize`/`VariationOpentype` 属性 → `SetVariationCoordinates(0, {"wght": N})`
+- 旋转默认绕左上角 → 必须设 `PivotOffset`
+
+---
+
 ## Phase 0.5: 2K 分辨率 UI 模糊修复
 
 - **日期**: 2026-08-04

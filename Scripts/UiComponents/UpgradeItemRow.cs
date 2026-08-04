@@ -20,8 +20,12 @@ public sealed partial class UpgradeItemRow : HBoxContainer
     private readonly Label _costLabel;
     private readonly Button _plusButton;
     private readonly PanelContainer _maxBadge;
+    private Tween? _shakeTween;
 
     public UpgradeItemDef Def => _def;
+
+    /// <summary>购买成功事件（Phase 5：+1 飘字与点数跳动）。</summary>
+    public event Action? Purchased;
 
     public UpgradeItemRow(UpgradeItemDef def)
     {
@@ -68,7 +72,8 @@ public sealed partial class UpgradeItemRow : HBoxContainer
         _costLabel.AddThemeColorOverride("font_color", UpgradeTheme.CostColor);
         AddChild(_costLabel);
 
-        // 加号按钮
+        // 加号按钮（Phase 5：点数不足时不用 Disabled —— 禁用态收不到点击，
+        // 无法触发抖动提示；改为灰色半透明视觉 + 点击失败抖动）
         _plusButton = new Button
         {
             Text = "+",
@@ -79,8 +84,9 @@ public sealed partial class UpgradeItemRow : HBoxContainer
         _plusButton.AddThemeFontSizeOverride("font_size", 16);
         _plusButton.Pressed += async () =>
         {
-            await def.OnClick();
-            // 行状态与点数由调用方统一刷新（OnClick 内部已刷新点数）
+            var ok = await def.OnClick();
+            if (ok) Purchased?.Invoke();
+            else Shake(); // 点数不足/操作失败 → 抖动提示
         };
         AddChild(_plusButton);
 
@@ -115,6 +121,10 @@ public sealed partial class UpgradeItemRow : HBoxContainer
         _maxBadge.AddChild(badgeLabel);
         badgeLabel.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(_maxBadge);
+
+        // Phase 5：悬停提亮
+        MouseEntered += () => Modulate = new Color(1.12f, 1.12f, 1.12f);
+        MouseExited += () => Modulate = Colors.White;
     }
 
     /// <summary>
@@ -156,8 +166,23 @@ public sealed partial class UpgradeItemRow : HBoxContainer
 
         _maxBadge.Visible = isMaxed;
         _plusButton.Visible = !isMaxed;
-        _plusButton.Disabled = !affordable;
+        // 点数不足：加号半透明灰 + 成本变红（保持可点击以触发抖动反馈）
+        _plusButton.Modulate = affordable ? Colors.White : new Color(1, 1, 1, 0.45f);
         _costLabel.Modulate = affordable ? Colors.White : UpgradeTheme.Danger;
         _costLabel.Text = _def.Cost > 0 ? _def.Cost.ToString() : "";
+    }
+
+    /// <summary>操作失败/点数不足的抖动提示（水平 ±4px 三次，Phase 5）。</summary>
+    public void Shake()
+    {
+        _shakeTween?.Kill();
+        var baseX = Position.X;
+        _shakeTween = CreateTween();
+        for (int i = 0; i < 3; i++)
+        {
+            _shakeTween.TweenProperty(this, "position:x", baseX + 4, 0.04f);
+            _shakeTween.TweenProperty(this, "position:x", baseX - 4, 0.04f);
+        }
+        _shakeTween.TweenProperty(this, "position:x", baseX, 0.04f);
     }
 }

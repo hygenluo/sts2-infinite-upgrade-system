@@ -42,6 +42,7 @@ public sealed partial class UpgradeUIHandler : Control
     private Label? _cardOpsEmptyLabel;
     private readonly Dictionary<UpgradeItemDef, CollapsibleSection> _sectionOf = new();
     private readonly Dictionary<UpgradeItemDef, UpgradeItemRow> _cardOpsRows = new();
+    private Tween? _panelTween;
     private bool _isOpen;
 
     /// <summary>面板位置记忆（运行期间跨打开/关闭保持；NaN = 尚未拖拽，使用居中）。</summary>
@@ -316,6 +317,7 @@ public sealed partial class UpgradeUIHandler : Control
         foreach (var item in _allItems.Where(i => i.Category is "卡牌操作" or "牌组操作"))
         {
             var row = new UpgradeItemRow(item);
+            row.Purchased += OnPurchaseSucceeded;
             _itemControls[item] = row;
             _cardOpsRows[item] = row;
             _cardOpsContent.AddChild(row);
@@ -419,6 +421,7 @@ public sealed partial class UpgradeUIHandler : Control
     private UpgradeItemRow CreateRow(UpgradeItemDef item, CollapsibleSection section)
     {
         var row = new UpgradeItemRow(item);
+        row.Purchased += OnPurchaseSucceeded;
         _itemControls[item] = row;
         _sectionOf[item] = section;
         return row;
@@ -763,12 +766,35 @@ public sealed partial class UpgradeUIHandler : Control
         SetUIVisible(true);
         ResizeBackground();
         CenterMainPanel();
+        PlayOpenAnimation();
+    }
+
+    /// <summary>面板开启动画：淡入 + 上移 16px（Phase 5 动效）。</summary>
+    private void PlayOpenAnimation()
+    {
+        _panelTween?.Kill();
+        if (_mainPanel == null) return;
+        _mainPanel.Modulate = new Color(1, 1, 1, 0);
+        _mainPanel.Position += new Vector2(0, 16);
+        _panelTween = CreateTween();
+        _panelTween.TweenProperty(_mainPanel, "modulate:a", 1f, 0.15f);
+        _panelTween.Parallel().TweenProperty(_mainPanel, "position:y", _mainPanel.Position.Y - 16, 0.15f);
     }
 
     public void HideUI()
     {
         _isOpen = false;
-        SetUIVisible(false);
+        // 关闭动画：淡出 + 下移 16px 后隐藏（Phase 5 动效）
+        _panelTween?.Kill();
+        if (_mainPanel == null || !Visible)
+        {
+            SetUIVisible(false);
+            return;
+        }
+        _panelTween = CreateTween();
+        _panelTween.TweenProperty(_mainPanel, "modulate:a", 0f, 0.12f);
+        _panelTween.Parallel().TweenProperty(_mainPanel, "position:y", _mainPanel.Position.Y + 16, 0.12f);
+        _panelTween.TweenCallback(Callable.From(() => SetUIVisible(false)));
     }
 
     public void SetUIVisible(bool visible)
@@ -784,6 +810,32 @@ public sealed partial class UpgradeUIHandler : Control
     {
         _topBar?.SetPoints(UpgradePointManager.CurrentPoints);
         RefreshAllRows();
+    }
+
+    private void OnPurchaseSucceeded() => SpawnPurchaseVfx();
+
+    /// <summary>购买成功反馈（Phase 5）：+1 飘字（点数旁上浮淡出）+ 点数计数器跳动。</summary>
+    private void SpawnPurchaseVfx()
+    {
+        if (_topBar == null) return;
+        var pointsLabel = _topBar.PointsLabel;
+
+        // +1 飘字（挂在根 Control 上，根为全屏无变换，坐标即画布坐标）
+        var floatLabel = new Label { Text = "+1", ZIndex = 100 };
+        floatLabel.AddThemeFontOverride("font", UpgradeTheme.SemiBold);
+        floatLabel.AddThemeFontSizeOverride("font_size", 16);
+        floatLabel.AddThemeColorOverride("font_color", UpgradeTheme.TitleGold);
+        floatLabel.Position = pointsLabel.GlobalPosition + new Vector2(-4, -20);
+        AddChild(floatLabel);
+        var ft = CreateTween();
+        ft.TweenProperty(floatLabel, "position:y", floatLabel.Position.Y - 28, 0.6f);
+        ft.Parallel().TweenProperty(floatLabel, "modulate:a", 0f, 0.6f).SetDelay(0.25f);
+        ft.TweenCallback(Callable.From(floatLabel.QueueFree));
+
+        // 点数计数器跳动
+        var pulse = CreateTween();
+        pulse.TweenProperty(pointsLabel, "scale", new Vector2(1.25f, 1.25f), 0.08f);
+        pulse.TweenProperty(pointsLabel, "scale", Vector2.One, 0.08f);
     }
 
     /// <summary>按当前点数刷新所有条目行状态（值/满级/可用性）。</summary>

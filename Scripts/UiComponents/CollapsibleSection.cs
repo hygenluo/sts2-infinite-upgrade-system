@@ -16,7 +16,6 @@ namespace InfiniteUpgradeSystem.UiComponents;
 /// </summary>
 public sealed partial class CollapsibleSection : VBoxContainer
 {
-    private readonly string _title;
     private readonly Label _arrowLabel;
     private readonly Label _summaryLabel;
     private readonly VBoxContainer _content;
@@ -34,7 +33,6 @@ public sealed partial class CollapsibleSection : VBoxContainer
 
     public CollapsibleSection(string title, bool collapsed = true, bool weakStyle = false)
     {
-        _title = title;
         _collapsed = collapsed;
 
         // ── 分区头（扁平按钮，子节点提供视觉）──
@@ -54,10 +52,15 @@ public sealed partial class CollapsibleSection : VBoxContainer
         var headerRow = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
         headerRow.AddThemeConstantOverride("separation", 6);
 
-        _arrowLabel = new Label { Text = collapsed ? "▸" : "▾", VerticalAlignment = VerticalAlignment.Center };
+        // 箭头固定 ▸ 字形，展开/收起用旋转 Tween（0° = 收起，90° = 展开）。
+        // 注意：默认绕左上角旋转，90° 后字形被甩出可视区域（实测箭头消失）——
+        // 必须把旋转轴心设为标签中心（尺寸确定后设置）。
+        _arrowLabel = new Label { Text = "▸", VerticalAlignment = VerticalAlignment.Center };
         _arrowLabel.AddThemeFontOverride("font", UpgradeTheme.Regular);
         _arrowLabel.AddThemeFontSizeOverride("font_size", 14);
         _arrowLabel.AddThemeColorOverride("font_color", UpgradeTheme.PanelBorder);
+        _arrowLabel.Resized += () => _arrowLabel.PivotOffset = _arrowLabel.Size * 0.5f;
+        if (collapsed) _arrowLabel.RotationDegrees = 0;
         headerRow.AddChild(_arrowLabel);
 
         var titleLabel = new Label
@@ -97,10 +100,12 @@ public sealed partial class CollapsibleSection : VBoxContainer
     {
         if (_collapsed == collapsed) return;
         _collapsed = collapsed;
-        _arrowLabel.Text = collapsed ? "▸" : "▾";
         Toggled?.Invoke(collapsed);
         _tween?.Kill();
         _tween = null;
+        // 箭头旋转动画（▸ 顺时针 90° = ▾）——独立 tween，避免与内容淡入互相覆盖
+        var arrowTween = CreateTween();
+        arrowTween.TweenProperty(_arrowLabel, "rotation_degrees", collapsed ? 0f : 90f, 0.15f);
 
         if (collapsed)
         {
@@ -112,27 +117,8 @@ public sealed partial class CollapsibleSection : VBoxContainer
             _content.Modulate = new Color(1, 1, 1, 0);
             _tween = CreateTween();
             _tween.TweenProperty(_content, "modulate:a", 1f, 0.15f);
-            ProbeSizes();
         }
     }
 
-    /// <summary>临时宽度链探针（名称标签消失排查，定位后移除）。</summary>
-    private void ProbeSizes()
-    {
-        if (_content.GetChildCount() == 0 || _content.GetChild(0) is not Control row) return;
-        GD.Print($"[IU-CS] probe '{_title}' immediate: section={Size} content={_content.Size} row0={row.Size}");
-        CallDeferred(nameof(ProbeDeferred), row);
-    }
-
-    private void ProbeDeferred(Control row)
-    {
-        GD.Print($"[IU-CS] probe '{_title}' deferred: content={_content.Size} row0={row.Size} " +
-                 $"name0={row.GetChild(0)?.ToString() ?? "null"}");
-    }
-
-    private void Toggle()
-    {
-        GD.Print($"[IU-CS] toggle '{_title}' → collapsed={!_collapsed}");
-        SetCollapsed(!_collapsed);
-    }
+    private void Toggle() => SetCollapsed(!_collapsed);
 }

@@ -6,17 +6,23 @@
 Scripts/
 ├── Entry.cs                      # 模组入口 (ModInitializer + Harmony)
 ├── UpgradePointManager.cs        # 点数管理 (Run seed 持久化)
-├── UpgradeUIHandler.cs           # Godot UI (29按钮 + 搜索 + 拖拽)
-├── CardOperationHelper.cs        # 卡牌操作引擎 (16项)
+├── UpgradeUIHandler.cs           # Godot UI v2：视图切换/折叠分区/搜索/动效
+├── CardOperationHelper.cs        # 卡牌操作引擎（promptKey 透传 + Esc 取消链路）
 ├── CardUpgradeTracker.cs         # 卡牌修改追踪 + 读档恢复
 ├── AbilityOperationHelper.cs     # 能力操作引擎 (11项 + Power 应用)
 ├── RunStateHook.cs               # 游戏生命周期 + 检查点持久化
 ├── PointsPersistence.cs          # 点数 JSON 持久化
 ├── UiComponents/
-│   ├── UpgradeItemData.cs        # UI 操作项数据模型
-│   └── UpgradeTheme.cs           # UI 主题：色板 + 字体（Noto Serif SC，DLL 同目录加载）
+│   ├── UpgradeItemData.cs        # 数据模型 UpgradeItemDef（Kind/MaxLevel/等级化）
+│   ├── UpgradeLoc.cs             # 自包含双语本地化 + key 常量
+│   ├── UpgradeTheme.cs           # 主题：浅灰色板 + 思源宋体 MSDF（DLL 同目录加载）
+│   ├── UpgradeItemRow.cs         # 条目行（名称/值/成本/加号 + MAX 徽标 + 抖动/悬停）
+│   ├── CollapsibleSection.cs     # 折叠分区（可见性切换 + 淡入 + 箭头旋转）
+│   ├── ClassTabBar.cs            # 技能 6 职业标签页
+│   └── UpgradeTopBar.cs          # 顶栏（标题/点数/关闭）
 └── Patches/
-    └── EnergyKeepPatch.cs        # Harmony Postfix: 能量跨回合保留
+    ├── EnergyKeepPatch.cs        # Harmony Postfix: 能量跨回合保留
+    └── LocStringPromptPatch.cs   # Harmony Postfix: 模组 key 本地化解析（专属选牌提示）
 ```
 
 ## 文件导航
