@@ -21,6 +21,23 @@ public static class SkillRegistry
     private static readonly Dictionary<string, int> s_levels = new();
     private static readonly JsonSerializerOptions s_jsonOptions = new() { PropertyNameCaseInsensitive = true };
 
+    /// <summary>本场战斗打牌计数（每 4 张触发一次敏捷/力量技能，BeforeCombatStart 清零）。</summary>
+    private static int s_combatPlayCount;
+
+    /// <summary>当前战斗打牌计数（UI 显示用：战斗间打开面板可见上一场计数）。</summary>
+    public static int CombatPlayCount => s_combatPlayCount;
+
+    /// <summary>是否拥有任何技能（诊断日志门槛：仅技能拥有者打印，避免打牌刷屏）。</summary>
+    public static bool AnyOwned()
+    {
+        foreach (var kv in s_levels)
+            if (kv.Value > 0) return true;
+        return false;
+    }
+
+    public static void AddCombatPlay() => s_combatPlayCount++;
+    public static void ResetCombatPlay() => s_combatPlayCount = 0;
+
     /// <summary>当前等级（0 = 未拥有）。</summary>
     public static int GetLevel(string id) => s_levels.TryGetValue(id, out var v) ? v : 0;
 

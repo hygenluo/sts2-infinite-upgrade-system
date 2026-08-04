@@ -27,6 +27,9 @@ public sealed partial class UpgradeItemRow : HBoxContainer
     /// <summary>购买成功事件（Phase 5：+1 飘字与点数跳动）。</summary>
     public event Action? Purchased;
 
+    /// <summary>只读模式（Phase S2.5：局内查看，隐藏加号、屏蔽购买交互）。</summary>
+    public bool ReadOnly { get; set; }
+
     public UpgradeItemRow(UpgradeItemDef def)
     {
         _def = def;
@@ -165,7 +168,13 @@ public sealed partial class UpgradeItemRow : HBoxContainer
             _valueLabel.Text = level.ToString();
 
         _maxBadge.Visible = isMaxed;
-        _plusButton.Visible = !isMaxed;
+        // 只读模式（局内查看）：隐藏加号，MAX 徽标照常显示
+        _plusButton.Visible = !isMaxed && !ReadOnly;
+        if (ReadOnly)
+        {
+            _costLabel.Text = "";
+            return;
+        }
         // 点数不足：加号半透明灰 + 成本变红（保持可点击以触发抖动反馈）
         _plusButton.Modulate = affordable ? Colors.White : new Color(1, 1, 1, 0.45f);
         _costLabel.Modulate = affordable ? Colors.White : UpgradeTheme.Danger;

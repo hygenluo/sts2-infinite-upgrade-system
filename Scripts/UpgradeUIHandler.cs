@@ -41,6 +41,7 @@ public sealed partial class UpgradeUIHandler : Control
     private Label? _emptyLabel;
     private Label? _cardOpsEmptyLabel;
     private ClassTabBar? _skillTabBar;
+    private Label? _hintLabel;
     private readonly Dictionary<string, VBoxContainer> _skillClassBoxes = new();
     private readonly Dictionary<UpgradeItemDef, CollapsibleSection> _sectionOf = new();
     private readonly Dictionary<UpgradeItemDef, UpgradeItemRow> _cardOpsRows = new();
@@ -220,6 +221,7 @@ public sealed partial class UpgradeUIHandler : Control
         hintLabel.AddThemeColorOverride("font_color", UpgradeTheme.TextSecondary);
         hintLabel.AddThemeFontOverride("font", UpgradeTheme.Regular);
         hintLabel.AddThemeFontSizeOverride("font_size", 12);
+        _hintLabel = hintLabel;
         outerVBox.AddChild(hintLabel);
 
         outerVBox.AddChild(new HSeparator());
@@ -342,6 +344,17 @@ public sealed partial class UpgradeUIHandler : Control
         if (_searchBox != null) _searchBox.Text = "";
         ResetRowsFilter(view);
         RefreshAllRows();
+    }
+
+    /// <summary>只读模式（局内查看）：行隐藏加号、牌组入口禁用、提示行标注。战斗结束重开自动恢复。</summary>
+    private void SetReadOnlyMode(bool readOnly)
+    {
+        foreach (var row in _itemControls.Values)
+            row.ReadOnly = readOnly;
+        if (_deckEntryRow != null)
+            _deckEntryRow.Disabled = readOnly;
+        if (_hintLabel != null)
+            _hintLabel.Text = readOnly ? "战斗中 — 只读模式  [Esc] 关闭" : "[P] 打开/关闭  [Esc] 关闭";
     }
 
     /// <summary>重置两视图全部行：可见 + 高亮清除 + 空态隐藏（ShowUI 打开时调用）。</summary>
@@ -643,8 +656,11 @@ public sealed partial class UpgradeUIHandler : Control
 
         // === 技能 (16)：效果未生效（Phase S2+ 接线），购买/持久化/UI 先行 ===
         _allItems.Add(SkillItem(ClassTabBar.Generic, "每打出1张牌，都获得1格挡", UpgradeLoc.ItemSkillBlockOnPlay, "block_on_play", 10));
-        _allItems.Add(SkillItem(ClassTabBar.Generic, "每当打出4张牌，获得1敏捷", UpgradeLoc.ItemSkillAgilityEvery4Plays, "agility_every_4_plays", 10));
-        _allItems.Add(SkillItem(ClassTabBar.Generic, "每当打出4张牌，获得1力量", UpgradeLoc.ItemSkillStrengthEvery4Plays, "strength_every_4_plays", 10));
+        // 计数显示用余数：0/4 → 1/4 → 2/4 → 3/4 → 0/4（触发并归零）→ …每 4 张触发一次（4/8/12…）
+        _allItems.Add(SkillItem(ClassTabBar.Generic, "每当打出4张牌，获得1敏捷", UpgradeLoc.ItemSkillAgilityEvery4Plays, "agility_every_4_plays", 10,
+            () => $"{SkillRegistry.CombatPlayCount % 4}/4"));
+        _allItems.Add(SkillItem(ClassTabBar.Generic, "每当打出4张牌，获得1力量", UpgradeLoc.ItemSkillStrengthEvery4Plays, "strength_every_4_plays", 10,
+            () => $"{SkillRegistry.CombatPlayCount % 4}/4"));
         _allItems.Add(SkillItem(ClassTabBar.Generic, "在你的回合，当你没有手牌时，抽1张牌", UpgradeLoc.ItemSkillDrawWhenNoHand, "draw_when_no_hand", 7));
         _allItems.Add(SkillItem(ClassTabBar.Generic, "你可以在休息处选择任意数量的选项", UpgradeLoc.ItemSkillRestAllOptions, "rest_all_options", 12));
         _allItems.Add(SkillItem(ClassTabBar.Generic, "每回合开始时，获取消耗牌堆数等量格挡", UpgradeLoc.ItemSkillBlockAtTurnStart, "block_at_turn_start", 10));
@@ -699,8 +715,9 @@ public sealed partial class UpgradeUIHandler : Control
         SearchText = BuildSearchText(category, locKey, fallbackName),
     };
 
-    /// <summary>技能条目构建（限等级 MaxLevel=1，按职业 SubCategory 落入标签页）。</summary>
-    private UpgradeItemDef SkillItem(string cls, string fallbackName, string locKey, string skillId, int cost) => new()
+    /// <summary>技能条目构建（限等级 MaxLevel=1，按职业 SubCategory 落入标签页；valueText 可覆盖，如计数显示）。</summary>
+    private UpgradeItemDef SkillItem(string cls, string fallbackName, string locKey, string skillId, int cost,
+        Func<string>? valueText = null) => new()
     {
         Category = "技能",
         SubCategory = cls,
@@ -710,7 +727,7 @@ public sealed partial class UpgradeUIHandler : Control
         Kind = UpgradeItemKind.Stat,
         MaxLevel = 1,
         LevelProvider = () => SkillRegistry.GetLevel(skillId),
-        ValueText = () => SkillRegistry.Has(skillId) ? "已拥有" : "未拥有",
+        ValueText = valueText ?? (() => SkillRegistry.Has(skillId) ? "已拥有" : "未拥有"),
         OnClick = () =>
         {
             var ok = SkillRegistry.TryPurchase(skillId, cost);
@@ -806,17 +823,15 @@ public sealed partial class UpgradeUIHandler : Control
 
     private void ShowUI()
     {
-        if (CombatManager.Instance is { IsOverOrEnding: false })
-        {
-            GD.Print("战斗中无法打开无限升级系统。");
-            return;
-        }
         if (RunManager.Instance?.DebugOnlyGetState() == null)
         {
             GD.Print("没有正在进行的游戏，无法打开升级系统。");
             return;
         }
+        // Phase S2.5：战斗中允许打开，但为只读模式（只能查看，不能操作）
+        var readOnly = CombatManager.Instance is { IsOverOrEnding: false };
         _isOpen = true;
+        SetReadOnlyMode(readOnly);
         RefreshPointsLabel();
         // 打开时显式重置搜索状态（不依赖 TextChanged 事件链）：
         // 所有行可见 + 高亮清除 + 空态隐藏 —— 关闭前搜索过的页面重开必须是完整列表

@@ -412,6 +412,33 @@ public static class SkillRegistry
 
 ---
 
+## 九、局内只读面板（Phase S2.5，方案已选型 2026-08-04）
+
+> 背景：计数类技能（每4张牌触发）需要局内可见的计数反馈；面板默认仅局外可开。
+> 方案评估：Power 图标方案需自定义 PowerModel + 图标资源（mod 无 pck，成本高、只解决计数）；
+> **采用局内只读面板方案**——复用现有 UI，顺带获得局内查看全部属性的能力。
+
+### 设计
+- **战斗中也允许按 P 打开面板，但为只读模式**：
+  - 所有条目行的**加号隐藏**（MAX 徽标照常显示），悬停提亮/抖动无效
+  - 牌组入口行禁用（点击提示「战斗中不可操作」）；测试分区同样只读
+  - 点数计数器、值列、计数（N/4）照常显示
+- **判定**：ShowUI 时检测 `CombatManager.Instance is { IsOverOrEnding: false }` → readOnly=true（原逻辑是直接拒绝打开）
+- **刷新**：面板每次打开执行 `RefreshAllRows()`（已有）——计数类技能的值列显示 `SkillRegistry.CombatPlayCount` 的「N/4」；打牌 → 关面板 → 再开 → 更新
+- **输入**：全屏遮罩（MouseFilter Stop）天然挡住游戏操作——只读模式即「只能看不能动」
+- **退出**：战斗结束（CombatWon）后重开面板自动回到正常模式（readOnly 按当前战斗状态判定）
+
+### 实现清单
+1. `UpgradeItemRow`：新增 `ReadOnly` 属性（隐藏加号、屏蔽交互）
+2. `UpgradeUIHandler`：ShowUI 战斗拦截 → readOnly 判定；牌组入口行只读禁用
+3. `SkillItem` 计数值列已接入 `SkillRegistry.CombatPlayCount`（S2 完成）
+
+### 后续可选增强（暂不实施）
+- 方案 1（角色下方常驻 Power 图标）：需自定义 PowerModel（BaseLib 注册）+ 图标资源，
+  仅显示数字 N（规则靠悬停提示），价值低于只读面板，留待需要常驻显示时再做。
+
+---
+
 ## 附：相关文件索引
 
 | 文件 | 本次改动 |

@@ -10,6 +10,7 @@ using HarmonyLib;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Models;
 
 namespace InfiniteUpgradeSystem;
 
@@ -80,7 +81,16 @@ public static class AbilityOperationHelper
     public static void ResetForNewRun() => s_appliedThisRun = false;
     public static void ResetForNextCombat() => s_appliedThisRun = false;
 
-    private static async Task ApplyOnePower(Creature creature, string key, int count)
+    /// <summary>
+    /// 应用 Power（public 供技能系统复用，Phase S2）。
+    /// key 映射：能力系统 + 技能效果（vigor/weak）。
+    ///
+    /// 叠加处理（Phase S2 修复）：Creature.ApplyPowerInternal 对已存在的同类 Power
+    /// 直接抛异常（IL 反汇编确认，重复应用检查）——第二次触发同类技能会失败。
+    /// 因此：已有同类 Power 时改用 SetAmount 叠加数量（触发 PowerModified 更新显示与数值），
+    /// 否则走「模板克隆 + ApplyInternal」应用路径。
+    /// </summary>
+    public static async Task ApplyOnePower(Creature creature, string key, int count)
     {
         var typeName = key switch
         {
@@ -91,6 +101,8 @@ public static class AbilityOperationHelper
             "thorns" => "MegaCrit.Sts2.Core.Models.Powers.ThornsPower",
             "artifact" => "MegaCrit.Sts2.Core.Models.Powers.ArtifactPower",
             "blockKeep" => "MegaCrit.Sts2.Core.Models.Powers.BarricadePower",
+            "vigor" => "MegaCrit.Sts2.Core.Models.Powers.VigorPower",
+            "weak" => "MegaCrit.Sts2.Core.Models.Powers.WeakPower",
             _ => null
         };
         if (typeName == null) return;
@@ -101,6 +113,15 @@ public static class AbilityOperationHelper
             { powerType = asm.GetType(typeName); if (powerType != null) break; }
             if (powerType == null) return;
 
+            // 1) 已有同类 Power → 叠加数量（避免 ApplyPowerInternal 的重复类型异常）
+            var existing = GetExistingPower(creature, powerType);
+            if (existing != null)
+            {
+                existing.SetAmount(existing._amount + count, false);
+                return;
+            }
+
+            // 2) 原路径：模板克隆 + ApplyInternal
             var modelDb = Type.GetType("MegaCrit.Sts2.Core.Models.ModelDb, sts2");
             if (modelDb == null) foreach (var a in AppDomain.CurrentDomain.GetAssemblies()) { modelDb = a.GetType("MegaCrit.Sts2.Core.Models.ModelDb"); if (modelDb != null) break; }
             if (modelDb == null) return;
@@ -119,7 +140,40 @@ public static class AbilityOperationHelper
             if (applyMethod == null) return;
             applyMethod.Invoke(mutable, new object[] { creature, (decimal)count, false });
         }
-        catch (Exception ex) { GD.PrintErr($"[IU] ApplyPower {key}: {ex.Message}"); }
+        catch (Exception ex)
+        {
+            // 解包 TargetInvocationException，打印真实内层异常与堆栈（技能战斗中应用失败排查）
+            var inner = ex is System.Reflection.TargetInvocationException tie && tie.InnerException != null
+                ? tie.InnerException
+                : ex;
+            GD.PrintErr($"[IU] ApplyPower {key}: {inner}");
+        }
+    }
+
+    /// <summary>查找生物身上已应用的指定类型 Power（publicized 泛型方法反射调用）。</summary>
+    private static PowerModel? GetExistingPower(Creature creature, Type powerType)
+    {
+        try
+        {
+            var hasPower = creature.GetType()
+                .GetMethods()
+                .FirstOrDefault(m => m.Name == "HasPower" && m.GetParameters().Length == 0 && m.IsGenericMethodDefinition)?
+                .MakeGenericMethod(powerType)
+                .Invoke(creature, null);
+            if (hasPower is not true) return null;
+
+            var power = creature.GetType()
+                .GetMethods()
+                .FirstOrDefault(m => m.Name == "GetPower" && m.GetParameters().Length == 0 && m.IsGenericMethodDefinition)?
+                .MakeGenericMethod(powerType)
+                .Invoke(creature, null) as PowerModel;
+            return power;
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[IU] GetExistingPower: {ex.Message}");
+            return null;
+        }
     }
 
     public static void SaveCheckpoint(string seed)
