@@ -60,6 +60,23 @@ public static class UpgradeLoc
     public const string ItemTestP5 = "INFINITEUPGRADESYSTEM-ITEM_TEST_P5";
     public const string ItemTestP10 = "INFINITEUPGRADESYSTEM-ITEM_TEST_P10";
 
+    public const string ItemSkillBlockOnPlay = "INFINITEUPGRADESYSTEM-ITEM_SKILL_BLOCK_ON_PLAY";
+    public const string ItemSkillAgilityEvery4Plays = "INFINITEUPGRADESYSTEM-ITEM_SKILL_AGILITY_EVERY_4_PLAYS";
+    public const string ItemSkillStrengthEvery4Plays = "INFINITEUPGRADESYSTEM-ITEM_SKILL_STRENGTH_EVERY_4_PLAYS";
+    public const string ItemSkillDrawWhenNoHand = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_WHEN_NO_HAND";
+    public const string ItemSkillRestAllOptions = "INFINITEUPGRADESYSTEM-ITEM_SKILL_REST_ALL_OPTIONS";
+    public const string ItemSkillBlockAtTurnStart = "INFINITEUPGRADESYSTEM-ITEM_SKILL_BLOCK_AT_TURN_START";
+    public const string ItemSkillDrawOnExhaust = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_ON_EXHAUST";
+    public const string ItemSkillDrawOnHpLoss = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_ON_HP_LOSS";
+    public const string ItemSkillWeakOnDiscard = "INFINITEUPGRADESYSTEM-ITEM_SKILL_WEAK_ON_DISCARD";
+    public const string ItemSkillBlockOnPoison = "INFINITEUPGRADESYSTEM-ITEM_SKILL_BLOCK_ON_POISON";
+    public const string ItemSkillForgeOnPlay = "INFINITEUPGRADESYSTEM-ITEM_SKILL_FORGE_ON_PLAY";
+    public const string ItemSkillVigorOnSkillPlay = "INFINITEUPGRADESYSTEM-ITEM_SKILL_VIGOR_ON_SKILL_PLAY";
+    public const string ItemSkillSummonOnPlay = "INFINITEUPGRADESYSTEM-ITEM_SKILL_SUMMON_ON_PLAY";
+    public const string ItemSkillDmgOnEtherealPlay = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DMG_ON_ETHEREAL_PLAY";
+    public const string ItemSkillDrawOnPowerPlay = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_ON_POWER_PLAY";
+    public const string ItemSkillOrbDmgAtTurnEnd = "INFINITEUPGRADESYSTEM-ITEM_SKILL_ORB_DMG_AT_TURN_END";
+
     public const string PromptCardUpgrade = "INFINITEUPGRADESYSTEM-PROMPT_CARD_UPGRADE";
     public const string PromptAttackPlus = "INFINITEUPGRADESYSTEM-PROMPT_ATTACK_PLUS";
     public const string PromptBlockPlus = "INFINITEUPGRADESYSTEM-PROMPT_BLOCK_PLUS";

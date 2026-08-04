@@ -40,6 +40,8 @@ public sealed partial class UpgradeUIHandler : Control
     private Label? _deckCountLabel;
     private Label? _emptyLabel;
     private Label? _cardOpsEmptyLabel;
+    private ClassTabBar? _skillTabBar;
+    private readonly Dictionary<string, VBoxContainer> _skillClassBoxes = new();
     private readonly Dictionary<UpgradeItemDef, CollapsibleSection> _sectionOf = new();
     private readonly Dictionary<UpgradeItemDef, UpgradeItemRow> _cardOpsRows = new();
     private Tween? _panelTween;
@@ -383,18 +385,25 @@ public sealed partial class UpgradeUIHandler : Control
         var abilitySection = AddSection("能力");
         AddStatRows(abilitySection, "能力");
 
-        // 技能：二级标签页 + 空态占位（条目 Phase 2.5/技能实现时按 SubCategory 落入标签）
+        // 技能：职业标签页 → 各职业条目容器（默认选中「通用」）
         var skillSection = AddSection("技能");
-        skillSection.Content.AddChild(new ClassTabBar());
-        var emptyLabel = new Label
+        _skillTabBar = new ClassTabBar();
+        skillSection.Content.AddChild(_skillTabBar);
+        foreach (var cls in ClassTabBar.Classes)
         {
-            Text = "尚未解锁任何技能",
-            HorizontalAlignment = HorizontalAlignment.Center,
+            var box = new VBoxContainer();
+            box.AddThemeConstantOverride("separation", 4);
+            skillSection.Content.AddChild(box);
+            _skillClassBoxes[cls] = box;
+            box.Visible = cls == ClassTabBar.Generic;
+        }
+        _skillTabBar.ClassSelected += cls =>
+        {
+            foreach (var (key, box) in _skillClassBoxes)
+                box.Visible = key == cls;
         };
-        emptyLabel.AddThemeFontOverride("font", UpgradeTheme.Regular);
-        emptyLabel.AddThemeFontSizeOverride("font_size", 13);
-        emptyLabel.AddThemeColorOverride("font_color", UpgradeTheme.TextSecondary);
-        skillSection.Content.AddChild(emptyLabel);
+        foreach (var item in _allItems.Where(i => i.Category == "技能"))
+            _skillClassBoxes[item.SubCategory!].AddChild(CreateRow(item, skillSection));
 
         // 牌组：入口行（Phase 4 点击进入子面板）
         BuildDeckEntryRow();
@@ -506,6 +515,17 @@ public sealed partial class UpgradeUIHandler : Control
         {
             foreach (var section in matchesInSection)
                 if (section.Collapsed) section.SetCollapsed(false);
+        }
+        // 技能分区：搜索时显示含命中的职业容器（无搜索词时跟随选中标签）
+        if (_skillClassBoxes.Count > 0)
+        {
+            foreach (var (cls, box) in _skillClassBoxes)
+            {
+                var anyVisible = box.GetChildren().OfType<UpgradeItemRow>().Any(r => r.Visible);
+                box.Visible = string.IsNullOrEmpty(filter)
+                    ? cls == (_skillTabBar?.SelectedClass ?? ClassTabBar.Generic)
+                    : anyVisible;
+            }
         }
         var totalVisible = _itemControls.Count(kv => !_cardOpsRows.ContainsKey(kv.Key) && kv.Value.Visible);
         _emptyLabel!.Visible = !string.IsNullOrEmpty(filter) && totalVisible == 0;
@@ -621,6 +641,24 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(ActionItem("卡牌操作", "移除永恒", UpgradeLoc.ItemRemoveEternal, 15,
             UpgradeLoc.PromptRemoveEternal, pk => CardOperationHelper.ToggleKeyword(15, CardKeyword.Eternal, false, pk)));
 
+        // === 技能 (16)：效果未生效（Phase S2+ 接线），购买/持久化/UI 先行 ===
+        _allItems.Add(SkillItem(ClassTabBar.Generic, "每打出1张牌，都获得1格挡", UpgradeLoc.ItemSkillBlockOnPlay, "block_on_play", 10));
+        _allItems.Add(SkillItem(ClassTabBar.Generic, "每当打出4张牌，获得1敏捷", UpgradeLoc.ItemSkillAgilityEvery4Plays, "agility_every_4_plays", 10));
+        _allItems.Add(SkillItem(ClassTabBar.Generic, "每当打出4张牌，获得1力量", UpgradeLoc.ItemSkillStrengthEvery4Plays, "strength_every_4_plays", 10));
+        _allItems.Add(SkillItem(ClassTabBar.Generic, "在你的回合，当你没有手牌时，抽1张牌", UpgradeLoc.ItemSkillDrawWhenNoHand, "draw_when_no_hand", 7));
+        _allItems.Add(SkillItem(ClassTabBar.Generic, "你可以在休息处选择任意数量的选项", UpgradeLoc.ItemSkillRestAllOptions, "rest_all_options", 12));
+        _allItems.Add(SkillItem(ClassTabBar.Generic, "每回合开始时，获取消耗牌堆数等量格挡", UpgradeLoc.ItemSkillBlockAtTurnStart, "block_at_turn_start", 10));
+        _allItems.Add(SkillItem(ClassTabBar.Ironclad, "每当有一张牌被消耗时，抽一张牌", UpgradeLoc.ItemSkillDrawOnExhaust, "draw_on_exhaust", 10));
+        _allItems.Add(SkillItem(ClassTabBar.Ironclad, "每当失去生命值时，抽一张牌", UpgradeLoc.ItemSkillDrawOnHpLoss, "draw_on_hp_loss", 10));
+        _allItems.Add(SkillItem(ClassTabBar.Silent, "每当丢弃一张牌时，给予所有敌人1层虚弱", UpgradeLoc.ItemSkillWeakOnDiscard, "weak_on_discard", 10));
+        _allItems.Add(SkillItem(ClassTabBar.Silent, "每当给予敌人中毒时，获得1格挡", UpgradeLoc.ItemSkillBlockOnPoison, "block_on_poison", 10));
+        _allItems.Add(SkillItem(ClassTabBar.Regent, "每打出1张牌时，铸造1", UpgradeLoc.ItemSkillForgeOnPlay, "forge_on_play", 10));
+        _allItems.Add(SkillItem(ClassTabBar.Regent, "每打出1张技能牌时，获得2点活力", UpgradeLoc.ItemSkillVigorOnSkillPlay, "vigor_on_skill_play", 6));
+        _allItems.Add(SkillItem(ClassTabBar.Necrobinder, "每打出1张牌时，召唤1", UpgradeLoc.ItemSkillSummonOnPlay, "summon_on_play", 10));
+        _allItems.Add(SkillItem(ClassTabBar.Necrobinder, "每打出1张虚无牌，对所有敌人造成3点伤害", UpgradeLoc.ItemSkillDmgOnEtherealPlay, "dmg_on_ethereal_play", 7));
+        _allItems.Add(SkillItem(ClassTabBar.Defect, "每打出1张能力牌，抽一张牌", UpgradeLoc.ItemSkillDrawOnPowerPlay, "draw_on_power_play", 10));
+        _allItems.Add(SkillItem(ClassTabBar.Defect, "回合结束时，每有一个充能球，对所有敌人造成1点伤害", UpgradeLoc.ItemSkillOrbDmgAtTurnEnd, "orb_dmg_at_turn_end", 10));
+
         // === 牌组操作 (1) ===
         _allItems.Add(ActionItem("牌组操作", "从牌组删除一张牌", UpgradeLoc.ItemDeckRemove, 20,
             UpgradeLoc.PromptDeckRemove, pk => CardOperationHelper.RemoveCardFromDeck(20, pk)));
@@ -659,6 +697,27 @@ public sealed partial class UpgradeUIHandler : Control
         PromptKey = promptKey,
         OnClick = () => onClick(promptKey),
         SearchText = BuildSearchText(category, locKey, fallbackName),
+    };
+
+    /// <summary>技能条目构建（限等级 MaxLevel=1，按职业 SubCategory 落入标签页）。</summary>
+    private UpgradeItemDef SkillItem(string cls, string fallbackName, string locKey, string skillId, int cost) => new()
+    {
+        Category = "技能",
+        SubCategory = cls,
+        DisplayName = UpgradeLoc.ResolveDisplayName(locKey, fallbackName),
+        LocKey = locKey,
+        Cost = cost,
+        Kind = UpgradeItemKind.Stat,
+        MaxLevel = 1,
+        LevelProvider = () => SkillRegistry.GetLevel(skillId),
+        ValueText = () => SkillRegistry.Has(skillId) ? "已拥有" : "未拥有",
+        OnClick = () =>
+        {
+            var ok = SkillRegistry.TryPurchase(skillId, cost);
+            if (ok) RefreshPointsLabel();
+            return Task.FromResult(ok);
+        },
+        SearchText = BuildSearchText("技能", locKey, fallbackName),
     };
 
     /// <summary>测试条目构建。</summary>
