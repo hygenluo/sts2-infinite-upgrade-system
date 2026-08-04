@@ -22,14 +22,24 @@ public sealed partial class UpgradeUIHandler : Control
     private static CanvasLayer? s_canvasLayer;
     public static CanvasLayer? CanvasLayer => s_canvasLayer;
 
+    /// <summary>面板视图（Phase 4 起 CardOps = 牌组子面板）。</summary>
+    private enum UiView { Main, CardOps }
+
+    private UiView _currentView = UiView.Main;
+
     // UI 组件
     private ColorRect? _background;
     private Panel? _mainPanel;
-    private Control? _titleBar;
-    private Label? _pointsLabel;
+    private UpgradeTopBar? _topBar;
     private LineEdit? _searchBox;
     private ScrollContainer? _scrollContainer;
     private VBoxContainer? _scrollContent;
+    private ScrollContainer? _cardOpsScroll;
+    private VBoxContainer? _cardOpsContent;
+    private Button? _deckEntryRow;
+    private Label? _deckCountLabel;
+    private readonly Dictionary<UpgradeItemDef, CollapsibleSection> _sectionOf = new();
+    private readonly Dictionary<UpgradeItemDef, UpgradeItemRow> _cardOpsRows = new();
     private bool _isOpen;
 
     // 拖拽
@@ -37,8 +47,8 @@ public sealed partial class UpgradeUIHandler : Control
     private Vector2 _dragOffset;
 
     // 操作项数据 + 控件映射
-    private readonly List<UpgradeItemData> _allItems = new();
-    private readonly Dictionary<UpgradeItemData, Control> _itemControls = new();
+    private readonly List<UpgradeItemDef> _allItems = new();
+    private readonly Dictionary<UpgradeItemDef, UpgradeItemRow> _itemControls = new();
 
     public static void CreateInstance()
     {
@@ -78,16 +88,24 @@ public sealed partial class UpgradeUIHandler : Control
             return;
         }
 
-        // 快捷键
-        if (@event is InputEventKey { Pressed: true, Keycode: ToggleHotkey, Echo: false })
+        // 快捷键。选牌进行中（面板隐藏但 _isOpen 保持）不拦截按键，
+        // 让游戏选牌界面的 Esc/返回图标能正常取消选牌（Phase 2 取消链路）。
+        if (@event is InputEventKey { Pressed: true, Keycode: ToggleHotkey, Echo: false } && !IsSelectionInProgress)
         {
             GetViewport().SetInputAsHandled();
             ToggleUI();
         }
-        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape, Echo: false } && _isOpen)
+        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape, Echo: false } && _isOpen && Visible)
         {
             GetViewport().SetInputAsHandled();
             HideUI();
+        }
+        // 选牌进行中按 Esc：游戏自身 Esc 打开主菜单（不取消选牌），
+        // 这里程序化取消选牌屏 → 退款并恢复面板（DEBUG.md Phase 2 取消链路）
+        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape, Echo: false } && IsSelectionInProgress
+            && CardOperationHelper.TryCancelActiveCardSelection())
+        {
+            GetViewport().SetInputAsHandled();
         }
 
         // 拖拽标题栏移动面板
@@ -116,14 +134,18 @@ public sealed partial class UpgradeUIHandler : Control
         }
     }
 
-    /// <summary>鼠标是否在标题栏区域（面板顶部 42px）。</summary>
+    /// <summary>鼠标是否在标题栏区域（面板顶部 40px，顶部栏高度；排除关闭按钮区域）。</summary>
     private bool IsMouseInTitleBar()
     {
         if (_mainPanel == null) return false;
         var mousePos = GetGlobalMousePosition();
         var panelPos = _mainPanel.GlobalPosition;
-        return mousePos.X >= panelPos.X && mousePos.X <= panelPos.X + PanelWidth
-            && mousePos.Y >= panelPos.Y && mousePos.Y <= panelPos.Y + 42;
+        var inBar = mousePos.X >= panelPos.X && mousePos.X <= panelPos.X + PanelWidth
+            && mousePos.Y >= panelPos.Y && mousePos.Y <= panelPos.Y + 40;
+        if (!inBar) return false;
+        // 关闭按钮在顶栏内：排除其区域，否则点击被拖拽逻辑吞掉（✕ 无反应）
+        var closeRect = _topBar?.CloseButton?.GetGlobalRect();
+        return closeRect == null || !closeRect.Value.HasPoint(mousePos);
     }
 
     /// <summary>限制面板不超出屏幕。</summary>
@@ -155,12 +177,13 @@ public sealed partial class UpgradeUIHandler : Control
         _background.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(_background);
 
-        // 居中面板
+        // 居中面板（羊皮纸底 + 金边）
         _mainPanel = new Panel
         {
             CustomMinimumSize = new Vector2(PanelWidth, PanelHeight),
             MouseFilter = MouseFilterEnum.Stop,
         };
+        _mainPanel.AddThemeStyleboxOverride("panel", UpgradeTheme.BuildPanelStylebox());
         AddChild(_mainPanel);
 
         var outerMargin = 12;
@@ -174,35 +197,21 @@ public sealed partial class UpgradeUIHandler : Control
         };
         _mainPanel.AddChild(outerVBox);
 
-        // 标题栏（可拖拽）
-        _titleBar = new Control { CustomMinimumSize = new Vector2(0, 32) };
-        var title = new Label
-        {
-            Text = "⋮⋮ 无限升级系统 （拖拽此处移动）",
-            HorizontalAlignment = HorizontalAlignment.Center,
-            MouseFilter = MouseFilterEnum.Pass,
-        };
-        title.AddThemeFontSizeOverride("font_size", 22);
-        title.AddThemeColorOverride("font_color", new Color(0.75f, 0.75f, 0.75f));
-        _titleBar.AddChild(title);
-        title.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        outerVBox.AddChild(_titleBar);
+        // 顶部栏（标题 + 金色点数 + 关闭，可拖拽，固定不滚动）
+        _topBar = new UpgradeTopBar("无限升级系统", OnCloseClicked);
+        outerVBox.AddChild(_topBar);
 
-        // 点数 + 提示行
-        var infoRow = new HBoxContainer();
-        _pointsLabel = new Label { HorizontalAlignment = HorizontalAlignment.Left };
-        _pointsLabel.AddThemeFontSizeOverride("font_size", 18);
-        infoRow.AddChild(_pointsLabel);
-
+        // 快捷键提示（弱化样式）
         var hintLabel = new Label
         {
             Text = "[P] 打开/关闭  [Esc] 关闭",
             HorizontalAlignment = HorizontalAlignment.Right,
-            SizeFlagsHorizontal = SizeFlags.Expand | SizeFlags.Fill,
+            SizeFlagsHorizontal = SizeFlags.ShrinkEnd,
         };
-        hintLabel.AddThemeColorOverride("font_color", new Color(0.6f, 0.6f, 0.6f));
-        infoRow.AddChild(hintLabel);
-        outerVBox.AddChild(infoRow);
+        hintLabel.AddThemeColorOverride("font_color", UpgradeTheme.TextSecondary);
+        hintLabel.AddThemeFontOverride("font", UpgradeTheme.Regular);
+        hintLabel.AddThemeFontSizeOverride("font_size", 12);
+        outerVBox.AddChild(hintLabel);
 
         outerVBox.AddChild(new HSeparator());
 
@@ -212,6 +221,14 @@ public sealed partial class UpgradeUIHandler : Control
             PlaceholderText = "搜索加点项目...",
             ClearButtonEnabled = true,
         };
+        // LineEdit 的输入文字与占位文字是两套独立主题项（font/font_size 与
+        // font_placeholder/font_placeholder_size）。全部覆盖为主题 MSDF 字体 +
+        // 统一 16px，避免占位文字落入游戏主题的小字号（小字号 + 复杂笔画 +
+        // MSDF 会产生火花噪声，如「搜」字）。
+        _searchBox.AddThemeFontOverride("font", UpgradeTheme.Regular);
+        _searchBox.AddThemeFontOverride("font_placeholder", UpgradeTheme.Regular);
+        _searchBox.AddThemeFontSizeOverride("font_size", 16);
+        _searchBox.AddThemeFontSizeOverride("font_placeholder_size", 16);
         _searchBox.TextChanged += OnSearchTextChanged;
         outerVBox.AddChild(_searchBox);
 
@@ -220,57 +237,197 @@ public sealed partial class UpgradeUIHandler : Control
         // 可滚动区域
         _scrollContainer = new ScrollContainer
         {
-            SizeFlagsVertical = SizeFlags.Expand | SizeFlags.Fill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
             FollowFocus = true,
         };
-        _scrollContent = new VBoxContainer();
+        _scrollContent = new VBoxContainer
+        {
+            // ScrollContainer 子节点必须显式撑宽，否则内容按最小宽度收缩，
+            // 行内 ExpandFill 名称标签会被压到 0 宽（症状：只有数字/加号可见）
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        _scrollContent.AddThemeConstantOverride("separation", 6);
         _scrollContainer.AddChild(_scrollContent);
         outerVBox.AddChild(_scrollContainer);
 
-        // 生成分类按钮
-        BuildCategorySections();
+        // 牌组子面板滚动区（默认隐藏；与主视图共用顶栏/搜索框）
+        _cardOpsScroll = new ScrollContainer
+        {
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+            FollowFocus = true,
+        };
+        _cardOpsContent = new VBoxContainer
+        {
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        _cardOpsContent.AddThemeConstantOverride("separation", 4);
+        _cardOpsScroll.AddChild(_cardOpsContent);
+        outerVBox.AddChild(_cardOpsScroll);
+        _cardOpsScroll.Visible = false;
 
-        outerVBox.AddChild(new HSeparator());
-
-        // 关闭按钮
-        var closeButton = new Button { Text = "关闭" };
-        closeButton.Pressed += OnCloseClicked;
-        outerVBox.AddChild(closeButton);
+        // 生成牌组子面板 + 主视图分区（默认全部收起）
+        BuildCardOpsView();
+        BuildSections();
     }
 
-    private void BuildCategorySections()
+    /// <summary>
+    /// 牌组子面板（UI设计.md §三 3.2）：返回行 + 18 项卡牌操作（操作优先）。
+    /// 复用 UpgradeItemRow（Action 型渲染：无当前值、成本、加号）。
+    /// 选牌取消时 SetUIVisible(true) 恢复 _currentView —— 视图状态天然保持为子面板。
+    /// </summary>
+    private void BuildCardOpsView()
     {
-        var categories = _allItems.Select(i => i.Category).Distinct();
-        foreach (var category in categories)
+        var backButton = new Button
         {
-            var header = new Label
-            {
-                Text = $"── {category} ──",
-                HorizontalAlignment = HorizontalAlignment.Center,
-            };
-            header.AddThemeColorOverride("font_color", new Color(0.8f, 0.7f, 0.3f));
-            header.AddThemeFontSizeOverride("font_size", 16);
-            _scrollContent!.AddChild(header);
+            Text = "← 返回主面板",
+            Flat = true,
+            FocusMode = FocusModeEnum.None,
+            CustomMinimumSize = new Vector2(0, 30),
+        };
+        backButton.AddThemeFontOverride("font", UpgradeTheme.Regular);
+        backButton.AddThemeFontSizeOverride("font_size", 14);
+        backButton.AddThemeColorOverride("font_color", UpgradeTheme.PanelBorder);
+        backButton.Pressed += () => SwitchView(UiView.Main);
+        _cardOpsContent!.AddChild(backButton);
 
-            foreach (var item in _allItems.Where(i => i.Category == category))
-            {
-                var button = new Button
-                {
-                    Text = item.ButtonLabel,
-                    TooltipText = item.DisplayName,
-                };
-                button.Pressed += async () =>
-                {
-                    GD.Print($"[InfiniteUpgrade] Clicked: {item.DisplayName}");
-                    await item.OnClick();
-                    RefreshPointsLabel();
-                };
-                _scrollContent.AddChild(button);
-                _itemControls[item] = button;
-            }
-
-            _scrollContent.AddChild(new HSeparator());
+        foreach (var item in _allItems.Where(i => i.Category is "卡牌操作" or "牌组操作"))
+        {
+            var row = new UpgradeItemRow(item);
+            _itemControls[item] = row;
+            _cardOpsRows[item] = row;
+            _cardOpsContent.AddChild(row);
         }
+    }
+
+    /// <summary>选牌进行中：面板隐藏但 _isOpen 保持（此时不响应 P/Esc，避免抢走游戏选牌界面的按键）。</summary>
+    private bool IsSelectionInProgress => _isOpen && !Visible;
+
+    /// <summary>主视图 ↔ 牌组子面板整页切换（只切换可见性，视图状态天然保持）。</summary>
+    private void SwitchView(UiView view)
+    {
+        if (_currentView == view) return;
+        _currentView = view;
+        _scrollContainer!.Visible = view == UiView.Main;
+        _cardOpsScroll!.Visible = view == UiView.CardOps;
+        if (_searchBox != null) _searchBox.Text = "";
+        ResetRowsFilter(view);
+        RefreshAllRows();
+    }
+
+    /// <summary>
+    /// 进入视图时重置该视图所有行可见 —— 搜索框文本可能已是空串（TextChanged 不触发），
+    /// 行的过滤状态必须显式复位，保证每次进入子面板都是完整列表。
+    /// </summary>
+    private void ResetRowsFilter(UiView view)
+    {
+        if (view == UiView.CardOps)
+        {
+            foreach (var row in _cardOpsRows.Values) row.Visible = true;
+        }
+        else
+        {
+            foreach (var (item, row) in _itemControls)
+                if (!_cardOpsRows.ContainsKey(item)) row.Visible = true;
+        }
+    }
+
+    /// <summary>
+    /// 分区构建（UI设计.md §三）：基础属性/能力（Stat 条目）、技能（标签页+空态）、
+    /// 牌组（入口行）、测试（弱化样式）。全部默认收起。
+    /// </summary>
+    private void BuildSections()
+    {
+        // 基础属性 / 能力
+        var baseSection = AddSection("基础属性");
+        AddStatRows(baseSection, "基础属性");
+        var abilitySection = AddSection("能力");
+        AddStatRows(abilitySection, "能力");
+
+        // 技能：二级标签页 + 空态占位（条目 Phase 2.5/技能实现时按 SubCategory 落入标签）
+        var skillSection = AddSection("技能");
+        skillSection.Content.AddChild(new ClassTabBar());
+        var emptyLabel = new Label
+        {
+            Text = "尚未解锁任何技能",
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        emptyLabel.AddThemeFontOverride("font", UpgradeTheme.Regular);
+        emptyLabel.AddThemeFontSizeOverride("font_size", 13);
+        emptyLabel.AddThemeColorOverride("font_color", UpgradeTheme.TextSecondary);
+        skillSection.Content.AddChild(emptyLabel);
+
+        // 牌组：入口行（Phase 4 点击进入子面板）
+        BuildDeckEntryRow();
+
+        // 测试：弱化样式
+        var testSection = AddSection("测试", weakStyle: true);
+        foreach (var item in _allItems.Where(i => i.Category == "测试操作"))
+            testSection.Content.AddChild(CreateRow(item, testSection));
+    }
+
+    private CollapsibleSection AddSection(string title, bool weakStyle = false)
+    {
+        var section = new CollapsibleSection(title, collapsed: true, weakStyle: weakStyle);
+        _scrollContent!.AddChild(section);
+        return section;
+    }
+
+    private void AddStatRows(CollapsibleSection section, string category)
+    {
+        foreach (var item in _allItems.Where(i => i.Category == category))
+            section.Content.AddChild(CreateRow(item, section));
+    }
+
+    private UpgradeItemRow CreateRow(UpgradeItemDef item, CollapsibleSection section)
+    {
+        var row = new UpgradeItemRow(item);
+        _itemControls[item] = row;
+        _sectionOf[item] = section;
+        return row;
+    }
+
+    /// <summary>牌组入口行：名称 + 当前卡牌数 + 箭头（Phase 4 接入子面板）。</summary>
+    private void BuildDeckEntryRow()
+    {
+        // 同 CollapsibleSection：无文本按钮必须显式给高度，否则文字溢出、点击无法命中
+        _deckEntryRow = new Button
+        {
+            Flat = true,
+            MouseFilter = MouseFilterEnum.Stop,
+            FocusMode = FocusModeEnum.None,
+            CustomMinimumSize = new Vector2(0, 34),
+        };
+        _deckEntryRow.AddThemeStyleboxOverride("hover", new StyleBoxEmpty());
+        _deckEntryRow.AddThemeStyleboxOverride("pressed", new StyleBoxEmpty());
+        var rowBox = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+        rowBox.AddThemeConstantOverride("separation", 8);
+
+        var name = new Label
+        {
+            Text = "牌组",
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        name.AddThemeFontOverride("font", UpgradeTheme.SemiBold);
+        name.AddThemeFontSizeOverride("font_size", 17);
+        name.AddThemeColorOverride("font_color", UpgradeTheme.TitleGold);
+        rowBox.AddChild(name);
+
+        _deckCountLabel = new Label();
+        _deckCountLabel.AddThemeFontOverride("font", UpgradeTheme.Regular);
+        _deckCountLabel.AddThemeFontSizeOverride("font_size", 14);
+        _deckCountLabel.AddThemeColorOverride("font_color", UpgradeTheme.TextSecondary);
+        rowBox.AddChild(_deckCountLabel);
+
+        var arrow = new Label { Text = "→" };
+        arrow.AddThemeFontOverride("font", UpgradeTheme.Regular);
+        arrow.AddThemeFontSizeOverride("font_size", 15);
+        arrow.AddThemeColorOverride("font_color", UpgradeTheme.PanelBorder);
+        rowBox.AddChild(arrow);
+
+        _deckEntryRow.AddChild(rowBox);
+        rowBox.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _deckEntryRow.Pressed += () => SwitchView(UiView.CardOps);
+        _scrollContent!.AddChild(_deckEntryRow);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -280,106 +437,221 @@ public sealed partial class UpgradeUIHandler : Control
     private void OnSearchTextChanged(string text)
     {
         var filter = text.Trim().ToLower();
+
+        // 牌组子面板视图：过滤操作行（无分区概念）
+        if (_currentView == UiView.CardOps)
+        {
+            foreach (var item in _cardOpsRows.Keys)
+            {
+                if (_cardOpsRows.TryGetValue(item, out var row))
+                    row.Visible = string.IsNullOrEmpty(filter) || item.SearchText.Contains(filter);
+            }
+            return;
+        }
+
+        // 主视图：分区过滤 + 自动展开命中分区
+        var matchesInSection = new HashSet<CollapsibleSection>();
         foreach (var item in _allItems)
         {
-            if (_itemControls.TryGetValue(item, out var control))
-            {
-                control.Visible = string.IsNullOrEmpty(filter)
-                    || item.SearchText.Contains(filter);
-            }
+            if (!_itemControls.TryGetValue(item, out var control)) continue;
+            var match = string.IsNullOrEmpty(filter) || item.SearchText.Contains(filter);
+            control.Visible = match;
+            if (match && _sectionOf.TryGetValue(item, out var section))
+                matchesInSection.Add(section);
+        }
+        // 搜索时自动展开含命中的分区（Phase 3 追加滚动定位与命中高亮）
+        if (!string.IsNullOrEmpty(filter))
+        {
+            foreach (var section in matchesInSection)
+                if (section.Collapsed) section.SetCollapsed(false);
         }
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // 操作项定义（47 项）—— onClick 在 Phase 3+ 实现
+    // 操作项注册表（34 项，Phase 1 数据模型，UI设计.md §4.3 归属）
+    // 显示名走本地化（UpgradeLoc.ResolveDisplayName），搜索语料含中英双语。
     // ═══════════════════════════════════════════════════════════════
 
     private void PopulateItems()
     {
-        // === 卡牌操作 (29) ===
-        _allItems.Add(new("卡牌操作", "升级卡牌", 5, async () =>
+        // === 基础属性 (8)：开局生效的数值属性 ===
+        _allItems.Add(StatItem("基础属性", "初始力量+1", UpgradeLoc.ItemBaseStrength, 10,
+            () => AbilityOperationHelper.GetBoost("strength"), Purchase("strength", 10)));
+        _allItems.Add(StatItem("基础属性", "初始敏捷+1", UpgradeLoc.ItemBaseDexterity, 10,
+            () => AbilityOperationHelper.GetBoost("dexterity"), Purchase("dexterity", 10)));
+        _allItems.Add(StatItem("基础属性", "初始集中+1", UpgradeLoc.ItemBaseFocus, 15,
+            () => AbilityOperationHelper.GetBoost("focus"), Purchase("focus", 15)));
+        _allItems.Add(StatItem("基础属性", "初始覆甲+1", UpgradeLoc.ItemBasePlating, 8,
+            () => AbilityOperationHelper.GetBoost("plating"), Purchase("plating", 8)));
+        _allItems.Add(StatItem("基础属性", "初始荆棘+1", UpgradeLoc.ItemBaseThorns, 10,
+            () => AbilityOperationHelper.GetBoost("thorns"), Purchase("thorns", 10)));
+        _allItems.Add(StatItem("基础属性", "初始人工制品+1", UpgradeLoc.ItemBaseArtifact, 20,
+            () => AbilityOperationHelper.GetBoost("artifact"), Purchase("artifact", 20)));
+        _allItems.Add(StatItem("基础属性", "生命上限+1", UpgradeLoc.ItemHp, 5,
+            () => AbilityOperationHelper.GetBoost("hp"), PurchaseImmediate("hp", 5)));
+        _allItems.Add(StatItem("基础属性", "充能球栏位+1", UpgradeLoc.ItemOrbSlot, 10,
+            () => AbilityOperationHelper.GetBoost("orbSlot"), PurchaseImmediate("orbSlot", 10)));
+
+        // === 能力 (5)：行为类被动 ===
+        _allItems.Add(StatItem("能力", "每回合能量+1", UpgradeLoc.ItemEnergyPerTurn, 30,
+            () => AbilityOperationHelper.GetBoost("energy"), PurchaseImmediate("energy", 30)));
+        _allItems.Add(StatItem("能力", "每回合辉星+1", UpgradeLoc.ItemStarsPerTurn, 15,
+            () => AbilityOperationHelper.GetBoost("stars"), Purchase("stars", 15)));
+        _allItems.Add(StatItem("能力", "每回合铸造+5", UpgradeLoc.ItemForgePerTurn, 15,
+            () => AbilityOperationHelper.GetBoost("forge"), Purchase("forge", 15)));
+        _allItems.Add(StatItem("能力", "格挡跨回合不消失", UpgradeLoc.ItemBlockKeep, 25,
+            () => AbilityOperationHelper.GetBoost("blockKeep"), Purchase("blockKeep", 25), maxLevel: 1));
+        _allItems.Add(StatItem("能力", "能量跨回合不消失", UpgradeLoc.ItemEnergyKeep, 25,
+            () => AbilityOperationHelper.GetBoost("energyKeep"), Purchase("energyKeep", 25), maxLevel: 1));
+
+        // === 卡牌操作 (17)：Phase 2 移入牌组子面板 ===
+        _allItems.Add(ActionItem("卡牌操作", "升级卡牌", UpgradeLoc.ItemCardUpgrade, CardOperationHelper.UpgradeCost,
+            UpgradeLoc.PromptCardUpgrade, UpgradeCardFlow));
+        _allItems.Add(ActionItem("卡牌操作", "攻击+1", UpgradeLoc.ItemAttackPlus, 1,
+            UpgradeLoc.PromptAttackPlus, () => CardOperationHelper.ModifyDamage(1)));
+        _allItems.Add(ActionItem("卡牌操作", "格挡+1", UpgradeLoc.ItemBlockPlus, 1,
+            UpgradeLoc.PromptBlockPlus, () => CardOperationHelper.ModifyBlock(1)));
+        _allItems.Add(ActionItem("卡牌操作", "抽牌+1", UpgradeLoc.ItemDrawPlus, 7,
+            UpgradeLoc.PromptDrawPlus, () => CardOperationHelper.ModifyDrawCount(7)));
+        _allItems.Add(ActionItem("卡牌操作", "重放+1", UpgradeLoc.ItemReplayPlus, 7,
+            UpgradeLoc.PromptReplayPlus, () => CardOperationHelper.ModifyReplayCount(7)));
+        _allItems.Add(ActionItem("卡牌操作", "耗能-1", UpgradeLoc.ItemCostMinus, 12,
+            UpgradeLoc.PromptCostMinus, () => CardOperationHelper.ReduceEnergyCost(12)));
+        _allItems.Add(ActionItem("卡牌操作", "添加消耗", UpgradeLoc.ItemAddExhaust, 12,
+            UpgradeLoc.PromptAddExhaust, () => CardOperationHelper.ToggleKeyword(12, CardKeyword.Exhaust, true)));
+        _allItems.Add(ActionItem("卡牌操作", "移除消耗", UpgradeLoc.ItemRemoveExhaust, 15,
+            UpgradeLoc.PromptRemoveExhaust, () => CardOperationHelper.ToggleKeyword(15, CardKeyword.Exhaust, false)));
+        _allItems.Add(ActionItem("卡牌操作", "添加奇巧", UpgradeLoc.ItemAddSly, 7,
+            UpgradeLoc.PromptAddSly, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Sly, true)));
+        _allItems.Add(ActionItem("卡牌操作", "添加保留", UpgradeLoc.ItemAddRetain, 7,
+            UpgradeLoc.PromptAddRetain, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Retain, true)));
+        _allItems.Add(ActionItem("卡牌操作", "移除保留", UpgradeLoc.ItemRemoveRetain, 7,
+            UpgradeLoc.PromptRemoveRetain, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Retain, false)));
+        _allItems.Add(ActionItem("卡牌操作", "添加固有", UpgradeLoc.ItemAddInnate, 7,
+            UpgradeLoc.PromptAddInnate, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Innate, true)));
+        _allItems.Add(ActionItem("卡牌操作", "移除固有", UpgradeLoc.ItemRemoveInnate, 7,
+            UpgradeLoc.PromptRemoveInnate, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Innate, false)));
+        _allItems.Add(ActionItem("卡牌操作", "添加虚无", UpgradeLoc.ItemAddEthereal, 8,
+            UpgradeLoc.PromptAddEthereal, () => CardOperationHelper.ToggleKeyword(8, CardKeyword.Ethereal, true)));
+        _allItems.Add(ActionItem("卡牌操作", "移除虚无", UpgradeLoc.ItemRemoveEthereal, 8,
+            UpgradeLoc.PromptRemoveEthereal, () => CardOperationHelper.ToggleKeyword(8, CardKeyword.Ethereal, false)));
+        _allItems.Add(ActionItem("卡牌操作", "添加永恒", UpgradeLoc.ItemAddEternal, 10,
+            UpgradeLoc.PromptAddEternal, () => CardOperationHelper.ToggleKeyword(10, CardKeyword.Eternal, true)));
+        _allItems.Add(ActionItem("卡牌操作", "移除永恒", UpgradeLoc.ItemRemoveEternal, 15,
+            UpgradeLoc.PromptRemoveEternal, () => CardOperationHelper.ToggleKeyword(15, CardKeyword.Eternal, false)));
+
+        // === 牌组操作 (1) ===
+        _allItems.Add(ActionItem("牌组操作", "从牌组删除一张牌", UpgradeLoc.ItemDeckRemove, 20,
+            UpgradeLoc.PromptDeckRemove, () => CardOperationHelper.RemoveCardFromDeck(20)));
+
+        // === 测试操作 (3) ===
+        _allItems.Add(TestItem("点数+1", UpgradeLoc.ItemTestP1, 1));
+        _allItems.Add(TestItem("点数+5", UpgradeLoc.ItemTestP5, 5));
+        _allItems.Add(TestItem("点数+10", UpgradeLoc.ItemTestP10, 10));
+    }
+
+    /// <summary>数值型条目构建（含本地化显示名、等级取数、搜索语料）。</summary>
+    private UpgradeItemDef StatItem(string category, string fallbackName, string locKey, int cost,
+        Func<int> levelProvider, Func<Task<bool>> onClick, int maxLevel = 0) => new()
+    {
+        Category = category,
+        DisplayName = UpgradeLoc.ResolveDisplayName(locKey, fallbackName),
+        LocKey = locKey,
+        Cost = cost,
+        Kind = UpgradeItemKind.Stat,
+        MaxLevel = maxLevel,
+        LevelProvider = levelProvider,
+        ValueText = () => levelProvider().ToString(),
+        OnClick = onClick,
+        SearchText = BuildSearchText(category, locKey, fallbackName),
+    };
+
+    /// <summary>动作型条目构建（卡牌操作，含选牌提示 key）。</summary>
+    private UpgradeItemDef ActionItem(string category, string fallbackName, string locKey, int cost,
+        string promptKey, Func<Task<bool>> onClick) => new()
+    {
+        Category = category,
+        DisplayName = UpgradeLoc.ResolveDisplayName(locKey, fallbackName),
+        LocKey = locKey,
+        Cost = cost,
+        Kind = UpgradeItemKind.Action,
+        PromptKey = promptKey,
+        OnClick = onClick,
+        SearchText = BuildSearchText(category, locKey, fallbackName),
+    };
+
+    /// <summary>测试条目构建。</summary>
+    private UpgradeItemDef TestItem(string fallbackName, string locKey, int amount) => new()
+    {
+        Category = "测试操作",
+        DisplayName = UpgradeLoc.ResolveDisplayName(locKey, fallbackName),
+        LocKey = locKey,
+        Cost = 0,
+        Kind = UpgradeItemKind.Action,
+        OnClick = () =>
         {
-            if (!UpgradePointManager.TrySpendPoints(CardOperationHelper.UpgradeCost)) return;
-            var player = CardOperationHelper.GetLocalPlayer();
-            if (player == null) return;
-            SetUIVisible(false);
-            try
+            UpgradePointManager.AddPoints(amount);
+            RefreshPointsLabel();
+            return Task.FromResult(true);
+        },
+        SearchText = BuildSearchText("测试操作", locKey, fallbackName),
+    };
+
+    /// <summary>能力购买 OnClick（扣点即写盘 + 刷新点数，返回是否成功）。</summary>
+    private Func<Task<bool>> Purchase(string key, int cost) => () =>
+    {
+        if (!AbilityOperationHelper.TryPurchase(key, cost)) return Task.FromResult(false);
+        RefreshPointsLabel();
+        return Task.FromResult(true);
+    };
+
+    /// <summary>能力购买 + 立即生效（hp/energy/orbSlot）。</summary>
+    private Func<Task<bool>> PurchaseImmediate(string key, int cost) => async () =>
+    {
+        if (!AbilityOperationHelper.TryPurchase(key, cost)) return false;
+        await AbilityOperationHelper.ApplyImmediate(key);
+        RefreshPointsLabel();
+        return true;
+    };
+
+    /// <summary>升级卡牌流程（选牌取消自动退款并恢复面板）。</summary>
+    private async Task<bool> UpgradeCardFlow()
+    {
+        if (!UpgradePointManager.TrySpendPoints(CardOperationHelper.UpgradeCost)) return false;
+        var player = CardOperationHelper.GetLocalPlayer();
+        if (player == null) return false;
+        SetUIVisible(false);
+        try
+        {
+            var card = await CardOperationHelper.SelectCardFromDeck(player);
+            if (card == null)
             {
-                var card = await CardOperationHelper.SelectCardFromDeck(player);
-                if (card == null)
-                {
-                    UpgradePointManager.AddPoints(CardOperationHelper.UpgradeCost);
-                    RefreshPointsLabel();
-                    SetUIVisible(true);
-                    return;
-                }
-                CardOperationHelper.PerformInfiniteUpgrade(card);
-                RefreshPointsLabel();
-                HideUI();
-            }
-            catch (Exception ex)
-            {
-                Log.Error($"Upgrade error: {ex.Message}");
                 UpgradePointManager.AddPoints(CardOperationHelper.UpgradeCost);
                 RefreshPointsLabel();
                 SetUIVisible(true);
+                return false;
             }
-        }));
-
-        _allItems.Add(new("卡牌操作", "攻击+1", 1, () => CardOperationHelper.ModifyDamage(1)));
-        _allItems.Add(new("卡牌操作", "格挡+1", 1, () => CardOperationHelper.ModifyBlock(1)));
-        _allItems.Add(new("卡牌操作", "抽牌+1", 7, () => CardOperationHelper.ModifyDrawCount(7)));
-        _allItems.Add(new("卡牌操作", "重放+1", 7, () => CardOperationHelper.ModifyReplayCount(7)));
-        _allItems.Add(new("卡牌操作", "耗能-1", 12, () => CardOperationHelper.ReduceEnergyCost(12)));
-        _allItems.Add(new("卡牌操作", "添加消耗", 12, () => CardOperationHelper.ToggleKeyword(12, CardKeyword.Exhaust, true)));
-        _allItems.Add(new("卡牌操作", "移除消耗", 15, () => CardOperationHelper.ToggleKeyword(15, CardKeyword.Exhaust, false)));
-        _allItems.Add(new("卡牌操作", "添加奇巧", 7, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Sly, true)));
-        _allItems.Add(new("卡牌操作", "添加保留", 7, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Retain, true)));
-        _allItems.Add(new("卡牌操作", "移除保留", 7, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Retain, false)));
-        _allItems.Add(new("卡牌操作", "添加固有", 7, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Innate, true)));
-        _allItems.Add(new("卡牌操作", "移除固有", 7, () => CardOperationHelper.ToggleKeyword(7, CardKeyword.Innate, false)));
-        _allItems.Add(new("卡牌操作", "添加虚无", 8, () => CardOperationHelper.ToggleKeyword(8, CardKeyword.Ethereal, true)));
-        _allItems.Add(new("卡牌操作", "移除虚无", 8, () => CardOperationHelper.ToggleKeyword(8, CardKeyword.Ethereal, false)));
-        _allItems.Add(new("卡牌操作", "添加永恒", 10, () => CardOperationHelper.ToggleKeyword(10, CardKeyword.Eternal, true)));
-        _allItems.Add(new("卡牌操作", "移除永恒", 15, () => CardOperationHelper.ToggleKeyword(15, CardKeyword.Eternal, false)));
-
-        // === 能力操作 (12) ===
-        _allItems.Add(new("能力操作", "初始力量+1", 10, () => { if (AbilityOperationHelper.TryPurchase("strength", 10)) RefreshPointsLabel(); return Task.CompletedTask; }));
-        _allItems.Add(new("能力操作", "初始敏捷+1", 10, () => { if (AbilityOperationHelper.TryPurchase("dexterity", 10)) RefreshPointsLabel(); return Task.CompletedTask; }));
-        _allItems.Add(new("能力操作", "初始集中+1", 15, () => { if (AbilityOperationHelper.TryPurchase("focus", 15)) RefreshPointsLabel(); return Task.CompletedTask; }));
-        _allItems.Add(new("能力操作", "生命+1", 5, async () => { if (AbilityOperationHelper.TryPurchase("hp", 5)) { await AbilityOperationHelper.ApplyImmediate("hp"); RefreshPointsLabel(); } }));
-        _allItems.Add(new("能力操作", "每回合能量+1", 30, async () => { if (AbilityOperationHelper.TryPurchase("energy", 30)) { await AbilityOperationHelper.ApplyImmediate("energy"); RefreshPointsLabel(); } }));
-        _allItems.Add(new("能力操作", "每回合辉星+1", 15, () => { if (AbilityOperationHelper.TryPurchase("stars", 15)) RefreshPointsLabel(); return Task.CompletedTask; }));
-        _allItems.Add(new("能力操作", "每回合铸造+5", 15, () => { if (AbilityOperationHelper.TryPurchase("forge", 15)) RefreshPointsLabel(); return Task.CompletedTask; }));
-        _allItems.Add(new("能力操作", "初始覆甲+1", 8, () => { if (AbilityOperationHelper.TryPurchase("plating", 8)) RefreshPointsLabel(); return Task.CompletedTask; }));
-        _allItems.Add(new("能力操作", "初始荆棘+1", 10, () => { if (AbilityOperationHelper.TryPurchase("thorns", 10)) RefreshPointsLabel(); return Task.CompletedTask; }));
-        _allItems.Add(new("能力操作", "初始人工制品+1", 20, () => { if (AbilityOperationHelper.TryPurchase("artifact", 20)) RefreshPointsLabel(); return Task.CompletedTask; }));
-        _allItems.Add(new("能力操作", "充能球栏位+1", 10, async () => { if (AbilityOperationHelper.TryPurchase("orbSlot", 10)) { await AbilityOperationHelper.ApplyImmediate("orbSlot"); RefreshPointsLabel(); } }));
-        _allItems.Add(new("能力操作", "格挡跨回合不消失", 25, () => { if (AbilityOperationHelper.TryPurchase("blockKeep", 25)) RefreshPointsLabel(); return Task.CompletedTask; }));
-        _allItems.Add(new("能力操作", "能量跨回合不消失", 25, () => { if (AbilityOperationHelper.TryPurchase("energyKeep", 25)) RefreshPointsLabel(); return Task.CompletedTask; }));
-
-        // === 牌组操作 (5) ===
-        _allItems.Add(new("牌组操作", "从牌组删除一张牌", 20, () => CardOperationHelper.RemoveCardFromDeck(20)));
-
-        // === 测试操作 (3) ===
-        _allItems.Add(new("测试操作", "点数+1", 0, () =>
-        {
-            UpgradePointManager.AddPoints(1);
+            CardOperationHelper.PerformInfiniteUpgrade(card);
             RefreshPointsLabel();
-            return Task.CompletedTask;
-        }));
-        _allItems.Add(new("测试操作", "点数+5", 0, () =>
+            HideUI();
+            return true;
+        }
+        catch (Exception ex)
         {
-            UpgradePointManager.AddPoints(5);
+            Log.Error($"Upgrade error: {ex.Message}");
+            UpgradePointManager.AddPoints(CardOperationHelper.UpgradeCost);
             RefreshPointsLabel();
-            return Task.CompletedTask;
-        }));
-        _allItems.Add(new("测试操作", "点数+10", 0, () =>
-        {
-            UpgradePointManager.AddPoints(10);
-            RefreshPointsLabel();
-            return Task.CompletedTask;
-        }));
+            SetUIVisible(true);
+            return false;
+        }
+    }
+
+    /// <summary>搜索语料：分类 + 中文名 + 英文名（小写）。</summary>
+    private static string BuildSearchText(string category, string? locKey, string fallbackName)
+    {
+        var zhs = locKey != null ? UpgradeLoc.GetZhs(locKey) : null;
+        var eng = locKey != null ? UpgradeLoc.GetEng(locKey) : null;
+        return $"{category} {zhs ?? fallbackName} {eng ?? ""}".ToLower();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -429,8 +701,25 @@ public sealed partial class UpgradeUIHandler : Control
 
     public void RefreshPointsLabel()
     {
-        if (_pointsLabel != null)
-            _pointsLabel.Text = $"当前点数: {UpgradePointManager.CurrentPoints}";
+        _topBar?.SetPoints(UpgradePointManager.CurrentPoints);
+        RefreshAllRows();
+    }
+
+    /// <summary>按当前点数刷新所有条目行状态（值/满级/可用性）。</summary>
+    private void RefreshAllRows()
+    {
+        var points = UpgradePointManager.CurrentPoints;
+        foreach (var row in _itemControls.Values)
+            row.Refresh(points);
+        RefreshDeckRow();
+    }
+
+    /// <summary>刷新牌组入口行的卡牌数。</summary>
+    private void RefreshDeckRow()
+    {
+        if (_deckCountLabel == null) return;
+        var player = CardOperationHelper.GetLocalPlayer();
+        _deckCountLabel.Text = player?.Deck?.Cards != null ? $"{player.Deck.Cards.Count} 张" : "—";
     }
 
     private void OnCloseClicked() => HideUI();

@@ -106,6 +106,8 @@
   <ItemGroup>
     <None Include="mod_manifest.json" />
     <None Include="InfiniteUpgradeSystem\**\*" Exclude="InfiniteUpgradeSystem\**\*.cs" />
+    <!-- 打包字体：随构建复制到输出目录，随部署进入 mod 目录（DLL 同路径加载） -->
+    <None Include="resources\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Resolve BaseLib path (runs after restore, before Build) -->
@@ -135,6 +137,19 @@
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ModsPath)InfiniteUpgradeSystem\" />
     <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="$(ModsPath)InfiniteUpgradeSystem\" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
     <Copy SourceFiles="mod_manifest.json" DestinationFolder="$(ModsPath)InfiniteUpgradeSystem\" />
+
+    <!-- Copy bundled fonts (fonts are loaded relative to the DLL location) -->
+    <ItemGroup>
+      <FontFiles Include="$(TargetDir)resources\fonts\*.otf" />
+      <FontFiles Include="$(TargetDir)resources\fonts\LICENSE-OFL.txt" />
+    </ItemGroup>
+    <Copy SourceFiles="@(FontFiles)" DestinationFolder="$(ModsPath)InfiniteUpgradeSystem\resources\fonts\" />
+
+    <!-- Copy localization JSONs (self-contained locale loading via UpgradeLoc) -->
+    <ItemGroup>
+      <LocFiles Include="InfiniteUpgradeSystem\localization\**\*.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(LocFiles)" DestinationFolder="$(ModsPath)InfiniteUpgradeSystem\localization\%(RecursiveDir)" />
 
     <!-- Copy BaseLib (if not already present) -->
     <Copy SourceFiles="$(BaseLibResolvedDir)\lib\net9.0\BaseLib.dll" DestinationFolder="$(ModsPath)BaseLib\" />

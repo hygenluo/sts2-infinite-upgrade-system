@@ -1,5 +1,42 @@
 # DEBUG 记录 (InfiniteUpgradeSystem)
 
+## Phase 0.5: 2K 分辨率 UI 模糊修复
+
+- **日期**: 2026-08-04
+- **现象**: 2560×1440 下模组面板文字发糊；1080p 正常
+- **排查过程**:
+  1. 排除系统缩放：日志确认 `Screen info: Size: (2560,1440) Scale: 1 DPI: 96`（无 Windows DPI 缩放）
+  2. 运行时探针（`显示探针(open)`）实锤：`window=(2560,1440) contentScaleSize=(1920,1080) mode=1 aspect=1 finalScale=1.333,1.333`
+     - mode=1 = **canvas_items** 内容缩放（游戏 UI 以 1920×1080 为基准，2K 下全部 2D 内容放大 1.333×）
+     - **CanvasLayer 受内容缩放影响**（finalScale=1.333 证明），面板渲染为 640×1.333=853 屏幕像素
+  3. **根因**: 普通动态字体的字形贴图按画布单位尺寸栅格化，再被画布变换双线性放大（纹理放大而非矢量重渲染）→ 发糊
+  4. LCD 亚像素抗锯齿 + OneQuarter 亚像素定位：无效（救不了被放大的贴图）
+  5. **MSDF（有符号距离场）**：生效，任意缩放锐利
+- **二次问题（噪音）**: Google Fonts 转换的 Noto Serif SC 变量字体有重叠字形 + 变量字体的 MSDF 兼容问题 → MSDF 渲染出噪音
+  - 解决：换 **Adobe 官方构建** `SourceHanSerifSC-Regular.otf` + `SourceHanSerifSC-SemiBold.otf`（2.003R，静态 OTF），噪音消失
+- **三次问题（漏网节点）**: 提示行「[P] 打开/关闭」和「关闭」按钮未应用主题字体（只用游戏默认字体渲染，非 MSDF）→ 仍然发糊
+  - 解决：补 `AddThemeFontOverride("font", UpgradeTheme.Regular)`
+  - **教训: 每个新建文本节点必须应用主题字体，否则回退游戏默认字体（非 MSDF）→ 高分辨率下必糊。Phase 1 重构应把文本创建收拢到统一构建方法**
+- **关键结论**: `UpgradeTheme.LoadFont` 中 MSDF 配置（`MultichannelSignedDistanceField=true, MsdfSize=48, MsdfPixelRange=16`）是本面板在高分辨率下清晰的必要条件；**必须使用官方静态 OTF，禁止换回 Google 转换版或变量字体**
+
+---
+
+## Phase 0: UI 主题基建（字体 + 色板）
+
+- **日期**: 2026-08-04
+- **功能**: 贴原版质感主题基建 — 打包 Noto Serif SC（思源宋体，OFL）+ 集中色板 `UpgradeTheme`
+- **实现**:
+  - `Scripts/UiComponents/UpgradeTheme.cs` — 新建：色板常量 + 字体加载（`FontFile.LoadDynamicFont` + `SetVariationCoordinates(0, {"wght": 600})` 实现 SemiBold）
+  - `Scripts/UpgradeUIHandler.cs` — 现有 v1 UI 换皮（面板 StyleBoxFlat 金边、标题/点数金色衬线、正文/搜索/按钮字体）
+  - `resources/fonts/NotoSerifSC.ttf` — 25MB 可变字重字体
+- **技术决策**:
+  1. **字体加载路径基于 `Assembly.Location`**（DLL 同目录 `resources/fonts/`），与 mod 所在位置解耦 —— 游戏从 `mods/`、workshop 目录加载都能找到
+  2. **csproj 部署目标已加字体复制**（`CopyToOutputDirectory` + 部署 Target 内 Copy）
+  3. **部署与测试路径：本地 `mods/` 目录**（Steam 优先加载本地 mod；workshop 目录无需改动）。csproj 的 `CopyToModsFolderOnBuild` 目标已在每次构建后自动部署 DLL + 字体到 `mods/InfiniteUpgradeSystem/`。workshop 目录仅在上传发布时更新
+  4. 本地化 JSON 走 `res://` 路径（pck 挂载），与 DLL 目录无关；但字体是纯 C# 读取文件，不受此限制
+
+---
+
 ## v26: 新增"能量跨回合不消失"能力
 
 - **日期**: 2026-07-21

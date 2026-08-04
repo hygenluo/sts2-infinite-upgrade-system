@@ -14,6 +14,7 @@ using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Nodes.Cards;
+using MegaCrit.Sts2.Core.Nodes.Screens.CardSelection;
 using MegaCrit.Sts2.Core.Nodes.Screens.Overlays;
 using MegaCrit.Sts2.Core.Nodes.Vfx;
 using MegaCrit.Sts2.Core.Runs;
@@ -64,6 +65,9 @@ public static class CardOperationHelper
         return mutable;
     }
 
+    /// <summary>当前选牌流程的取消信号（Esc 触发；非本模组选牌时为 null）。</summary>
+    private static TaskCompletionSource<bool>? s_activeSelectionCancel;
+
     public static async Task<CardModel?> SelectCardFromDeck(Player player, string builtInPromptKey = "")
     {
         var prefs = string.IsNullOrEmpty(builtInPromptKey)
@@ -74,10 +78,90 @@ public static class CardOperationHelper
         var selectTask = CardSelectCmd.FromDeckGeneric(player, prefs);
         await Task.Delay(33); // 2 帧 — Push() + 子节点 _Ready()
         EnsureOverlayOnTop();
+        // 游戏自带返回图标在 0 张已选牌时抛异常（空集合 First()，游戏本体 bug），
+        // 会把选牌流程挂起；禁用该按钮，取消统一走我们的 Esc 链路。
+        TryDisableCloseButton();
+
+        // 取消链路（DEBUG.md Phase 2）：
+        // 游戏选牌屏的 CancelSelection 在 0 张已选牌时会抛 "Sequence contains no elements"
+        // （空集合 First()，游戏本体同样存在），异常中断任务完成 → 屏永远关不掉。
+        // 因此不调用它：Esc 由我们接管 —— 关闭选牌屏 + 触发取消信号，
+        // 本任务以 null 完成 → 调用方退款并恢复面板。
+        var cancelSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        s_activeSelectionCancel = cancelSignal;
+        var completed = await Task.WhenAny(selectTask, cancelSignal.Task);
+        s_activeSelectionCancel = null;
+
+        if (completed == cancelSignal.Task)
+        {
+            TryCloseSelectionScreen();
+            RestoreOverlayPosition();
+            return null;
+        }
 
         var selected = (await selectTask).ToList();
         RestoreOverlayPosition(); // 恢复原位，避免打乱 GlobalUi 场景树结构
         return selected.Count > 0 ? selected[0] : null;
+    }
+
+    /// <summary>
+    /// 程序化取消当前选牌（Esc 快捷键用）：
+    /// 1. 关闭选牌屏（强制 Remove，绕开会抛异常的游戏 CancelSelection）
+    /// 2. 触发取消信号 → SelectCardFromDeck 以 null 完成 → 退款 + 恢复面板
+    /// 非本模组发起的选牌（s_activeSelectionCancel 为 null）时不干预，Esc 放行给游戏。
+    /// </summary>
+    public static bool TryCancelActiveCardSelection()
+    {
+        var cancel = s_activeSelectionCancel;
+        if (cancel == null) return false;
+        TryCloseSelectionScreen();
+        cancel.TrySetResult(true);
+        return true;
+    }
+
+    /// <summary>禁用游戏选牌屏的返回按钮（其取消在 0 选牌时抛异常，会导致流程挂起）。</summary>
+    private static void TryDisableCloseButton()
+    {
+        try
+        {
+            var overlays = NRun.Instance?.GlobalUi?.Overlays;
+            if (overlays == null) return;
+            for (int i = overlays.GetChildCount() - 1; i >= 0; i--)
+            {
+                if (overlays.GetChild(i) is NDeckCardSelectScreen screen)
+                {
+                    screen._closeButton.Visible = false;
+                    return;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"InfiniteUpgrade: disable close button failed (non-fatal): {ex.Message}");
+        }
+    }
+
+    /// <summary>从 Overlay 栈关闭选牌屏（先移除后释放，防残留）。</summary>
+    private static void TryCloseSelectionScreen()
+    {
+        try
+        {
+            var overlays = NRun.Instance?.GlobalUi?.Overlays;
+            if (overlays == null) return;
+            for (int i = overlays.GetChildCount() - 1; i >= 0; i--)
+            {
+                if (overlays.GetChild(i) is NDeckCardSelectScreen screen)
+                {
+                    try { overlays.Remove(screen); } catch (Exception ex) { Log.Warn($"InfiniteUpgrade: overlay remove failed: {ex.Message}"); }
+                    try { screen.QueueFree(); } catch { /* 已释放则忽略 */ }
+                    return;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"InfiniteUpgrade: close selection screen failed (non-fatal): {ex.Message}");
+        }
     }
 
     private static int s_overlayOriginalIndex = -1;

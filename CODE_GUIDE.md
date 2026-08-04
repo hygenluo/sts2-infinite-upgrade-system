@@ -13,7 +13,8 @@ Scripts/
 ├── RunStateHook.cs               # 游戏生命周期 + 检查点持久化
 ├── PointsPersistence.cs          # 点数 JSON 持久化
 ├── UiComponents/
-│   └── UpgradeItemData.cs        # UI 操作项数据模型
+│   ├── UpgradeItemData.cs        # UI 操作项数据模型
+│   └── UpgradeTheme.cs           # UI 主题：色板 + 字体（Noto Serif SC，DLL 同目录加载）
 └── Patches/
     └── EnergyKeepPatch.cs        # Harmony Postfix: 能量跨回合保留
 ```
