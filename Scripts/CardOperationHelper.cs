@@ -581,16 +581,24 @@ public static class CardOperationHelper
             RefreshAllVisuals(card.Owner);
     }
 
-    /// <summary>合成附魔静态模板。`new CompositeEnchantment()` 首次构造会经 ModelDb.GetId
-    /// 自动注册该类型，第二次 `new` 抛 DuplicateModelException —— 因此只构造一次模板，
-    /// 之后用 MutableClone（MemberwiseClone，不走构造函数）生成可变副本。</summary>
-    private static CompositeEnchantment? s_compositeTemplate;
-
+    /// <summary>
+    /// 获取合成附魔可变实例。CompositeEnchantment 是 AbstractModel 子类，启动时被 ModelDb
+    /// 自动扫描注册（Id=ENCHANTMENT.COMPOSITE_ENCHANTMENT）——此时 `new` 必抛
+    /// DuplicateModelException。因此取已注册 canonical + ToMutable（内部走 MutableClone，
+    /// 不调用构造函数）。若某环境下未被注册（异常），回退到 `new` + MutableClone。
+    /// </summary>
     private static CompositeEnchantment CreateCompositeInstance()
     {
-        if (s_compositeTemplate == null)
-            s_compositeTemplate = new CompositeEnchantment();
-        return (CompositeEnchantment)s_compositeTemplate.MutableClone();
+        try
+        {
+            var canonical = ModelDb.Enchantment<CompositeEnchantment>();
+            return (CompositeEnchantment)canonical.ToMutable();
+        }
+        catch
+        {
+            var bare = new CompositeEnchantment();
+            return (CompositeEnchantment)bare.MutableClone();
+        }
     }
 
     /// <summary>创建子附魔可变实例并挂到卡牌（设 Card + Amount，不触发 OnEnchant）。</summary>
