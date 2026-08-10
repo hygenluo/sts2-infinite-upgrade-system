@@ -4,11 +4,13 @@ using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
+using MegaCrit.Sts2.Core.Commands.Builders;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Monsters;
 
 namespace InfiniteUpgradeSystem;
 
@@ -115,5 +117,17 @@ public static class SkillHandEmptyPatch
         {
             GD.PrintErr($"[InfiniteUpgrade] Skill AfterHandEmptied error: {ex}");
         }
+    }
+}
+
+/// <summary>奥斯提攻击牌每次打出时，奥斯提攻击两次（亡灵契约师）。翻倍奥斯提攻击的命中次数。</summary>
+[HarmonyPatch(typeof(Hook), nameof(Hook.ModifyAttackHitCount))]
+public static class SkillOstyDoubleAttackPatch
+{
+    public static void Postfix(ICombatState combatState, AttackCommand attackCommand, ref decimal __result)
+    {
+        if (!SkillRegistry.Has("osty_extra_attack")) return;
+        if (attackCommand?.Attacker?.Monster is Osty)
+            __result *= 2m;
     }
 }

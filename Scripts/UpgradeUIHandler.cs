@@ -675,6 +675,7 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(SkillItem(ClassTabBar.Regent, "每铸造一次，君王之剑永久获取1格挡", UpgradeLoc.ItemSkillSovereignBladeBlockOnForge, "sovereign_blade_block_on_forge", 12));
         _allItems.Add(SkillItem(ClassTabBar.Necrobinder, "每打出1张牌时，召唤1", UpgradeLoc.ItemSkillSummonOnPlay, "summon_on_play", 10));
         _allItems.Add(SkillItem(ClassTabBar.Necrobinder, "每打出1张虚无牌，对所有敌人造成3点伤害", UpgradeLoc.ItemSkillDmgOnEtherealPlay, "dmg_on_ethereal_play", 7));
+        _allItems.Add(SkillItem(ClassTabBar.Necrobinder, "奥斯提会额外攻击一次", UpgradeLoc.ItemSkillOstyExtraAttack, "osty_extra_attack", 15));
         _allItems.Add(SkillItem(ClassTabBar.Defect, "每打出1张能力牌，抽一张牌", UpgradeLoc.ItemSkillDrawOnPowerPlay, "draw_on_power_play", 10));
         _allItems.Add(SkillItem(ClassTabBar.Defect, "回合结束时，每有一个充能球，对所有敌人造成1点伤害", UpgradeLoc.ItemSkillOrbDmgAtTurnEnd, "orb_dmg_at_turn_end", 10));
 
