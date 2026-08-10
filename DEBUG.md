@@ -316,16 +316,18 @@
 3. **与其它摸牌技能叠加**：若同时拥有「每打出1张能力牌抽1张」等，可叠加
 
 ### C6 技能「你的回合开始时，免费打出第一张牌」（储君，8 点，id=free_first_card）
-- 新文件 `SkillFreeFirstCardPatch.cs`，三钩子：
-  - `AfterPlayerTurnStart` → 打牌计数归零（每回合刷新资格）
-  - `AfterCardPlayed` → 计数自增（仅统计拥有该技能的玩家）
-  - `ModifyEnergyCostInCombat` → Postfix `ref __result = 0`（计数==0 时首牌免费）
-- **顺序关键**（已从反编译确认）：打牌流程 `SpendEnergy→LoseEnergy`（此处调用 ModifyEnergyCostInCombat）在 `AfterCardPlayed` **之前** → 首牌扣费时计数仍为 0 → 免费；首牌 AfterCardPlayed 后计数=1 → 次牌原价
-- **已知副作用**：本回合首牌打出前，所有牌的费用计算返回 0（语义正确——首张打出的牌免费）；X 费牌（CostsX）不走此钩子不受影响；星费牌仍付星费
+- **v2 借鉴原生 VoidFormPower（虚空形态）**：不再用自写的 ModifyEnergyCostInCombat hack（已删除 SkillFreeFirstCardPatch.cs）
+- `ApplyOnePower` 新增映射 `freeFirstCard → VoidFormPower`；`RunStateHook.OnCombatSetUp` 战斗开始时若拥有该技能则应用 `VoidFormPower(1)`
+- **VoidFormPower 原生能力**（IL 反编译确认）：
+  - `TryModifyEnergyCostInCombat`（能量归零）+ `TryModifyStarCost`（辉星归零）——首牌能量与辉星都免费
+  - 自带每回合计数：`AfterCardPlayed` 自增（非自动打出、末次结算才计），`BeforeSideTurnStart` 归零
+  - **原生绿色荧光显示**（临时0费视觉效果）；辉星免费为蓝色荧光
+- 与虚空形态卡叠加：技能 VoidFormPower(1) + 卡 VoidFormPower(2) = 前 3 张免费
 
 **测试**（储君开局攒 8 点 → 购买该技能 → 进战斗）：
-1. **首牌免费**：打第一张牌 → 不消耗能量；接着打第二张 → 正常扣能量
-2. **每回合重置**：第 2 回合第一张牌再次免费
-3. **任意牌免费**：第一张牌是 1/2/3 费的都免费（验证不同费用）
-4. **能量观察**：留意打牌时能量条扣除情况（首牌不扣、次牌扣）
-5. **X 费牌**（如有）：作为首牌不会被免费（消耗全部能量）——确认是否符合预期
+1. **首牌能量免费**：打第一张牌不消耗能量
+2. **首牌辉星免费**（重点，v1 缺陷修复）：打第一张带辉星费的牌（如储君的王牌类）→ 辉星不消耗；第二张才扣
+3. **绿色/蓝色荧光**：首牌打出前，手牌中带费用的牌应显示**绿色荧光**（能量免费）；带辉星费的牌显示**蓝色荧光**（辉星免费）——**与虚空形态打出后的显示一致**
+4. **每回合重置**：第 2 回合第一张牌再次免费
+5. **次牌原价**：第二张牌正常扣能量/辉星
+6. **自动打出不消耗名额**：若同时拥有「抽到能力牌自动打出」，自动打出的牌不计入首牌名额

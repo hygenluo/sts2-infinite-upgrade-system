@@ -106,6 +106,7 @@ public static class AbilityOperationHelper
             "weak" => "MegaCrit.Sts2.Core.Models.Powers.WeakPower",
             "poison" => "MegaCrit.Sts2.Core.Models.Powers.PoisonPower",
             "parry" => "MegaCrit.Sts2.Core.Models.Powers.ParryPower",
+            "freeFirstCard" => "MegaCrit.Sts2.Core.Models.Powers.VoidFormPower",
             _ => null
         };
         if (typeName == null) return;

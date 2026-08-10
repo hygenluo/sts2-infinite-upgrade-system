@@ -37,12 +37,23 @@ public static class RunStateHook
     {
         AbilityOperationHelper.ApplyInitialBoosts();
         AbilityOperationHelper.ApplyStarsAtCombatStart();
+        ApplySkillCombatStartPowers();
         UpgradePointManager.SaveCheckpoint();
         var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
         CardUpgradeTracker.SaveCheckpoint(seed);
         AbilityOperationHelper.SaveCheckpoint(seed);
         SkillRegistry.SaveCheckpoint(seed);
         GD.Print($"[InfiniteUpgrade] Checkpoint SAVED (combat start) — pts={UpgradePointManager.CurrentPoints}");
+    }
+
+    /// <summary>技能战斗开始效果（应用战斗级 Power，随战斗重置、每场重新应用）。</summary>
+    private static async void ApplySkillCombatStartPowers()
+    {
+        var player = CardOperationHelper.GetLocalPlayer();
+        if (player?.Creature == null) return;
+        // 储君「免费打出第一张牌」→ VoidFormPower(1)：能量+辉星免费 + 原生绿色荧光显示
+        if (SkillRegistry.Has("free_first_card"))
+            await AbilityOperationHelper.ApplyOnePower(player.Creature, "freeFirstCard", 1);
     }
 
     /// <summary>当前房间是否为问号房（进入时已发问号房点数；其战斗不再额外发放）。</summary>
