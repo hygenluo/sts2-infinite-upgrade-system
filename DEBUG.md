@@ -283,3 +283,14 @@
 5. **非攻击击杀**：毒杀/自爆击杀的敌人是否也 +20（验证副作用是否符合预期）
 6. **读档**：退出重进 → 能力仍在（金币能力生效）
 7. **上限**：该能力为一次性（购买后该行变已拥有/满级，不可重复购买）
+
+### C3 技能「你的回合开始时，获取力量2」（通用，12 点，id=str_at_turn_start）
+- 注册：`SkillItem(ClassTabBar.Generic, ..., ItemSkillStrAtTurnStart, "str_at_turn_start", 12)`（通用标签页，在「每回合开始时获取消耗牌堆数等量格挡」之后）
+- 补丁：`SkillEventPatches.cs` `SkillStrAtTurnStartPatch` — `[HarmonyPatch(Hook.AfterPlayerTurnStart)]` → `ApplyOnePower(player.Creature, "strength", 2)`
+- 与已有 `block_at_turn_start` 同款钩子（每回合触发，非仅首回合）；`ApplyOnePower` 已有同类 Power 时 SetAmount 叠加
+
+**测试**（新开一局攒 12 点 → 购买该技能 → 进战斗）：
+1. **每回合触发**：第 1 回合开始力量 +2，第 2 回合再 +2（累计 4），第 3 回合 6——验证**每回合都加**而非仅首回合
+2. **战斗内持久**：力量面板/攻击伤害随力量叠加递增
+3. **跨战斗重置**：下场战斗力量回到 2（技能每场战斗重新从 0 施加）
+4. **读档**：退出重进 → 技能仍在

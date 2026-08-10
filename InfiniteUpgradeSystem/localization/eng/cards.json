@@ -45,6 +45,7 @@
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_WHEN_NO_HAND": "Draw 1 card when your hand is empty on your turn",
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_REST_ALL_OPTIONS": "Choose any number of options at Rest Sites",
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_BLOCK_AT_TURN_START": "Gain Block equal to your exhaust pile size at turn start",
+    "INFINITEUPGRADESYSTEM-ITEM_SKILL_STR_AT_TURN_START": "Gain 2 Strength at the start of your turn",
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_ON_EXHAUST": "Draw 1 card whenever a card is exhausted",
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_ON_HP_LOSS": "Draw 1 card whenever you lose HP",
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_DOUBLE_BLOCK_AT_TURN_END": "At end of turn, double your Block",

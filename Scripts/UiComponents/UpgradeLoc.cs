@@ -67,6 +67,7 @@ public static class UpgradeLoc
     public const string ItemSkillDrawWhenNoHand = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_WHEN_NO_HAND";
     public const string ItemSkillRestAllOptions = "INFINITEUPGRADESYSTEM-ITEM_SKILL_REST_ALL_OPTIONS";
     public const string ItemSkillBlockAtTurnStart = "INFINITEUPGRADESYSTEM-ITEM_SKILL_BLOCK_AT_TURN_START";
+    public const string ItemSkillStrAtTurnStart = "INFINITEUPGRADESYSTEM-ITEM_SKILL_STR_AT_TURN_START";
     public const string ItemSkillDrawOnExhaust = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_ON_EXHAUST";
     public const string ItemSkillDrawOnHpLoss = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_ON_HP_LOSS";
     public const string ItemSkillDoubleBlockAtTurnEnd = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DOUBLE_BLOCK_AT_TURN_END";

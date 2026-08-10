@@ -143,6 +143,30 @@ public static class SkillTurnStartPatch
     }
 }
 
+/// <summary>你的回合开始时，获取力量2（通用）。</summary>
+[HarmonyPatch(typeof(Hook), nameof(Hook.AfterPlayerTurnStart))]
+public static class SkillStrAtTurnStartPatch
+{
+    public static void Postfix(PlayerChoiceContext choiceContext, Player player)
+    {
+        SkillContextCache.Last = choiceContext;
+        if (player?.Creature == null || !SkillRegistry.Has("str_at_turn_start")) return;
+        _ = HandleAsync(player);
+    }
+
+    private static async Task HandleAsync(Player player)
+    {
+        try
+        {
+            await AbilityOperationHelper.ApplyOnePower(player.Creature, "strength", 2);
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[InfiniteUpgrade] Skill str-at-turn-start error: {ex}");
+        }
+    }
+}
+
 /// <summary>
 /// 你可以在休息处选择任意数量的选项（通用，参照遗物 微型帐篷 MiniatureTent）。
 /// 休息处逻辑调用 Hook.ShouldDisableRemainingRestSiteOptions 决定是否禁用剩余选项；
