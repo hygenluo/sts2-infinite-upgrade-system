@@ -229,3 +229,9 @@
 - 读取 `Creature.Block`，`CreatureCmd.GainBlock(block)` 补到 2 倍；翻倍后按游戏规则正常结算（无格挡保留则下回合开始清零）
 
 **测试**：铁甲战士开局 → 购买该技能 → 战斗内本回合先获得一些格挡（如打出防御牌）→ 点「结束回合」→ 回合结束瞬间格挡数字翻倍（敌方回合可见翻倍后的格挡）；配合「格挡跨回合不消失」能力验证翻倍后保留。
+
+### C4 技能「每铸造一次，君王之剑永久获取1格挡」（储君，12 点，id=sovereign_blade_block_on_forge）
+- `Hook.AfterForge` → `ForgeCmd.GetSovereignBlades(forger, true)` 拿所有君王之剑
+- `DynamicVars.CalculationBase.BaseValue += 1`（君王之剑格挡 = Base + Extra×Parry，bump 基础值永久 +1，随卡牌跨战斗持久化，同游戏自身 AddDamage 机制）
+
+**测试**：储君开局 → 购买该技能 → 铸造一次（如打出带铸造的牌或触发「每打出1张牌铸造1」）→ 手牌/牌组中的君王之剑格挡 +1（铸造动画后查看卡牌数值）；多次铸造格挡累加；进入下一场战斗后格挡加成仍在（永久）。

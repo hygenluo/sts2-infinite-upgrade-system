@@ -214,3 +214,25 @@ public static class SkillDoubleBlockPatch
         }
     }
 }
+
+/// <summary>每铸造一次，君王之剑永久获取1格挡（储君）。</summary>
+[HarmonyPatch(typeof(Hook), nameof(Hook.AfterForge))]
+public static class SkillSovereignBladeBlockPatch
+{
+    public static void Postfix(ICombatState combatState, decimal amount, Player forger, AbstractModel? source)
+    {
+        if (forger == null || !SkillRegistry.Has("sovereign_blade_block_on_forge")) return;
+        var player = CardOperationHelper.GetLocalPlayer();
+        if (player == null || forger != player) return;
+        try
+        {
+            // 君王之剑格挡 = CalculationBase + CalculationExtra × Parry → bump 基础值即永久 +1（随卡牌跨战斗持久化，同 AddDamage）
+            foreach (var blade in ForgeCmd.GetSovereignBlades(forger, includeExhausted: true))
+                blade.DynamicVars.CalculationBase.BaseValue += 1m;
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[InfiniteUpgrade] Skill sovereign blade block error: {ex}");
+        }
+    }
+}
