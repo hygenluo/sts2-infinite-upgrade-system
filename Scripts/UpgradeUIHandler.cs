@@ -678,6 +678,7 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(SkillItem(ClassTabBar.Necrobinder, "奥斯提会额外攻击一次", UpgradeLoc.ItemSkillOstyExtraAttack, "osty_extra_attack", 15));
         _allItems.Add(SkillItem(ClassTabBar.Defect, "每打出1张能力牌，抽一张牌", UpgradeLoc.ItemSkillDrawOnPowerPlay, "draw_on_power_play", 10));
         _allItems.Add(SkillItem(ClassTabBar.Defect, "回合结束时，每有一个充能球，对所有敌人造成1点伤害", UpgradeLoc.ItemSkillOrbDmgAtTurnEnd, "orb_dmg_at_turn_end", 10));
+        _allItems.Add(SkillItem(ClassTabBar.Defect, "每当你抽到能力牌时，自动打出", UpgradeLoc.ItemSkillAutoPlayPowerOnDraw, "auto_play_power_on_draw", 20));
 
         // === 牌组操作 (1) ===
         _allItems.Add(ActionItem("牌组操作", "从牌组删除一张牌", UpgradeLoc.ItemDeckRemove, 20,

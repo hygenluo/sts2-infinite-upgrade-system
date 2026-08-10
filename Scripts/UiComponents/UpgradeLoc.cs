@@ -80,6 +80,7 @@ public static class UpgradeLoc
     public const string ItemSkillOstyExtraAttack = "INFINITEUPGRADESYSTEM-ITEM_SKILL_OSTY_EXTRA_ATTACK";
     public const string ItemSkillDrawOnPowerPlay = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_ON_POWER_PLAY";
     public const string ItemSkillOrbDmgAtTurnEnd = "INFINITEUPGRADESYSTEM-ITEM_SKILL_ORB_DMG_AT_TURN_END";
+    public const string ItemSkillAutoPlayPowerOnDraw = "INFINITEUPGRADESYSTEM-ITEM_SKILL_AUTO_PLAY_POWER_ON_DRAW";
 
     public const string PromptCardUpgrade = "INFINITEUPGRADESYSTEM-PROMPT_CARD_UPGRADE";
     public const string PromptAttackPlus = "INFINITEUPGRADESYSTEM-PROMPT_ATTACK_PLUS";
