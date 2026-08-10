@@ -1,7 +1,10 @@
 using Godot;
+using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 
@@ -42,18 +45,31 @@ public static class RunStateHook
         GD.Print($"[InfiniteUpgrade] Checkpoint SAVED (combat start) — pts={UpgradePointManager.CurrentPoints}");
     }
 
-    /// <summary>战斗胜利 → 发放点数 → 保存检查点</summary>
+    /// <summary>当前房间是否为问号房（进入时已发问号房点数；其战斗不再额外发放）。</summary>
+    private static bool s_enteredEventRoom;
+
+    /// <summary>战斗胜利 → 发放点数 → 保存检查点（update05：Monster/Elite/Boss 改为随机区间）</summary>
     private static void OnCombatWon(CombatRoom room)
     {
         if (room == null) return;
 
-        int points = room.RoomType switch
+        int points;
+        if (s_enteredEventRoom)
         {
-            RoomType.Monster => 1,
-            RoomType.Elite => 5,
-            RoomType.Boss => 20,
-            _ => 0
-        };
+            // 问号房只获取问号房点数：战斗胜利不再额外发放（update05 规则，进入时已发）
+            points = 0;
+            s_enteredEventRoom = false;
+        }
+        else
+        {
+            points = room.RoomType switch
+            {
+                RoomType.Monster => Roll(1, 3),
+                RoomType.Elite => Roll(5, 7),
+                RoomType.Boss => Roll(25, 30),
+                _ => 0
+            };
+        }
 
         if (points > 0)
             UpgradePointManager.AddPoints(points);
@@ -70,6 +86,7 @@ public static class RunStateHook
     private static void OnRunStarted(RunState runState)
     {
         var seed = runState.Rng.StringSeed;
+        s_enteredEventRoom = false;
         GD.Print($"[InfiniteUpgrade] RunStarted — seed={seed}");
 
         int points = PointsPersistence.LoadPoints(seed);
@@ -85,6 +102,45 @@ public static class RunStateHook
         {
             CardUpgradeTracker.ReapplyAll(player);
             CardOperationHelper.RefreshAllVisuals(player);
+        }
+    }
+
+    /// <summary>
+    /// 随机区间（含两端）。用全局 Chaotic RNG：点数纯 mod 内部数据，不必跟随 run 种子，
+    /// 且避免扰动 run RNG 各流（Niche 等）的确定性。
+    /// </summary>
+    internal static int Roll(int min, int maxInclusive) =>
+        Rng.Chaotic.NextInt(min, maxInclusive + 1);
+
+    /// <summary>房间进入回调（update05 问号房/商店/火堆点数）。</summary>
+    public static void NotifyRoomEntered(bool isEventRoom) => s_enteredEventRoom = isEventRoom;
+}
+
+/// <summary>
+/// update05：进入问号房(1-5)/商店(1-5)/火堆(2-6) 即发放随机点数。
+/// 只处理这三种房间；Monster/Elite/Boss 由 CombatWon 发放。
+/// AddPoints 内部立即写盘，退出重进不丢失。
+/// </summary>
+[HarmonyPatch(typeof(Hook), nameof(Hook.AfterRoomEntered))]
+public static class RoomEntryPointsPatch
+{
+    public static void Postfix(IRunState runState, AbstractRoom room)
+    {
+        if (room == null || runState == null) return;
+
+        int points = room.RoomType switch
+        {
+            RoomType.Event => RunStateHook.Roll(1, 5),
+            RoomType.Shop => RunStateHook.Roll(1, 5),
+            RoomType.RestSite => RunStateHook.Roll(2, 6),
+            _ => 0
+        };
+
+        RunStateHook.NotifyRoomEntered(room.RoomType == RoomType.Event);
+        if (points > 0)
+        {
+            UpgradePointManager.AddPoints(points);
+            GD.Print($"[InfiniteUpgrade] Room entry +{points} ({room.RoomType}) — pts={UpgradePointManager.CurrentPoints}");
         }
     }
 }
