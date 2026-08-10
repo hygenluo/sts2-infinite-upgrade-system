@@ -66,6 +66,7 @@
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_ORB_DMG_AT_TURN_END": "At end of turn, deal 1 damage to ALL enemies for each Orb",
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_AUTO_PLAY_POWER_ON_DRAW": "Whenever you draw a Power, automatically play it",
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_ORB_AT_TURN_START": "At the start of your turn, Channel 1 random Orb",
+    "INFINITEUPGRADESYSTEM-ENCHANT_COMPOSITE": "Multiple Enchantments",
 
     "INFINITEUPGRADESYSTEM-PROMPT_CARD_UPGRADE": "Select a card to upgrade infinitely",
     "INFINITEUPGRADESYSTEM-PROMPT_ATTACK_PLUS": "Select a card to increase its damage by 1",

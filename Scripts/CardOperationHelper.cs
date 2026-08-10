@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
@@ -533,5 +534,133 @@ public static class CardOperationHelper
         {
             Log.Warn("InfiniteUpgrade: upgrade VFX failed (non-fatal): " + ex.Message);
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 卡牌附魔（update05：多种附魔共存，合成模型 CompositeEnchantment）
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// 给卡牌应用附魔：同种 +1 层，新种添加。读档 ReapplyAll 也走此方法（幂等重建）。
+    /// 游戏存档把合成附魔记为无附魔，由 CardUpgradeTracker 持久化附魔列表。
+    /// </summary>
+    public static void ApplyEnchantmentToCard(CardModel card, string enchantType)
+    {
+        if (card == null) return;
+        if (!card.IsMutable)
+        {
+            Log.Warn($"InfiniteUpgrade: ApplyEnchantment skip on immutable card {card.Id.Entry}.");
+            return;
+        }
+
+        var composite = card.Enchantment as CompositeEnchantment;
+        if (composite == null)
+        {
+            composite = CreateCompositeInstance();
+            card.EnchantInternal(composite, 1);
+        }
+
+        var sub = CreateEnchantmentSub(card, enchantType);
+        if (sub == null) return;
+
+        var existing = composite.Subs.FirstOrDefault(s => s.GetType() == sub.GetType());
+        if (existing != null)
+        {
+            existing.Amount += 1;
+            existing.RecalculateValues();
+        }
+        else
+        {
+            composite.Subs.Add(sub);
+            sub.ModifyCard(); // 触发子附魔 OnEnchant（如 TezcatarasEmber 减费）
+        }
+        card.DynamicVars.RecalculateForUpgradeOrEnchant();
+        composite.RefreshPrimaryDisplay();
+
+        if (card.Owner != null)
+            RefreshAllVisuals(card.Owner);
+    }
+
+    private static CompositeEnchantment CreateCompositeInstance()
+    {
+        var bare = new CompositeEnchantment();
+        return (CompositeEnchantment)bare.MutableClone();
+    }
+
+    /// <summary>创建子附魔可变实例并挂到卡牌（设 Card + Amount，不触发 OnEnchant）。</summary>
+    private static EnchantmentModel? CreateEnchantmentSub(CardModel card, string enchantType)
+    {
+        var type = FindEnchantmentType(enchantType);
+        if (type == null) return null;
+        var canonical = GetCanonicalEnchantment(type);
+        if (canonical == null) return null;
+        var sub = (EnchantmentModel)canonical.ToMutable();
+        sub.ApplyInternal(card, 1m);
+        return sub;
+    }
+
+    private static Type? FindEnchantmentType(string name)
+    {
+        string full = $"MegaCrit.Sts2.Core.Models.Enchantments.{name}";
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            var t = asm.GetType(full);
+            if (t != null) return t;
+        }
+        return null;
+    }
+
+    private static EnchantmentModel? GetCanonicalEnchantment(Type type)
+    {
+        try
+        {
+            var modelDb = typeof(MegaCrit.Sts2.Core.Models.ModelDb);
+            var m = modelDb.GetMethod("Enchantment", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null);
+            if (m == null) return null;
+            return m.MakeGenericMethod(type).Invoke(null, null) as EnchantmentModel;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"InfiniteUpgrade: GetCanonicalEnchantment({type.Name}) failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>卡牌当前附魔列表（类型名, 层数）。</summary>
+    public static List<(string Type, int Amount)> GetCardEnchantments(CardModel card)
+    {
+        if (card?.Enchantment is CompositeEnchantment composite)
+            return composite.Subs.Select(s => (s.GetType().Name, s.Amount)).ToList();
+        if (card?.Enchantment != null)
+            return new() { (card.Enchantment.GetType().Name, card.Enchantment.Amount) };
+        return new();
+    }
+
+    /// <summary>稀有度附魔种类上限：普通2 / 罕见3 / 稀有5 / 其它3。</summary>
+    public static int GetEnchantLimit(CardModel card) => card.Rarity switch
+    {
+        CardRarity.Common => 2,
+        CardRarity.Uncommon => 3,
+        CardRarity.Rare => 5,
+        _ => 3
+    };
+
+    /// <summary>
+    /// 附魔可加性判断（参照游戏 CanEnchant 规则，但适配合成附魔）：
+    /// 类型门禁 + 不可玩牌排除 + 同种可叠层 / 新种看种类上限。
+    /// </summary>
+    public static bool CanEnchant(CardModel card, string enchantType)
+    {
+        if (card == null) return false;
+        var type = FindEnchantmentType(enchantType);
+        if (type == null) return false;
+        var canonical = GetCanonicalEnchantment(type);
+        if (canonical == null) return false;
+        if (!canonical.CanEnchantCardType(card.Type)) return false;
+        if (card.Pile?.Type == PileType.Deck && card.Keywords.Contains(CardKeyword.Unplayable)) return false;
+
+        var cur = GetCardEnchantments(card);
+        if (cur.Any(e => e.Type == enchantType)) return true; // 同种可叠层
+        return cur.Count < GetEnchantLimit(card);              // 新种看上限
     }
 }

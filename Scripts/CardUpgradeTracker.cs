@@ -38,6 +38,7 @@ public static class CardUpgradeTracker
         KeywordAdd,
         KeywordRemove,
         EnergyReduce,
+        Enchant,
     }
 
     [Serializable]
@@ -478,7 +479,22 @@ public static class CardUpgradeTracker
                 var cur = card.EnergyCost.Canonical;
                 if (cur > 0) card.EnergyCost.SetCustomBaseCost(cur - 1);
                 break;
+            case ModType.Enchant:
+                if (entry.Keyword != null)
+                    CardOperationHelper.ApplyEnchantmentToCard(card, entry.Keyword);
+                break;
         }
+    }
+
+    /// <summary>移除某张卡指定附魔类型的全部记录（多种附魔替换用）。</summary>
+    public static void RemoveEnchantmentEntries(CardModel card, string seed, string enchantType)
+    {
+        var player = CardOperationHelper.GetLocalPlayer();
+        if (player == null) return;
+        string identity = GetCardIdentity(card, player.Deck.Cards);
+        if (!s_records.TryGetValue(identity, out var rec)) return;
+        rec.Entries.RemoveAll(e => e.Type == nameof(ModType.Enchant) && e.Keyword == enchantType);
+        SaveToDisk(seed);
     }
 
     private static string GetFilePath(string seed) => SavePaths.GetFilePath("card_upgrades", seed);
