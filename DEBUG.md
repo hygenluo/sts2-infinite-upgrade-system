@@ -223,3 +223,9 @@
 - `Hook.AfterCardPlayed` 中遍历 `combatState.Enemies` 各施加 1 层中毒
 
 **测试**：静默猎人开局 → 攒点购买该技能 → 进入战斗 → 打出任意牌 → 所有敌人头顶各出现 1 层中毒；再打出牌中毒叠加。
+
+### C3 技能「回合结束时，你的格挡翻倍」（铁甲战士，15 点，id=double_block_at_turn_end）
+- `Hook.BeforeSideTurnEnd` + `CombatSide.Player`（格挡清零前触发）
+- 读取 `Creature.Block`，`CreatureCmd.GainBlock(block)` 补到 2 倍；翻倍后按游戏规则正常结算（无格挡保留则下回合开始清零）
+
+**测试**：铁甲战士开局 → 购买该技能 → 战斗内本回合先获得一些格挡（如打出防御牌）→ 点「结束回合」→ 回合结束瞬间格挡数字翻倍（敌方回合可见翻倍后的格挡）；配合「格挡跨回合不消失」能力验证翻倍后保留。

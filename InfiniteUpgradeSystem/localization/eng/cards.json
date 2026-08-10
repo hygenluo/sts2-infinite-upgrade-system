@@ -46,6 +46,7 @@
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_BLOCK_AT_TURN_START": "Gain Block equal to your exhaust pile size at turn start",
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_ON_EXHAUST": "Draw 1 card whenever a card is exhausted",
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_ON_HP_LOSS": "Draw 1 card whenever you lose HP",
+    "INFINITEUPGRADESYSTEM-ITEM_SKILL_DOUBLE_BLOCK_AT_TURN_END": "At end of turn, double your Block",
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_WEAK_ON_DISCARD": "Apply 1 Weak to ALL enemies whenever you discard a card",
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_BLOCK_ON_POISON": "Gain 1 Block whenever you apply Poison",
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_POISON_ALL_ON_CARD_PLAY": "Apply 1 Poison to ALL enemies whenever you play a card",

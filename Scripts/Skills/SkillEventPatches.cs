@@ -186,3 +186,31 @@ public static class SkillOrbTurnEndPatch
         }
     }
 }
+
+/// <summary>回合结束时，你的格挡翻倍（铁甲战士）。BeforeSideTurnEnd 在格挡清零前触发。</summary>
+[HarmonyPatch(typeof(Hook), nameof(Hook.BeforeSideTurnEnd))]
+public static class SkillDoubleBlockPatch
+{
+    public static void Postfix(CombatSide side)
+    {
+        if (side != CombatSide.Player) return; // 玩家回合结束
+        if (!SkillRegistry.Has("double_block_at_turn_end")) return;
+        var player = CardOperationHelper.GetLocalPlayer();
+        if (player?.Creature == null) return;
+        _ = HandleAsync(player);
+    }
+
+    private static async Task HandleAsync(Player player)
+    {
+        try
+        {
+            var block = player.Creature.Block;
+            if (block > 0)
+                await CreatureCmd.GainBlock(player.Creature, block, default, null, false);
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[InfiniteUpgrade] Skill double block error: {ex}");
+        }
+    }
+}
