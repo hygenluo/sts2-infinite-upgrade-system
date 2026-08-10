@@ -48,6 +48,7 @@
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_ON_HP_LOSS": "Draw 1 card whenever you lose HP",
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_WEAK_ON_DISCARD": "Apply 1 Weak to ALL enemies whenever you discard a card",
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_BLOCK_ON_POISON": "Gain 1 Block whenever you apply Poison",
+    "INFINITEUPGRADESYSTEM-ITEM_SKILL_POISON_ALL_ON_CARD_PLAY": "Apply 1 Poison to ALL enemies whenever you play a card",
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_FORGE_ON_PLAY": "Forge 1 whenever you play a card",
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_VIGOR_ON_SKILL_PLAY": "Gain 2 Vigor whenever you play a Skill",
     "INFINITEUPGRADESYSTEM-ITEM_SKILL_SUMMON_ON_PLAY": "Summon 1 whenever you play a card",

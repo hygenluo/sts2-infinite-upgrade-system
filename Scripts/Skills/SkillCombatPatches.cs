@@ -74,6 +74,11 @@ public static class SkillCardPlayPatch
             // 8. 每打出1张能力牌，抽一张牌
             if (SkillRegistry.Has("draw_on_power_play") && card.Type == CardType.Power)
                 await CardPileCmd.Draw(context, player);
+
+            // 9. 每打出1张牌，给予所有敌人1层中毒
+            if (SkillRegistry.Has("poison_all_on_card_play"))
+                foreach (var enemy in state.Enemies)
+                    await AbilityOperationHelper.ApplyOnePower(enemy, "poison", 1);
         }
         catch (Exception ex)
         {

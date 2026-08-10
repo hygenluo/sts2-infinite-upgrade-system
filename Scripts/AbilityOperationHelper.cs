@@ -103,6 +103,7 @@ public static class AbilityOperationHelper
             "blockKeep" => "MegaCrit.Sts2.Core.Models.Powers.BarricadePower",
             "vigor" => "MegaCrit.Sts2.Core.Models.Powers.VigorPower",
             "weak" => "MegaCrit.Sts2.Core.Models.Powers.WeakPower",
+            "poison" => "MegaCrit.Sts2.Core.Models.Powers.PoisonPower",
             _ => null
         };
         if (typeName == null) return;

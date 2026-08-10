@@ -217,3 +217,9 @@
 - 休息处任意选项 12 → 10（`UpgradeUIHandler` rest_all_options cost）
 
 **测试**：新开局按 P → 点数显示 7；购买「你可以在休息处选择任意数量的选项」扣 10 点。
+
+### C2 技能「每打出一张牌都给予所有敌人一层中毒」（静默猎人，15 点，id=poison_all_on_card_play）
+- `ApplyOnePower` 新增 `poison` → PoisonPower 映射
+- `Hook.AfterCardPlayed` 中遍历 `combatState.Enemies` 各施加 1 层中毒
+
+**测试**：静默猎人开局 → 攒点购买该技能 → 进入战斗 → 打出任意牌 → 所有敌人头顶各出现 1 层中毒；再打出牌中毒叠加。
