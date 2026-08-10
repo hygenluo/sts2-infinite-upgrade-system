@@ -31,6 +31,13 @@ public sealed class CompositeEnchantment : EnchantmentModel
         _iconPath = Subs.FirstOrDefault()?.IconPath;
     }
 
+    /// <summary>移除指定类型的子附魔（多种附魔替换用）。一次性 OnEnchant 副作用（如减费）不回滚。</summary>
+    public void RemoveSub(string typeName)
+    {
+        Subs.RemoveAll(s => s.GetType().Name == typeName);
+        RefreshPrimaryDisplay();
+    }
+
     // ── 数值修饰符转发 ─────────────────────────────────────────────
 
     public override decimal EnchantDamageAdditive(decimal originalDamage, ValueProp props) =>

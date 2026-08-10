@@ -35,6 +35,7 @@
     "INFINITEUPGRADESYSTEM-ITEM_ADD_ETERNAL": "Add Eternal",
     "INFINITEUPGRADESYSTEM-ITEM_REMOVE_ETERNAL": "Remove Eternal",
     "INFINITEUPGRADESYSTEM-ITEM_DECK_REMOVE": "Remove a Card from Deck",
+    "INFINITEUPGRADESYSTEM-ITEM_ENCHANT": "Add an Enchantment to a Card",
     "INFINITEUPGRADESYSTEM-ITEM_TEST_P1": "Points +1",
     "INFINITEUPGRADESYSTEM-ITEM_TEST_P5": "Points +5",
     "INFINITEUPGRADESYSTEM-ITEM_TEST_P10": "Points +10",
@@ -85,5 +86,6 @@
     "INFINITEUPGRADESYSTEM-PROMPT_REMOVE_ETHEREAL": "Select a card to remove Ethereal",
     "INFINITEUPGRADESYSTEM-PROMPT_ADD_ETERNAL": "Select a card to add Eternal",
     "INFINITEUPGRADESYSTEM-PROMPT_REMOVE_ETERNAL": "Select a card to remove Eternal",
-    "INFINITEUPGRADESYSTEM-PROMPT_DECK_REMOVE": "Select a card to remove from your deck"
+    "INFINITEUPGRADESYSTEM-PROMPT_DECK_REMOVE": "Select a card to remove from your deck",
+    "INFINITEUPGRADESYSTEM-PROMPT_ENCHANT": "Select a card to enchant"
 }

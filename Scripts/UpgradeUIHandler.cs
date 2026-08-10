@@ -655,6 +655,8 @@ public sealed partial class UpgradeUIHandler : Control
             UpgradeLoc.PromptAddEternal, pk => CardOperationHelper.ToggleKeyword(10, CardKeyword.Eternal, true, pk)));
         _allItems.Add(ActionItem("卡牌操作", "移除永恒", UpgradeLoc.ItemRemoveEternal, 15,
             UpgradeLoc.PromptRemoveEternal, pk => CardOperationHelper.ToggleKeyword(15, CardKeyword.Eternal, false, pk)));
+        _allItems.Add(ActionItem("卡牌操作", "为一张卡牌新增附魔", UpgradeLoc.ItemEnchant, 12,
+            UpgradeLoc.PromptEnchant, pk => CardOperationHelper.AddEnchantment(12, pk)));
 
         // === 技能 (16)：效果未生效（Phase S2+ 接线），购买/持久化/UI 先行 ===
         _allItems.Add(SkillItem(ClassTabBar.Generic, "每打出1张牌，都获得1格挡", UpgradeLoc.ItemSkillBlockOnPlay, "block_on_play", 10));

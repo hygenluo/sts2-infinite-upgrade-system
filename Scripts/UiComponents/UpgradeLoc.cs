@@ -57,6 +57,7 @@ public static class UpgradeLoc
     public const string ItemAddEternal = "INFINITEUPGRADESYSTEM-ITEM_ADD_ETERNAL";
     public const string ItemRemoveEternal = "INFINITEUPGRADESYSTEM-ITEM_REMOVE_ETERNAL";
     public const string ItemDeckRemove = "INFINITEUPGRADESYSTEM-ITEM_DECK_REMOVE";
+    public const string ItemEnchant = "INFINITEUPGRADESYSTEM-ITEM_ENCHANT";
     public const string ItemTestP1 = "INFINITEUPGRADESYSTEM-ITEM_TEST_P1";
     public const string ItemTestP5 = "INFINITEUPGRADESYSTEM-ITEM_TEST_P5";
     public const string ItemTestP10 = "INFINITEUPGRADESYSTEM-ITEM_TEST_P10";
@@ -107,6 +108,7 @@ public static class UpgradeLoc
     public const string PromptAddEternal = "INFINITEUPGRADESYSTEM-PROMPT_ADD_ETERNAL";
     public const string PromptRemoveEternal = "INFINITEUPGRADESYSTEM-PROMPT_REMOVE_ETERNAL";
     public const string PromptDeckRemove = "INFINITEUPGRADESYSTEM-PROMPT_DECK_REMOVE";
+    public const string PromptEnchant = "INFINITEUPGRADESYSTEM-PROMPT_ENCHANT";
 
     // ═══════════════════════════════════════════════════════════════
     // 加载与查询

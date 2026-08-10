@@ -647,7 +647,8 @@ public static class CardOperationHelper
 
     /// <summary>
     /// 附魔可加性判断（参照游戏 CanEnchant 规则，但适配合成附魔）：
-    /// 类型门禁 + 不可玩牌排除 + 同种可叠层 / 新种看种类上限。
+    /// 只做类型门禁 + 不可玩牌排除。同种叠层 / 新种上限 / 替换由流程处理——
+    /// 已达上限时新种仍可选（选后替换最早的那个），因此此处不拦截上限。
     /// </summary>
     public static bool CanEnchant(CardModel card, string enchantType)
     {
@@ -658,9 +659,59 @@ public static class CardOperationHelper
         if (canonical == null) return false;
         if (!canonical.CanEnchantCardType(card.Type)) return false;
         if (card.Pile?.Type == PileType.Deck && card.Keywords.Contains(CardKeyword.Unplayable)) return false;
+        return true;
+    }
 
-        var cur = GetCardEnchantments(card);
-        if (cur.Any(e => e.Type == enchantType)) return true; // 同种可叠层
-        return cur.Count < GetEnchantLimit(card);              // 新种看上限
+    /// <summary>获取附魔的 canonical 模板（供 UI 显示名称/描述）。</summary>
+    public static EnchantmentModel? GetEnchantCanonical(string typeName)
+    {
+        var type = FindEnchantmentType(typeName);
+        return type == null ? null : GetCanonicalEnchantment(type);
+    }
+
+    /// <summary>
+    /// 卡牌附魔流程（update05）：扣点 → 选卡 → 选附魔 → 应用 + 记录。
+    /// 已达上限且选新种：替换最早添加的那个（移除旧记录 + 合成模型中删除）。
+    /// </summary>
+    public static async Task<bool> AddEnchantment(int cost, string promptKey = "")
+    {
+        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
+        var player = GetLocalPlayer();
+        if (player == null) { UpgradePointManager.AddPoints(cost); return false; }
+        UpgradeUIHandler.Instance?.SetUIVisible(false);
+        try
+        {
+            var card = await SelectCardFromDeck(player, promptKey);
+            if (card == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+
+            var cardMutable = EnsureMutableInDeck(player, card);
+            var enchantType = await UiComponents.EnchantSelectPanel.Show(cardMutable);
+            if (enchantType == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+
+            var currentTypes = GetCardEnchantments(cardMutable);
+            string? replacedType = null;
+            if (!currentTypes.Any(e => e.Type == enchantType) && currentTypes.Count >= GetEnchantLimit(cardMutable))
+                replacedType = currentTypes[0].Type;
+
+            ApplyEnchantmentToCard(cardMutable, enchantType);
+            if (replacedType != null && cardMutable.Enchantment is CompositeEnchantment composite)
+                composite.RemoveSub(replacedType);
+
+            var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
+            if (replacedType != null)
+                CardUpgradeTracker.RemoveEnchantmentEntries(cardMutable, seed, replacedType);
+            CardUpgradeTracker.RecordModification(cardMutable, seed, CardUpgradeTracker.ModType.Enchant, enchantType);
+
+            UpgradeUIHandler.Instance?.RefreshPointsLabel();
+            UpgradeUIHandler.Instance?.HideUI();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"AddEnchantment: {ex.Message}");
+            UpgradePointManager.AddPoints(cost);
+            UpgradeUIHandler.Instance?.SetUIVisible(true);
+            return false;
+        }
     }
 }
