@@ -294,3 +294,13 @@
 2. **战斗内持久**：力量面板/攻击伤害随力量叠加递增
 3. **跨战斗重置**：下场战斗力量回到 2（技能每场战斗重新从 0 施加）
 4. **读档**：退出重进 → 技能仍在
+
+### C4 技能「你的回合开始时，回复3点生命值」（铁甲战士，8 点，id=heal_at_turn_start）
+- 注册：`SkillItem(ClassTabBar.Ironclad, ..., ItemSkillHealAtTurnStart, "heal_at_turn_start", 8)`（铁甲标签页，格挡翻倍之后）
+- 补丁：`SkillHealAtTurnStartPatch` — `[HarmonyPatch(Hook.AfterPlayerTurnStart)]` → `CreatureCmd.Heal(player.Creature, 3)`
+- 与 `str_at_turn_start` 同款钩子（每回合触发，非仅首回合）
+
+**测试**（铁甲战士开局攒 8 点 → 购买该技能 → 进战斗）：
+1. **每回合回血**：受到伤害后进入下一回合 → 生命值 +3（第 1 回合开始 +3，第 2 回合开始再 +3）
+2. **满血不溢出**：满血时回合开始不超上限（生命值不变或不超过上限）
+3. **跨战斗重置**：技能每场战斗都生效
