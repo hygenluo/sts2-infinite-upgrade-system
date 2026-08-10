@@ -215,6 +215,30 @@ public static class SkillDrawAtTurnStartPatch
     }
 }
 
+/// <summary>你的回合开始时，额外召唤2（亡灵契约师）。OstyCmd.Summon 的 amount = 奥斯提 +2 MaxHp（召唤机制，单只宠物）。</summary>
+[HarmonyPatch(typeof(Hook), nameof(Hook.AfterPlayerTurnStart))]
+public static class SkillSummonAtTurnStartPatch
+{
+    public static void Postfix(PlayerChoiceContext choiceContext, Player player)
+    {
+        SkillContextCache.Last = choiceContext;
+        if (player == null || !SkillRegistry.Has("summon_at_turn_start")) return;
+        _ = HandleAsync(choiceContext, player);
+    }
+
+    private static async Task HandleAsync(PlayerChoiceContext context, Player player)
+    {
+        try
+        {
+            await OstyCmd.Summon(context, player, 2m, null);
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[InfiniteUpgrade] Skill summon-at-turn-start error: {ex}");
+        }
+    }
+}
+
 /// <summary>
 /// 你可以在休息处选择任意数量的选项（通用，参照遗物 微型帐篷 MiniatureTent）。
 /// 休息处逻辑调用 Hook.ShouldDisableRemainingRestSiteOptions 决定是否禁用剩余选项；

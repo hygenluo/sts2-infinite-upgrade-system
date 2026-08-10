@@ -331,3 +331,14 @@
 4. **每回合重置**：第 2 回合第一张牌再次免费
 5. **次牌原价**：第二张牌正常扣能量/辉星
 6. **自动打出不消耗名额**：若同时拥有「抽到能力牌自动打出」，自动打出的牌不计入首牌名额
+
+### C7 技能「你的回合开始时，额外召唤2」（亡灵契约师，8 点，id=summon_at_turn_start）
+- 注册：`SkillItem(ClassTabBar.Necrobinder, ..., ItemSkillSummonAtTurnStart, "summon_at_turn_start", 8)`（亡灵标签页，奥斯提攻击技能之后）
+- 补丁：`SkillSummonAtTurnStartPatch` — `[HarmonyPatch(Hook.AfterPlayerTurnStart)]` → `OstyCmd.Summon(context, player, 2m, null)`
+- **召唤机制说明**（IL 反编译确认）：奥斯提是单只宠物，`Summon` 的 amount = 给奥斯提 +MaxHp（体型/强度）；"召唤2" = 奥斯提 +2 MaxHp，与「每打出1张牌召唤1」同模式。奥斯提死亡时以 2 点 MaxHp 复活
+
+**测试**（亡灵契约师开局攒 8 点 → 购买该技能 → 进战斗）：
+1. **每回合召唤2**：回合开始 → 奥斯提 MaxHp +2（体型变大/生命上限增加）
+2. **死亡复活**：若奥斯提死亡，回合开始以 2 点 MaxHp 复活（而非死着）
+3. **与打出牌召唤叠加**：同时拥有「每打出1张牌召唤1」时，两者都生效
+4. **跨战斗重置**：每场战斗重新从基础召唤数开始
