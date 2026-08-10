@@ -662,7 +662,7 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(SkillItem(ClassTabBar.Generic, "每当打出4张牌，获得1力量", UpgradeLoc.ItemSkillStrengthEvery4Plays, "strength_every_4_plays", 10,
             () => $"{SkillRegistry.CombatPlayCount % 4}/4"));
         _allItems.Add(SkillItem(ClassTabBar.Generic, "在你的回合，当你没有手牌时，抽1张牌", UpgradeLoc.ItemSkillDrawWhenNoHand, "draw_when_no_hand", 7));
-        _allItems.Add(SkillItem(ClassTabBar.Generic, "你可以在休息处选择任意数量的选项", UpgradeLoc.ItemSkillRestAllOptions, "rest_all_options", 12));
+        _allItems.Add(SkillItem(ClassTabBar.Generic, "你可以在休息处选择任意数量的选项", UpgradeLoc.ItemSkillRestAllOptions, "rest_all_options", 10));
         _allItems.Add(SkillItem(ClassTabBar.Generic, "每回合开始时，获取消耗牌堆数等量格挡", UpgradeLoc.ItemSkillBlockAtTurnStart, "block_at_turn_start", 10));
         _allItems.Add(SkillItem(ClassTabBar.Ironclad, "每当有一张牌被消耗时，抽一张牌", UpgradeLoc.ItemSkillDrawOnExhaust, "draw_on_exhaust", 10));
         _allItems.Add(SkillItem(ClassTabBar.Ironclad, "每当失去生命值时，抽一张牌", UpgradeLoc.ItemSkillDrawOnHpLoss, "draw_on_hp_loss", 10));

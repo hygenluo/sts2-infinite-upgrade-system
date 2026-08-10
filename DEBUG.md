@@ -207,3 +207,13 @@
 ### Harmony async 方法匹配
 - 问题：NGame.StartRun/LoadRun 是 async → Prefix 不触发
 - 方案：改用 C# 事件订阅 (CombatWon, RunStarted)
+
+---
+
+## update04 实施记录（2026-08-10，每个功能一个 git commit）
+
+### C1 数值调整
+- 初始点数 6 → 7（`UpgradePointManager.CurrentPoints` / `InitializeDirect`）
+- 休息处任意选项 12 → 10（`UpgradeUIHandler` rest_all_options cost）
+
+**测试**：新开局按 P → 点数显示 7；购买「你可以在休息处选择任意数量的选项」扣 10 点。

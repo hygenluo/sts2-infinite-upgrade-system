@@ -10,7 +10,7 @@ namespace InfiniteUpgradeSystem;
 /// </summary>
 public static class UpgradePointManager
 {
-    public static int CurrentPoints { get; private set; } = 6;
+    public static int CurrentPoints { get; private set; } = 7;
 
     private static string CurrentSeed() =>
         RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
@@ -19,7 +19,7 @@ public static class UpgradePointManager
     public static void SetPointsDirect(int points) => CurrentPoints = points;
 
     /// <summary>新局初始化（不写盘）。</summary>
-    public static void InitializeDirect() => CurrentPoints = 6;
+    public static void InitializeDirect() => CurrentPoints = 7;
 
     public static void AddPoints(int amount)
     {
