@@ -304,3 +304,13 @@
 1. **每回合回血**：受到伤害后进入下一回合 → 生命值 +3（第 1 回合开始 +3，第 2 回合开始再 +3）
 2. **满血不溢出**：满血时回合开始不超上限（生命值不变或不超过上限）
 3. **跨战斗重置**：技能每场战斗都生效
+
+### C5 技能「你的回合开始时，额外摸1张牌」（静默猎手，8 点，id=draw_at_turn_start）
+- 注册：`SkillItem(ClassTabBar.Silent, ..., ItemSkillDrawAtTurnStart, "draw_at_turn_start", 8)`（静默标签页，中毒技能之后）
+- 补丁：`SkillDrawAtTurnStartPatch` — `[HarmonyPatch(Hook.AfterPlayerTurnStart)]` → `CardPileCmd.Draw(choiceContext, player)`
+- 与 `str/heal_at_turn_start` 同款钩子（每回合触发）；抽牌堆空时自然抽 0 张不报错
+
+**测试**（静默猎手开局攒 8 点 → 购买该技能 → 进战斗）：
+1. **每回合多摸1张**：回合开始手牌 = 正常 5 张 + 1 = 6 张；第 2 回合同样 6 张
+2. **抽牌堆空**：多回合消耗后抽牌堆见底，回合开始抽 0 张，不报错、不崩溃
+3. **与其它摸牌技能叠加**：若同时拥有「每打出1张能力牌抽1张」等，可叠加

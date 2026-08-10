@@ -191,6 +191,30 @@ public static class SkillHealAtTurnStartPatch
     }
 }
 
+/// <summary>你的回合开始时，额外摸1张牌（静默猎手）。</summary>
+[HarmonyPatch(typeof(Hook), nameof(Hook.AfterPlayerTurnStart))]
+public static class SkillDrawAtTurnStartPatch
+{
+    public static void Postfix(PlayerChoiceContext choiceContext, Player player)
+    {
+        SkillContextCache.Last = choiceContext;
+        if (player == null || !SkillRegistry.Has("draw_at_turn_start")) return;
+        _ = HandleAsync(choiceContext, player);
+    }
+
+    private static async Task HandleAsync(PlayerChoiceContext context, Player player)
+    {
+        try
+        {
+            await CardPileCmd.Draw(context, player);
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[InfiniteUpgrade] Skill draw-at-turn-start error: {ex}");
+        }
+    }
+}
+
 /// <summary>
 /// 你可以在休息处选择任意数量的选项（通用，参照遗物 微型帐篷 MiniatureTent）。
 /// 休息处逻辑调用 Hook.ShouldDisableRemainingRestSiteOptions 决定是否禁用剩余选项；

@@ -674,6 +674,7 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(SkillItem(ClassTabBar.Silent, "每当丢弃一张牌时，给予所有敌人1层虚弱", UpgradeLoc.ItemSkillWeakOnDiscard, "weak_on_discard", 10));
         _allItems.Add(SkillItem(ClassTabBar.Silent, "每当给予敌人中毒时，获得1格挡", UpgradeLoc.ItemSkillBlockOnPoison, "block_on_poison", 10));
         _allItems.Add(SkillItem(ClassTabBar.Silent, "你每打出一张牌都给予所有敌人一层中毒", UpgradeLoc.ItemSkillPoisonAllOnCardPlay, "poison_all_on_card_play", 15));
+        _allItems.Add(SkillItem(ClassTabBar.Silent, "你的回合开始时，额外摸1张牌", UpgradeLoc.ItemSkillDrawAtTurnStart, "draw_at_turn_start", 8));
         _allItems.Add(SkillItem(ClassTabBar.Regent, "每打出1张牌时，铸造1", UpgradeLoc.ItemSkillForgeOnPlay, "forge_on_play", 10));
         _allItems.Add(SkillItem(ClassTabBar.Regent, "每打出1张技能牌时，获得2点活力", UpgradeLoc.ItemSkillVigorOnSkillPlay, "vigor_on_skill_play", 6));
         _allItems.Add(SkillItem(ClassTabBar.Regent, "每铸造一次，君王之剑永久获取1格挡", UpgradeLoc.ItemSkillSovereignBladeBlockOnForge, "sovereign_blade_block_on_forge", 12));

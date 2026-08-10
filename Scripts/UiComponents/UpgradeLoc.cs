@@ -75,6 +75,7 @@ public static class UpgradeLoc
     public const string ItemSkillWeakOnDiscard = "INFINITEUPGRADESYSTEM-ITEM_SKILL_WEAK_ON_DISCARD";
     public const string ItemSkillBlockOnPoison = "INFINITEUPGRADESYSTEM-ITEM_SKILL_BLOCK_ON_POISON";
     public const string ItemSkillPoisonAllOnCardPlay = "INFINITEUPGRADESYSTEM-ITEM_SKILL_POISON_ALL_ON_CARD_PLAY";
+    public const string ItemSkillDrawAtTurnStart = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_AT_TURN_START";
     public const string ItemSkillForgeOnPlay = "INFINITEUPGRADESYSTEM-ITEM_SKILL_FORGE_ON_PLAY";
     public const string ItemSkillVigorOnSkillPlay = "INFINITEUPGRADESYSTEM-ITEM_SKILL_VIGOR_ON_SKILL_PLAY";
     public const string ItemSkillSovereignBladeBlockOnForge = "INFINITEUPGRADESYSTEM-ITEM_SKILL_SOVEREIGN_BLADE_BLOCK_ON_FORGE";
