@@ -24,9 +24,10 @@ public static class LocStringPromptPatch
         try
         {
             // 合成附魔（CompositeEnchantment）标题/描述：统一解析为「多重附魔」，
-            // 具体内容由悬停提示里聚合的子附魔描述展示。
+            // 具体内容由悬停提示里聚合的子附魔描述展示。Id.Entry 经 ModelDb.GetId
+            // 的 Slugify 生成，为 COMPOSITE_ENCHANTMENT（大写蛇形）。
             if (__instance.LocTable == "enchantments"
-                && __instance.LocEntryKey.StartsWith("CompositeEnchantment.", StringComparison.Ordinal))
+                && __instance.LocEntryKey.StartsWith("COMPOSITE_ENCHANTMENT.", StringComparison.OrdinalIgnoreCase))
             {
                 var compositeText = UpgradeLoc.Get("INFINITEUPGRADESYSTEM-ENCHANT_COMPOSITE", __result);
                 if (!string.IsNullOrEmpty(compositeText))

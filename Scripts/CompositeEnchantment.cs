@@ -23,8 +23,15 @@ namespace InfiniteUpgradeSystem;
 /// </summary>
 public sealed class CompositeEnchantment : EnchantmentModel
 {
-    public List<EnchantmentModel> Subs { get; } = new();
+    /// <summary>子附魔列表（MutableClone 时经 DeepCloneFields 重建为独立列表）。</summary>
+    public List<EnchantmentModel> Subs = new();
 
+    public override void DeepCloneFields()
+    {
+        base.DeepCloneFields();
+        // MutableClone 的 MemberwiseClone 会共享 Subs 引用，必须重建为独立列表
+        Subs = new List<EnchantmentModel>();
+    }
     /// <summary>用首个子附魔刷新显示身份（图标）；无子附魔时清空。</summary>
     public void RefreshPrimaryDisplay()
     {

@@ -382,3 +382,12 @@
 - **根因**：`EnchantSelectPanel.GetEnchantTypes()` 对**所有**程序集调用 `Assembly.GetTypes()`；Steamworks.NET 的 `OptionValue` 类型不可加载（对象字段对齐错误），`GetTypes()` 抛 `ReflectionTypeLoadException`（RitsuLib 日志 906 行同问题，它优雅跳过）
 - **修复**：只枚举游戏主程序集 `sts2`（附魔类型都在其中）+ try/catch 用 `ex.Types` 跳过不可加载项
 - **教训**：模组代码避免对 `AppDomain.GetAssemblies()` 全量 `GetTypes()`；用 `GetType(name)` 或限定程序集
+
+### C9 修复 v2：DuplicateModelException + 附魔描述格式/BBCode
+- **根因 1（致命）**：`new CompositeEnchantment()` 首次构造经 `ModelDb.GetId(type)` **自动注册**该类型（Id=ENCHANTMENT.COMPOSITE_ENCHANTMENT）；第二次 `new` 时 `ModelDb.Contains(type)` 为真 → `DuplicateModelException` → 附魔应用失败
+  - **修复**：静态模板只 `new` 一次，之后 `MutableClone()`（MemberwiseClone 不走构造函数）；`DeepCloneFields` 重建 `Subs` 独立列表（否则 MemberwiseClone 共享引用）
+- **根因 2**：附魔面板 tooltip 用 `canonical.Description.GetFormattedText()`，描述含 `{Block}/{Damage}/{Amount}` 变量但无 DynamicVar 来源 → `No source extension could handle the selector` 格式错误；且 `[gold][/gold]` 自定义 BBCode 在 Godot 按钮 tooltip 不渲染
+  - **修复**：改用 `canonical.DynamicDescription`（提供变量来源）+ 正则剥离 `[...]` BBCode 标记
+- **根因 3**：`LocStringPromptPatch` 匹配的 entry 名写错——`ModelDb.GetEntry` 用 `Slugify(type.Name)` → `CompositeEnchantment` → `COMPOSITE_ENCHANTMENT`（大写蛇形），合成附魔标题 key 应为 `enchantments/COMPOSITE_ENCHANTMENT.title`
+  - **修复**：改为 `OrdinalIgnoreCase` 匹配 `COMPOSITE_ENCHANTMENT.`
+- **教训**：publicized 程序集里 `protected` 成员都是 `public`（OnEnchant/CanonicalVars/DeepCloneFields 等），override 时必须用 `public`

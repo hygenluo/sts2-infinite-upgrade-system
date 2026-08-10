@@ -581,10 +581,16 @@ public static class CardOperationHelper
             RefreshAllVisuals(card.Owner);
     }
 
+    /// <summary>合成附魔静态模板。`new CompositeEnchantment()` 首次构造会经 ModelDb.GetId
+    /// 自动注册该类型，第二次 `new` 抛 DuplicateModelException —— 因此只构造一次模板，
+    /// 之后用 MutableClone（MemberwiseClone，不走构造函数）生成可变副本。</summary>
+    private static CompositeEnchantment? s_compositeTemplate;
+
     private static CompositeEnchantment CreateCompositeInstance()
     {
-        var bare = new CompositeEnchantment();
-        return (CompositeEnchantment)bare.MutableClone();
+        if (s_compositeTemplate == null)
+            s_compositeTemplate = new CompositeEnchantment();
+        return (CompositeEnchantment)s_compositeTemplate.MutableClone();
     }
 
     /// <summary>创建子附魔可变实例并挂到卡牌（设 Card + Amount，不触发 OnEnchant）。</summary>

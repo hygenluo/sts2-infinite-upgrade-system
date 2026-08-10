@@ -101,7 +101,7 @@ public sealed partial class EnchantSelectPanel : Control
             {
                 Text = already ? $"{name}（已有，+1层）" : name,
                 Alignment = HorizontalAlignment.Left,
-                TooltipText = canonical.Description.GetFormattedText()
+                TooltipText = FormatEnchantTooltip(canonical)
             };
             btn.AddThemeFontOverride("font", UpgradeTheme.Regular);
             btn.AddThemeFontSizeOverride("font_size", 14);
@@ -172,4 +172,23 @@ public sealed partial class EnchantSelectPanel : Control
         }
         return result.Distinct().OrderBy(n => n).ToList();
     }
+
+    /// <summary>格式化附魔描述：用 DynamicDescription（提供 {Block}/{Damage}/{Amount} 等变量来源）
+    /// 再剥离 [gold] 等 BBCode 标记（Godot 按钮 tooltip 不渲染自定义 BBCode）。</summary>
+    private static string FormatEnchantTooltip(EnchantmentModel canonical)
+    {
+        string text;
+        try
+        {
+            text = canonical.DynamicDescription.GetFormattedText();
+        }
+        catch
+        {
+            text = canonical.Description.GetFormattedText();
+        }
+        return StripBbcode(text);
+    }
+
+    private static string StripBbcode(string text) =>
+        System.Text.RegularExpressions.Regex.Replace(text, @"\[[^\]]*\]", "");
 }
