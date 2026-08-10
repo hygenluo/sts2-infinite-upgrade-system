@@ -224,16 +224,9 @@ public static class SkillSovereignBladeBlockPatch
         if (forger == null || !SkillRegistry.Has("sovereign_blade_block_on_forge")) return;
         var player = CardOperationHelper.GetLocalPlayer();
         if (player == null || forger != player) return;
-        try
-        {
-            // 君王之剑格挡 = CalculationBase + CalculationExtra × Parry → bump 基础值即永久 +1（随卡牌跨战斗持久化，同 AddDamage）
-            foreach (var blade in ForgeCmd.GetSovereignBlades(forger, includeExhausted: true))
-                blade.DynamicVars.CalculationBase.BaseValue += 1m;
-        }
-        catch (Exception ex)
-        {
-            GD.PrintErr($"[InfiniteUpgrade] Skill sovereign blade block error: {ex}");
-        }
+        // 君王之剑 OnPlay 仅在玩家有招架层数时 GainBlock（参照招架能力牌实现）。
+        // 铸造 → 玩家 +1 招架（持久化，每场战斗重新应用）→ 君王之剑按招架层数获得格挡 = 铸造次数。
+        _ = AbilityOperationHelper.AddSovereignBladeForgeParry(forger);
     }
 }
 

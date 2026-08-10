@@ -213,7 +213,7 @@
 ## update04 实施记录（2026-08-10，每个功能一个 git commit）
 
 ### C1 数值调整
-- 初始点数 6 → 7（`UpgradePointManager.CurrentPoints` / `InitializeDirect`）
+- 初始点数 6 → 7：真实生效点在 `PointsPersistence.LoadPoints` 默认值（新局无 seed 文件时返回 7），`UpgradePointManager` 的 `InitializeDirect` 从未被调用、不生效
 - 休息处任意选项 12 → 10（`UpgradeUIHandler` rest_all_options cost）
 
 **测试**：新开局按 P → 点数显示 7；购买「你可以在休息处选择任意数量的选项」扣 10 点。
@@ -231,10 +231,11 @@
 **测试**：铁甲战士开局 → 购买该技能 → 战斗内本回合先获得一些格挡（如打出防御牌）→ 点「结束回合」→ 回合结束瞬间格挡数字翻倍（敌方回合可见翻倍后的格挡）；配合「格挡跨回合不消失」能力验证翻倍后保留。
 
 ### C4 技能「每铸造一次，君王之剑永久获取1格挡」（储君，12 点，id=sovereign_blade_block_on_forge）
-- `Hook.AfterForge` → `ForgeCmd.GetSovereignBlades(forger, true)` 拿所有君王之剑
-- `DynamicVars.CalculationBase.BaseValue += 1`（君王之剑格挡 = Base + Extra×Parry，bump 基础值永久 +1，随卡牌跨战斗持久化，同游戏自身 AddDamage 机制）
+- **实现（v2，参考招架能力牌）**：君王之剑 OnPlay 仅在玩家有招架层数（`GetOwnerParryAmount > 0`）时才 GainBlock（IL 反编译确认）。初版 bump `CalculationBase` 被此门禁挡住 → 无效
+- 修复：`Hook.AfterForge` → `AbilityOperationHelper.AddSovereignBladeForgeParry`：铸造时玩家 +1 招架，存入 `s_boosts["parry"]`（持久化），每场战斗开始由 `ApplyInitialBoosts` 重新应用 → 君王之剑按招架层数获得格挡 = 铸造次数，跨战斗永久
+- `ApplyOnePower` 新增 `parry` → ParryPower 映射（通用 Power 应用方法，后续易伤/力量等效果同法扩展）
 
-**测试**：储君开局 → 购买该技能 → 铸造一次（如打出带铸造的牌或触发「每打出1张牌铸造1」）→ 手牌/牌组中的君王之剑格挡 +1（铸造动画后查看卡牌数值）；多次铸造格挡累加；进入下一场战斗后格挡加成仍在（永久）。
+**测试**：储君开局 → 购买该技能 → 铸造一次（如打出带铸造的牌）→ 君王之剑卡面格挡 +1（无招架时原为 0）；多次铸造格挡累加；进入下一场战斗后格挡加成仍在（招架每场战斗重新应用）。
 
 ### C5 技能「奥斯提会额外攻击一次」（亡灵契约师，15 点，id=osty_extra_attack）
 - `Hook.ModifyAttackHitCount`：`attackCommand.Attacker?.Monster is Osty` 时 `__result *= 2`

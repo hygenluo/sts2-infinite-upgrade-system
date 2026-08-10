@@ -9,6 +9,7 @@ using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
 
@@ -104,6 +105,7 @@ public static class AbilityOperationHelper
             "vigor" => "MegaCrit.Sts2.Core.Models.Powers.VigorPower",
             "weak" => "MegaCrit.Sts2.Core.Models.Powers.WeakPower",
             "poison" => "MegaCrit.Sts2.Core.Models.Powers.PoisonPower",
+            "parry" => "MegaCrit.Sts2.Core.Models.Powers.ParryPower",
             _ => null
         };
         if (typeName == null) return;
@@ -149,6 +151,21 @@ public static class AbilityOperationHelper
                 : ex;
             GD.PrintErr($"[IU] ApplyPower {key}: {inner}");
         }
+    }
+
+    /// <summary>
+    /// 技能「每铸造一次君王之剑永久+1格挡」：铸造时给玩家 +1 招架。
+    /// 君王之剑格挡 = 招架层数（CalculatedBlockVar，参照招架能力牌：OnPlay 仅在 GetOwnerParryAmount>0 时 GainBlock）。
+    /// 招架数作为持久 boost 存储（s_boosts["parry"]），每场战斗开始由 ApplyInitialBoosts 重新应用 → 跨战斗永久。
+    /// </summary>
+    public static async Task AddSovereignBladeForgeParry(Player player)
+    {
+        s_boosts.TryGetValue("parry", out int cur);
+        s_boosts["parry"] = cur + 1;
+        var seed = MegaCrit.Sts2.Core.Runs.RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
+        SaveCheckpoint(seed);
+        if (player?.Creature != null)
+            await ApplyOnePower(player.Creature, "parry", 1);
     }
 
     /// <summary>查找生物身上已应用的指定类型 Power（publicized 泛型方法反射调用）。</summary>
