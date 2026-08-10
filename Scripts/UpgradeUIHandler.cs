@@ -617,6 +617,8 @@ public sealed partial class UpgradeUIHandler : Control
             () => AbilityOperationHelper.GetBoost("blockKeep"), Purchase("blockKeep", 25), maxLevel: 1));
         _allItems.Add(StatItem("能力", "能量跨回合不消失", UpgradeLoc.ItemEnergyKeep, 25,
             () => AbilityOperationHelper.GetBoost("energyKeep"), Purchase("energyKeep", 25), maxLevel: 1));
+        _allItems.Add(StatItem("能力", "每当你击败一名敌人时，获取20金币", UpgradeLoc.ItemGoldOnKill, 7,
+            () => AbilityOperationHelper.GetBoost("gold_on_kill"), Purchase("gold_on_kill", 7), maxLevel: 1));
 
         // === 卡牌操作 (17)：Phase 2 移入牌组子面板 ===
         _allItems.Add(ActionItem("卡牌操作", "升级卡牌", UpgradeLoc.ItemCardUpgrade, CardOperationHelper.UpgradeCost,

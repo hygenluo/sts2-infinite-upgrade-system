@@ -268,3 +268,18 @@
 6. **火堆**：进入火堆 → +2~6
 7. **立即写盘**：进商店/问号房拿到点数后立刻退出游戏重进 → 点数保留（不回到上次战斗检查点）
 8. **读档/新局**：从地图进入新房间，标记位复位，后续战斗点数恢复正常
+
+### C2 能力「每当你击败一名敌人时，获取20金币」（7 点，key=gold_on_kill）
+- UI 注册：`StatItem("能力", ..., ItemGoldOnKill, 7, GetBoost("gold_on_kill"), Purchase("gold_on_kill",7), maxLevel:1)`（能力效果分类，第 6 项）
+- 补丁：`Scripts/Patches/GoldOnKillPatch.cs` — `[HarmonyPatch(Hook.AfterDeath)]` Postfix：`creature.IsEnemy`（排除友方宠物/奥斯提死亡）+ `wasRemovalPrevented` 为 false（死亡未被阻止）+ 已购能力 → `PlayerCmd.GainGold(20m, player)`
+- 击杀来源不限：攻击/中毒/自爆/Doom 致死的敌人都会触发（update05 访谈已确认接受此副作用）
+- `s_boosts["gold_on_kill"]` 走 abilities_<seed>.json 持久化，读档恢复
+
+**测试**（新开一局攒 7 点 → 购买该能力 → 进入战斗）：
+1. **普通击杀**：击杀 1 个普通怪 → 金币 +20
+2. **多怪战斗**：一场战斗击杀多个敌人 → 每个敌人 +20（2 个 = +40）
+3. **精英/Boss**：击杀同样触发 +20
+4. **事件战斗**：问号房遭遇战斗，击杀敌人也 +20
+5. **非攻击击杀**：毒杀/自爆击杀的敌人是否也 +20（验证副作用是否符合预期）
+6. **读档**：退出重进 → 能力仍在（金币能力生效）
+7. **上限**：该能力为一次性（购买后该行变已拥有/满级，不可重复购买）

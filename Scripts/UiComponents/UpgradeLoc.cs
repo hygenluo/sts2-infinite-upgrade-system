@@ -38,6 +38,7 @@ public static class UpgradeLoc
     public const string ItemForgePerTurn = "INFINITEUPGRADESYSTEM-ITEM_FORGE_PER_TURN";
     public const string ItemBlockKeep = "INFINITEUPGRADESYSTEM-ITEM_BLOCK_KEEP";
     public const string ItemEnergyKeep = "INFINITEUPGRADESYSTEM-ITEM_ENERGY_KEEP";
+    public const string ItemGoldOnKill = "INFINITEUPGRADESYSTEM-ITEM_GOLD_ON_KILL";
     public const string ItemCardUpgrade = "INFINITEUPGRADESYSTEM-ITEM_CARD_UPGRADE";
     public const string ItemAttackPlus = "INFINITEUPGRADESYSTEM-ITEM_ATTACK_PLUS";
     public const string ItemBlockPlus = "INFINITEUPGRADESYSTEM-ITEM_BLOCK_PLUS";
