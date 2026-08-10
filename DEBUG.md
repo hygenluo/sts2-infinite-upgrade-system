@@ -376,3 +376,9 @@
 10. **已知限制**：替换掉的附魔若有一次性 OnEnchant 副作用（如 TezcatarasEmber 减费）不会回滚
 
 > ⚠️ **测试重点**：合成附魔是本次 update05 风险最高的功能。请重点验证 6（读档还原）、8（战斗 Hook 附魔）、以及多种附魔同时生效时数值是否正确叠加。
+
+### C9 修复：附魔面板 GetTypes 崩溃
+- **现象**：点击「为一张卡牌新增附魔」→ 选完牌后报 `AddEnchantment: Unable to load one or more of the requested types`
+- **根因**：`EnchantSelectPanel.GetEnchantTypes()` 对**所有**程序集调用 `Assembly.GetTypes()`；Steamworks.NET 的 `OptionValue` 类型不可加载（对象字段对齐错误），`GetTypes()` 抛 `ReflectionTypeLoadException`（RitsuLib 日志 906 行同问题，它优雅跳过）
+- **修复**：只枚举游戏主程序集 `sts2`（附魔类型都在其中）+ try/catch 用 `ex.Types` 跳过不可加载项
+- **教训**：模组代码避免对 `AppDomain.GetAssemblies()` 全量 `GetTypes()`；用 `GetType(name)` 或限定程序集

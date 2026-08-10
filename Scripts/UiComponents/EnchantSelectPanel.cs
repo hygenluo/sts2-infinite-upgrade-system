@@ -146,16 +146,29 @@ public sealed partial class EnchantSelectPanel : Control
     private static List<string> GetEnchantTypes()
     {
         var result = new List<string>();
-        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        // 只枚举游戏主程序集 sts2（附魔类型都在其中），避免对 Steamworks.NET 等
+        // 程序集调用 GetTypes()（其 OptionValue 类型不可加载 → ReflectionTypeLoadException）。
+        var asm = AppDomain.CurrentDomain.GetAssemblies()
+            .FirstOrDefault(a => a.GetName().Name == "sts2");
+        if (asm == null) return result;
+
+        IEnumerable<Type> types;
+        try
         {
-            foreach (var t in asm.GetTypes())
-            {
-                if (t.Namespace != "MegaCrit.Sts2.Core.Models.Enchantments") continue;
-                if (!typeof(EnchantmentModel).IsAssignableFrom(t)) continue;
-                if (t.IsAbstract) continue;
-                if (t.Name == "DeprecatedEnchantment") continue;
-                result.Add(t.Name);
-            }
+            types = asm.GetTypes();
+        }
+        catch (System.Reflection.ReflectionTypeLoadException ex)
+        {
+            // 个别类型不可加载——跳过不可加载项
+            types = ex.Types.Where(t => t != null)!;
+        }
+
+        foreach (var t in types)
+        {
+            if (t.Namespace != "MegaCrit.Sts2.Core.Models.Enchantments") continue;
+            if (!typeof(EnchantmentModel).IsAssignableFrom(t)) continue;
+            if (t.IsAbstract || t.Name == "DeprecatedEnchantment") continue;
+            result.Add(t.Name);
         }
         return result.Distinct().OrderBy(n => n).ToList();
     }
