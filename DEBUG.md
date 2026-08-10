@@ -284,7 +284,7 @@
 6. **读档**：退出重进 → 能力仍在（金币能力生效）
 7. **上限**：该能力为一次性（购买后该行变已拥有/满级，不可重复购买）
 
-### C3 技能「你的回合开始时，获取力量2」（通用，12 点，id=str_at_turn_start）
+### C3 技能「你的回合开始时，获取2力量」（通用，12 点，id=str_at_turn_start）
 - 注册：`SkillItem(ClassTabBar.Generic, ..., ItemSkillStrAtTurnStart, "str_at_turn_start", 12)`（通用标签页，在「每回合开始时获取消耗牌堆数等量格挡」之后）
 - 补丁：`SkillEventPatches.cs` `SkillStrAtTurnStartPatch` — `[HarmonyPatch(Hook.AfterPlayerTurnStart)]` → `ApplyOnePower(player.Creature, "strength", 2)`
 - 与已有 `block_at_turn_start` 同款钩子（每回合触发，非仅首回合）；`ApplyOnePower` 已有同类 Power 时 SetAmount 叠加
