@@ -239,6 +239,31 @@ public static class SkillSummonAtTurnStartPatch
     }
 }
 
+/// <summary>你的回合开始时，随机获取1个充能球（故障机器人）。参照混沌卡 Chaos：OrbModel.GetRandomOrb + OrbCmd.Channel。</summary>
+[HarmonyPatch(typeof(Hook), nameof(Hook.AfterPlayerTurnStart))]
+public static class SkillOrbAtTurnStartPatch
+{
+    public static void Postfix(PlayerChoiceContext choiceContext, Player player)
+    {
+        SkillContextCache.Last = choiceContext;
+        if (player == null || !SkillRegistry.Has("orb_at_turn_start")) return;
+        _ = HandleAsync(choiceContext, player);
+    }
+
+    private static async Task HandleAsync(PlayerChoiceContext context, Player player)
+    {
+        try
+        {
+            var orb = OrbModel.GetRandomOrb(player.RunState.Rng.CombatOrbGeneration).ToMutable();
+            await OrbCmd.Channel(context, orb, player);
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[InfiniteUpgrade] Skill orb-at-turn-start error: {ex}");
+        }
+    }
+}
+
 /// <summary>
 /// 你可以在休息处选择任意数量的选项（通用，参照遗物 微型帐篷 MiniatureTent）。
 /// 休息处逻辑调用 Hook.ShouldDisableRemainingRestSiteOptions 决定是否禁用剩余选项；

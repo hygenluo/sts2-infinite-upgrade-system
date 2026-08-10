@@ -342,3 +342,14 @@
 2. **死亡复活**：若奥斯提死亡，回合开始以 2 点 MaxHp 复活（而非死着）
 3. **与打出牌召唤叠加**：同时拥有「每打出1张牌召唤1」时，两者都生效
 4. **跨战斗重置**：每场战斗重新从基础召唤数开始
+
+### C8 技能「你的回合开始时，随机获取1个充能球」（故障机器人，8 点，id=orb_at_turn_start）
+- 注册：`SkillItem(ClassTabBar.Defect, ..., ItemSkillOrbAtTurnStart, "orb_at_turn_start", 8)`（故障标签页，自动打出能力牌之后）
+- 补丁：`SkillOrbAtTurnStartPatch` — `[HarmonyPatch(Hook.AfterPlayerTurnStart)]` → `OrbCmd.Channel(context, OrbModel.GetRandomOrb(player.RunState.Rng.CombatOrbGeneration).ToMutable(), player)`
+- **参照混沌卡 Chaos**（原生随机充能球机制）：5 种球（闪电/冰霜/暗黑/玻璃/等离子）随机，走 `CombatOrbGeneration` RNG 流不扰动其它随机
+
+**测试**（故障机器人开局攒 8 点 → 购买该技能 → 进战斗）：
+1. **随机充能球**：回合开始 → 充能球栏出现 1 个球（闪电/冰霜/暗黑/玻璃/等离子随机）；多次战斗验证随机性
+2. **每回合一个**：第 2 回合再充能 1 个（栏位足够时）
+3. **栏位不足**：充能球栏满时继续充能 → 按游戏原生规则（虚空/替换）表现，不崩溃
+4. **与「回合结束每球伤害」叠加**：同时拥有该技能时，充能球越多，回合结束伤害越高
