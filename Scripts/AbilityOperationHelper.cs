@@ -34,6 +34,9 @@ public static class AbilityOperationHelper
 
     public static int GetBoost(string key) => s_boosts.TryGetValue(key, out int v) ? v : 0;
 
+    /// <summary>s_boosts 副本（供 UpgradeDataStore 旧档迁移，Step 1）。</summary>
+    public static Dictionary<string, int> SnapshotBoosts() => new(s_boosts);
+
     public static async Task ApplyImmediate(string key)
     {
         var player = CardOperationHelper.GetLocalPlayer();

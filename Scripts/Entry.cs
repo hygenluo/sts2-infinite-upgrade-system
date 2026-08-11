@@ -19,6 +19,9 @@ public static class Entry
         harmony.PatchAll(typeof(Entry).Assembly);
         ScriptManagerBridge.LookupScriptsInAssembly(typeof(Entry).Assembly);
 
+        // 注册 RitsuLib 每玩家数据槽位（须在 RunStateHook.Subscribe 前）
+        UpgradeDataStore.Register();
+
         // 订阅游戏生命周期事件（直接 C# 事件，非 Harmony）
         RunStateHook.Subscribe();
 

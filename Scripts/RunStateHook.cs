@@ -108,6 +108,7 @@ public static class RunStateHook
         AbilityOperationHelper.Load(seed);
         SkillRegistry.Load(seed);
         AbilityOperationHelper.ResetForNewRun();
+        UpgradeDataStore.SeedFromLegacy(runState); // 旧 JSON → store（只填不覆盖，Step 1）
         var player = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault();
         if (player != null)
         {

@@ -35,6 +35,9 @@ public static class SkillRegistry
         return false;
     }
 
+    /// <summary>s_levels 副本（供 UpgradeDataStore 旧档迁移，Step 1）。</summary>
+    public static Dictionary<string, int> SnapshotLevels() => new(s_levels);
+
     public static void AddCombatPlay() => s_combatPlayCount++;
     public static void ResetCombatPlay() => s_combatPlayCount = 0;
 
