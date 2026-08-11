@@ -117,15 +117,35 @@ public static class UpgradeDataStore
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // 旧档迁移（Step 1：只填不覆盖；Step 5 切换读取）
+    // RunStarted 同步（Step 5：store 权威优先）
     // ═══════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// RunStarted 时把旧 JSON（points/skills/abilities）迁移给本地玩家。
-    /// store 已有该玩家数据（多人重连/读档，host 权威）则跳过，不覆盖。
+    /// RunStarted 时同步本地玩家数据：
+    /// - store 已有该玩家数据（RitsuLib 从 run save 恢复，权威）→ 用 store 刷新本地缓存；
+    /// - store 为空（新局 / 旧档）→ 从旧 JSON（静态容器）填 store 并刷新缓存。
+    /// </summary>
+    public static void SyncOnRunStarted(RunState runState)
+    {
+        if (Slots == null || runState == null) return;
+        var local = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault();
+        if (local == null) return;
+        if (Slots.TryGet(runState, local.NetId, out _))
+        {
+            RefreshLocalCache(local);
+            Log.Info("InfiniteUpgradeSystem: RunStarted — store has authoritative data, cache synced from store.");
+        }
+        else
+        {
+            SeedFromLegacy(runState);
+        }
+    }
+
+    /// <summary>
+    /// 旧 JSON（points/skills/abilities）迁移给本地玩家。store 已有该玩家数据则跳过，不覆盖。
     /// 旧 JSON 是单机语义，数据归本地玩家。
     /// </summary>
-    public static void SeedFromLegacy(RunState runState)
+    private static void SeedFromLegacy(RunState runState)
     {
         if (Slots == null || runState == null) return;
         var local = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault();

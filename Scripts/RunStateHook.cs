@@ -41,6 +41,8 @@ public static class RunStateHook
         AbilityOperationHelper.ApplyInitialBoosts(state);
         AbilityOperationHelper.ApplyStarsAtCombatStart(state);
         ApplySkillCombatStartPowers(state);
+        // 以下 SaveCheckpoint 写本机 JSON 镜像（单人崩溃恢复/旧档迁移源），
+        // 权威数据在 RitsuLib store（随 run 存档自动持久化）。
         UpgradePointManager.SaveCheckpoint();
         var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
         CardUpgradeTracker.SaveCheckpoint(seed);
@@ -124,7 +126,7 @@ public static class RunStateHook
         AbilityOperationHelper.Load(seed);
         SkillRegistry.Load(seed);
         AbilityOperationHelper.ResetForNewRun();
-        UpgradeDataStore.SeedFromLegacy(runState); // 旧 JSON → store（只填不覆盖，Step 1）
+        UpgradeDataStore.SyncOnRunStarted(runState); // store 权威优先；空则旧 JSON 迁移
         var player = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault();
         if (player != null)
         {
