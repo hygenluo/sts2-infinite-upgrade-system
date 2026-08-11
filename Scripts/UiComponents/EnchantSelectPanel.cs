@@ -180,7 +180,10 @@ public sealed partial class EnchantSelectPanel : Control
         string text;
         try
         {
-            text = canonical.DynamicDescription.GetFormattedText();
+            // 用原版数值显示描述（canonical 的 Amount 为 0，直接格式化会显示 +0）
+            var mutable = canonical.ToMutable();
+            mutable.Amount = CardOperationHelper.GetOriginalAmount(canonical.GetType().Name);
+            text = mutable.DynamicDescription.GetFormattedText();
         }
         catch
         {

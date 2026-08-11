@@ -420,3 +420,16 @@
 - **根因 2（多附魔标记）**：NCard 只显示一个附魔标记（`%Enchantment/Icon` 单图标）
   - **修复**：`NCardEnchantMarkersPatch`（Harmony on `NCard.UpdateEnchantmentVisuals` Postfix）——合成附魔有多个子附魔时，为第 2 个起每个子附魔追加一个图标标记堆叠在下方；`ConditionalWeakTable` 按卡牌实例跟踪，可视化更新时先清理旧标记
 - **遗留风险**：`%Enchantment` 若为自动布局容器，手动定位可能被覆盖（需实测）；多标记无独立层数标签
+
+### C9 修复 v7：附魔数值同步游戏原版
+- **根因**：`CreateEnchantmentSub` 固定 `ApplyInternal(card, 1m)` → 所有附魔都是 1 层；而游戏原版施加附魔带特定数值
+- **原版数值**（反编译游戏施加源确认）：
+  - 动量 Momentum=**5**（PunchDagger 遗物 `DynamicVar("Momentum", 5m)`）
+  - 锋利 Sharp=**2**、敏捷 Nimble=**2**（SelfHelpBook 事件）
+  - 迅捷 Swift=**3**（BeautifulBracelet 遗物）
+  - 阿德罗伊特 Adroit=**3**（Kifuda 遗物）
+  - 强壮 Vigorous=**8**（StoneOfAllTime 事件）
+  - 克隆 Clone=**4**（PaelsGrowth 遗物）
+  - 其余（腐化/招架/青睐/沉眠精华等数值不随层数变化的）默认 **1**
+- **修复**：`GetOriginalAmount(type)` 查表；`CreateEnchantmentSub` 用原版数值；同种叠加 `existing.Amount += sub.Amount`（每次购买施加原版数值）；附魔面板 tooltip 用 `ToMutable()` + 原版数值显示描述（否则 canonical Amount=0 显示 +0）
+- **生效**：描述 `{Amount}` 与效果都显示原版数值，一致

@@ -572,7 +572,7 @@ public static class CardOperationHelper
         var existing = composite.Subs.FirstOrDefault(s => s.GetType() == sub.GetType());
         if (existing != null)
         {
-            existing.Amount += 1;
+            existing.Amount += sub.Amount; // 同种叠加：每次购买施加原版数值
             existing.RecalculateValues();
         }
         else
@@ -608,7 +608,7 @@ public static class CardOperationHelper
         }
     }
 
-    /// <summary>创建子附魔可变实例并挂到卡牌（设 Card + Amount，不触发 OnEnchant）。</summary>
+    /// <summary>创建子附魔可变实例并挂到卡牌（设 Card + Amount=原版数值，不触发 OnEnchant）。</summary>
     private static EnchantmentModel? CreateEnchantmentSub(CardModel card, string enchantType)
     {
         var type = FindEnchantmentType(enchantType);
@@ -616,9 +616,30 @@ public static class CardOperationHelper
         var canonical = GetCanonicalEnchantment(type);
         if (canonical == null) return null;
         var sub = (EnchantmentModel)canonical.ToMutable();
-        sub.ApplyInternal(card, 1m);
+        sub.ApplyInternal(card, GetOriginalAmount(enchantType));
         return sub;
     }
+
+    /// <summary>
+    /// 附魔原版数值（与游戏施加源一致，反编译确认）：
+    /// 动量 5（PunchDagger 遗物）、锋利 2 / 敏捷 2（SelfHelpBook 事件）、
+    /// 迅捷 3（BeautifulBracelet 遗物）、阿德罗伊特 3（Kifuda 遗物）、
+    /// 强壮 8（StoneOfAllTime 事件）、克隆 4（PaelsGrowth 遗物），其余默认 1。
+    /// 数值不随层数变化的附魔（青睐/沉眠精华等）用 1 即可。
+    /// </summary>
+    public static int GetOriginalAmount(string enchantType)
+        => s_originalAmounts.TryGetValue(enchantType, out var v) ? v : 1;
+
+    private static readonly Dictionary<string, int> s_originalAmounts = new()
+    {
+        ["Momentum"] = 5,
+        ["Sharp"] = 2,
+        ["Nimble"] = 2,
+        ["Swift"] = 3,
+        ["Adroit"] = 3,
+        ["Vigorous"] = 8,
+        ["Clone"] = 4,
+    };
 
     private static Type? FindEnchantmentType(string name)
     {
