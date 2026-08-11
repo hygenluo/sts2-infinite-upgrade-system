@@ -25,19 +25,17 @@ public static class AbilityOperationHelper
     private static readonly JsonSerializerOptions s_jsonOptions = new() { PropertyNameCaseInsensitive = true };
     private static bool s_appliedThisRun;
 
-    public static bool TryPurchase(string key, int cost)
+    /// <summary>购买能力（方案 B）：扣点 + 加 boost 写入指定玩家的 store。由同步 action 两端执行。</summary>
+    public static bool TryPurchase(Player player, string key, int cost)
     {
-        var player = CardOperationHelper.GetLocalPlayer();
         if (player == null) return false;
         if (UpgradeDataStore.GetPoints(player) < cost) return false;
-        // 方案 B：扣点 + 加 boost 一并写入 store（Mutate 刷新本地缓存）
         UpgradeDataStore.Mutate(player, d =>
         {
             d.Points -= cost;
             d.Boosts.TryGetValue(key, out int cur);
             d.Boosts[key] = cur + 1;
         });
-        // 每次购买立即写盘，避免中途退出丢失
         var seed = MegaCrit.Sts2.Core.Runs.RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
         SaveCheckpoint(seed);
         return true;
@@ -48,9 +46,9 @@ public static class AbilityOperationHelper
     /// <summary>s_boosts 副本（供 UpgradeDataStore 旧档迁移，Step 1）。</summary>
     public static Dictionary<string, int> SnapshotBoosts() => new(s_boosts);
 
-    public static async Task ApplyImmediate(string key)
+    /// <summary>购买即时生效能力（hp/energy/orbSlot）。由同步 action 两端执行。</summary>
+    public static async Task ApplyImmediate(Player player, string key)
     {
-        var player = CardOperationHelper.GetLocalPlayer();
         if (player == null) return;
         int count = UpgradeDataStore.GetBoost(player, key);
         if (count <= 0) return;

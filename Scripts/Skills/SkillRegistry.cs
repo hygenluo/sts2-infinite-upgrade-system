@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using Godot;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Runs;
 
@@ -56,15 +57,14 @@ public static class SkillRegistry
     public static bool Has(string id) => GetLevel(id) > 0;
 
     /// <summary>
-    /// 购买：扣点 → 升级（不超过 maxLevel）→ 立即写盘。点数不足/已满级返回 false。
-    /// 方案 B：扣点 + 技能等级一并写入每玩家 store（Mutate 刷新本地缓存）。
+    /// 购买技能（方案 B）：扣点 + 技能等级写入指定玩家的 store。由同步 action 两端执行。
+    /// 点数不足/已满级返回 false。
     /// </summary>
-    public static bool TryPurchase(string id, int cost, int maxLevel = 1)
+    public static bool TryPurchase(Player player, string id, int cost, int maxLevel = 1)
     {
-        var player = CardOperationHelper.GetLocalPlayer();
         if (player == null) return false;
         if (UpgradeDataStore.GetPoints(player) < cost) return false;
-        if (GetLevel(id) >= maxLevel) return false; // 已满级：不扣点
+        if (UpgradeDataStore.GetLevel(player, id) >= maxLevel) return false; // 已满级：不扣点
         UpgradeDataStore.Mutate(player, d =>
         {
             d.Points -= cost;

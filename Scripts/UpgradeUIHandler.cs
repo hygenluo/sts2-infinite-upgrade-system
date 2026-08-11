@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Godot;
+using InfiniteUpgradeSystem.Multiplayer;
 using InfiniteUpgradeSystem.UiComponents;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Cards;
@@ -743,11 +744,11 @@ public sealed partial class UpgradeUIHandler : Control
         MaxLevel = 1,
         LevelProvider = () => SkillRegistry.GetLevel(skillId),
         ValueText = valueText ?? (() => SkillRegistry.Has(skillId) ? "已拥有" : "未拥有"),
-        OnClick = () =>
+        OnClick = async () =>
         {
-            var ok = SkillRegistry.TryPurchase(skillId, cost);
+            var ok = await UpgradePurchaseFlow.EnqueuePurchase(skillId, cost, isSkill: true, isImmediate: false);
             if (ok) RefreshPointsLabel();
-            return Task.FromResult(ok);
+            return ok;
         },
         SearchText = BuildSearchText("技能", locKey, fallbackName),
     };
@@ -769,21 +770,20 @@ public sealed partial class UpgradeUIHandler : Control
         SearchText = BuildSearchText("测试操作", locKey, fallbackName),
     };
 
-    /// <summary>能力购买 OnClick（扣点即写盘 + 刷新点数，返回是否成功）。</summary>
-    private Func<Task<bool>> Purchase(string key, int cost) => () =>
+    /// <summary>能力购买 OnClick（走同步 action，两端一致后刷新点数，返回是否成功）。</summary>
+    private Func<Task<bool>> Purchase(string key, int cost) => async () =>
     {
-        if (!AbilityOperationHelper.TryPurchase(key, cost)) return Task.FromResult(false);
-        RefreshPointsLabel();
-        return Task.FromResult(true);
+        var ok = await UpgradePurchaseFlow.EnqueuePurchase(key, cost, isSkill: false, isImmediate: false);
+        if (ok) RefreshPointsLabel();
+        return ok;
     };
 
     /// <summary>能力购买 + 立即生效（hp/energy/orbSlot）。</summary>
     private Func<Task<bool>> PurchaseImmediate(string key, int cost) => async () =>
     {
-        if (!AbilityOperationHelper.TryPurchase(key, cost)) return false;
-        await AbilityOperationHelper.ApplyImmediate(key);
-        RefreshPointsLabel();
-        return true;
+        var ok = await UpgradePurchaseFlow.EnqueuePurchase(key, cost, isSkill: false, isImmediate: true);
+        if (ok) RefreshPointsLabel();
+        return ok;
     };
 
     /// <summary>升级卡牌流程（选牌取消自动退款并恢复面板）。</summary>
