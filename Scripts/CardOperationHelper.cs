@@ -560,6 +560,7 @@ public static class CardOperationHelper
             Log.Warn($"InfiniteUpgrade: cannot create enchantment {enchantType} for {card.Id.Entry}.");
             return false;
         }
+        Godot.GD.Print($"[IU-Ench] create sub {enchantType} on {card.Id.Entry}: Amount={sub.Amount}");
 
         var composite = card.Enchantment as CompositeEnchantment;
         if (composite == null)
