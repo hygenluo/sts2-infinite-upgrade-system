@@ -1,12 +1,12 @@
 using System;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Runs;
 
 namespace InfiniteUpgradeSystem;
 
 /// <summary>
 /// 升级点数管理器。
-/// 修改只在内存中进行，SaveCheckpoint() 才写入磁盘。
-/// 配合 RunStateHook 在战斗开始/结束时保存检查点。
+/// 修改写入每玩家 store（RitsuLib），CurrentPoints 仅是本地玩家缓存（UI 读取）。
 /// </summary>
 public static class UpgradePointManager
 {
@@ -23,10 +23,16 @@ public static class UpgradePointManager
 
     public static void AddPoints(int amount)
     {
+        var player = CardOperationHelper.GetLocalPlayer();
+        if (player == null) return;
+        AddPoints(player, amount);
+    }
+
+    /// <summary>给指定玩家加点（方案 B：写入该玩家 store，Mutate 刷新本地缓存）。</summary>
+    public static void AddPoints(Player player, int amount)
+    {
         if (amount < 0)
             throw new ArgumentException("Amount must be non-negative.", nameof(amount));
-        // 方案 B：点数写入每玩家 store（Mutate 内部刷新本地缓存 CurrentPoints）
-        var player = CardOperationHelper.GetLocalPlayer();
         if (player == null) return;
         UpgradeDataStore.Mutate(player, d => d.Points += amount);
         SaveCheckpoint(); // 点数变化立即写盘，避免中途退出丢失

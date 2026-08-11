@@ -1,7 +1,9 @@
+using System;
 using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Random;
@@ -67,27 +69,37 @@ public static class RunStateHook
     private static void OnCombatWon(CombatRoom room)
     {
         if (room == null) return;
+        var state = RunManager.Instance?.State;
+        if (state == null) return;
 
-        int points;
-        if (s_enteredEventRoom)
+        bool isEvent = s_enteredEventRoom;
+        s_enteredEventRoom = false;
+        int total = 0;
+        foreach (var player in state.Players)
         {
-            // 问号房只获取问号房点数：战斗胜利不再额外发放（update05 规则，进入时已发）
-            points = 0;
-            s_enteredEventRoom = false;
-        }
-        else
-        {
-            points = room.RoomType switch
+            if (player == null) continue;
+            int points;
+            if (isEvent)
             {
-                RoomType.Monster => Roll(1, 3),
-                RoomType.Elite => Roll(5, 7),
-                RoomType.Boss => Roll(25, 30),
-                _ => 0
-            };
+                // 问号房只获取问号房点数：战斗胜利不再额外发放（update05 规则，进入时已发）
+                points = 0;
+            }
+            else
+            {
+                points = room.RoomType switch
+                {
+                    RoomType.Monster => Roll(player, 1, 3),
+                    RoomType.Elite => Roll(player, 5, 7),
+                    RoomType.Boss => Roll(player, 25, 30),
+                    _ => 0
+                };
+            }
+            if (points > 0)
+            {
+                UpgradePointManager.AddPoints(player, points);
+                total += points;
+            }
         }
-
-        if (points > 0)
-            UpgradePointManager.AddPoints(points);
 
         UpgradePointManager.SaveCheckpoint();
         var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
@@ -95,7 +107,7 @@ public static class RunStateHook
         AbilityOperationHelper.SaveCheckpoint(seed);
         SkillRegistry.SaveCheckpoint(seed);
         AbilityOperationHelper.ResetForNextCombat();  // 下场战斗重新应用初始能力
-        GD.Print($"[InfiniteUpgrade] Checkpoint SAVED (combat won, +{points}) — pts={UpgradePointManager.CurrentPoints}");
+        GD.Print($"[InfiniteUpgrade] Checkpoint SAVED (combat won, +{total}) — pts={UpgradePointManager.CurrentPoints}");
     }
 
     private static void OnRunStarted(RunState runState)
@@ -122,11 +134,19 @@ public static class RunStateHook
     }
 
     /// <summary>
-    /// 随机区间（含两端）。用全局 Chaotic RNG：点数纯 mod 内部数据，不必跟随 run 种子，
-    /// 且避免扰动 run RNG 各流（Niche 等）的确定性。
+    /// 随机区间（含两端）。方案 B：确定性哈希（seed + 玩家 NetId + ActFloor + 房间坐标），
+    /// 不依赖 Rng.Chaotic（两端随机不同 → 点数分歧），也不扰动 run RNG 各流的确定性。
+    /// 同一玩家在同一房间的同一时刻，两端计算一致。
     /// </summary>
-    internal static int Roll(int min, int maxInclusive) =>
-        Rng.Chaotic.NextInt(min, maxInclusive + 1);
+    internal static int Roll(Player player, int min, int maxInclusive)
+    {
+        var state = RunManager.Instance?.State;
+        if (state == null || player == null) return min;
+        string mapCoord = state.CurrentMapCoord?.ToString() ?? "none";
+        long h = unchecked(HashCode.Combine(state.Rng.StringSeed, player.NetId, state.ActFloor, mapCoord));
+        int range = maxInclusive - min + 1;
+        return min + (int)(((ulong)h) % (uint)range);
+    }
 
     /// <summary>房间进入回调（update05 问号房/商店/火堆点数）。</summary>
     public static void NotifyRoomEntered(bool isEventRoom) => s_enteredEventRoom = isEventRoom;
@@ -144,19 +164,27 @@ public static class RoomEntryPointsPatch
     {
         if (room == null || runState == null) return;
 
-        int points = room.RoomType switch
+        var (min, max) = room.RoomType switch
         {
-            RoomType.Event => RunStateHook.Roll(1, 5),
-            RoomType.Shop => RunStateHook.Roll(1, 5),
-            RoomType.RestSite => RunStateHook.Roll(2, 6),
-            _ => 0
+            RoomType.Event => (1, 5),
+            RoomType.Shop => (1, 5),
+            RoomType.RestSite => (2, 6),
+            _ => (0, 0)
         };
 
         RunStateHook.NotifyRoomEntered(room.RoomType == RoomType.Event);
-        if (points > 0)
+        if (max <= 0) return;
+        var state = RunManager.Instance?.State;
+        if (state == null) return;
+        foreach (var player in state.Players)
         {
-            UpgradePointManager.AddPoints(points);
-            GD.Print($"[InfiniteUpgrade] Room entry +{points} ({room.RoomType}) — pts={UpgradePointManager.CurrentPoints}");
+            if (player == null) continue;
+            int points = RunStateHook.Roll(player, min, max);
+            if (points > 0)
+            {
+                UpgradePointManager.AddPoints(player, points);
+                GD.Print($"[InfiniteUpgrade] Room entry +{points} ({room.RoomType}) — pts={UpgradePointManager.CurrentPoints}");
+            }
         }
     }
 }
