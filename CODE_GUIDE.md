@@ -12,6 +12,7 @@ Scripts/
 ├── AbilityOperationHelper.cs     # 能力操作引擎 (11项 + Power 应用)
 ├── RunStateHook.cs               # 游戏生命周期 + 检查点持久化
 ├── PointsPersistence.cs          # 点数 JSON 持久化
+├── UpgradeDataStore.cs           # 每玩家数据（RitsuLib PlayerRunSavedData，store 权威）
 ├── Skills/
 │   ├── SkillRegistry.cs          # 技能注册表（等级化 + 计数 + skills_<seed>.json 持久化）
 │   ├── SkillCombatPatches.cs     # 打出牌触发类 9 项（AfterCardPlayed/AfterHandEmptied）
@@ -24,6 +25,8 @@ Scripts/
 │   ├── CollapsibleSection.cs     # 折叠分区（可见性切换 + 淡入 + 箭头旋转）
 │   ├── ClassTabBar.cs            # 技能 6 职业标签页
 │   └── UpgradeTopBar.cs          # 顶栏（标题/点数/关闭）
+├── Multiplayer/
+│   └── UpgradePurchaseAction.cs  # 购买同步 action（INetAction+GameAction，两端执行同一购买）
 └── Patches/
     ├── EnergyKeepPatch.cs        # Harmony Postfix: 能量跨回合保留
     └── LocStringPromptPatch.cs   # Harmony Postfix: 模组 key 本地化解析（专属选牌提示）
@@ -40,7 +43,9 @@ Scripts/
 | `UpgradeUIHandler.cs` | UI 面板 | `BuildUI()`, `PopulateItems()`, 搜索/拖拽/29按钮 |
 | `CardOperationHelper.cs` | 卡牌操作 | `PerformInfiniteUpgrade()`, `ModifyDamage()`, `ToggleKeyword()` 等 |
 | `CardUpgradeTracker.cs` | 修改追踪 | `RecordModification()`, `ReapplyAll()`, 按 cardIdentity (TemplateId__实例序号) 追踪 |
-| `AbilityOperationHelper.cs` | 能力操作 | `TryPurchase()`, `ApplyInitialBoosts()`, `ApplyOnePower()` |
+| `AbilityOperationHelper.cs` | 能力操作 | `TryPurchase(player,key,cost)`, `ApplyInitialBoosts(state)`, `ApplyPower()`（走 PowerCmd.Apply） |
+| `UpgradeDataStore.cs` | 每玩家数据（RitsuLib） | `Register()`, `For(player)`, `Mutate()`, `SyncOnRunStarted()` |
+| `Multiplayer/UpgradePurchaseAction.cs` | 购买同步 action | `UpgradePurchaseFlow.EnqueuePurchase()`, `UpgradePurchaseAction.ExecuteAction()` |
 | `Patches/EnergyKeepPatch.cs` | 能量保留 | Harmony Postfix on `Hook.ShouldPlayerResetEnergy` → 否决能量重置 |
 
 ## 核心流程

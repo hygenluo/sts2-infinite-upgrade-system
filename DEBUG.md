@@ -433,3 +433,43 @@
   - 其余（腐化/招架/青睐/沉眠精华等数值不随层数变化的）默认 **1**
 - **修复**：`GetOriginalAmount(type)` 查表；`CreateEnchantmentSub` 用原版数值；同种叠加 `existing.Amount += sub.Amount`（每次购买施加原版数值）；附魔面板 tooltip 用 `ToMutable()` + 原版数值显示描述（否则 canonical Amount=0 显示 +0）
 - **生效**：描述 `{Amount}` 与效果都显示原版数值，一致
+
+---
+
+## 多人状态分歧修复（方案 B，2026-08-12）
+
+- **现象**：联机（host=储君 / client=铁甲战士，seed=JLJKNR5E036E）出现状态分歧，
+  RitsuLib 报告 checksum 130 分歧（host 3280196070 / client 2200132544），唯一实质差异是
+  **host 的储君身上多了 `PARRY_POWER(招架):1`，client 没有**。
+- **根因**：
+  1. `ApplyOnePower`（AbilityOperationHelper）反射直调 `PowerModel.ApplyInternal`，绕过游戏原生
+     同步入口 `PowerCmd.Apply<T>`（后者走 Before/AfterPowerAmountChanged 等 Hook 链）
+  2. `RunStateHook.OnCombatSetUp → ApplyInitialBoosts`（async void）用 `GetLocalPlayer()` 只给
+     "本地玩家的角色"施加 boost，数据来自各端本地 `abilities_<seed>.json`；两端 GetLocalPlayer
+     返回不同玩家 + 数据不同 → 对同一角色状态认知不同
+  3. 追加分歧源：`Rng.Chaotic` 点数随机（两端值不同）、`s_combatPlayCount` 静态计数、
+     多个 GetLocalPlayer 分叉（EnergyKeep/GoldOnKill/毒格挡/自动打牌等）
+  4. 环境：对端缺 RitsuLib（non-gameplay，游戏不强校验），两端同步协议不对称
+- **方案 B（已实施）**：把 mod 状态变成「确定性 hook / 同步 action 的派生结果」，存储只是镜像
+  1. 每玩家数据（点数/技能/能力）存 RitsuLib `PlayerRunSavedData<PlayerUpgradeData>`（按 NetId 分槽）
+     → `Scripts/UpgradeDataStore.cs`；静态容器降级为本地玩家缓存（Mutate 自动刷新）
+  2. `ApplyOnePower` → `ApplyPower`：走 `PowerCmd.Apply<T>`（publicized 签名带 PlayerChoiceContext，
+     context 兜底 SkillContextCache.Last / BlockingPlayerChoiceContext）
+  3. 战斗开始三件套（boosts/stars/free_first_card）改遍历所有玩家按各自 store 施加
+  4. 全部 skill/ability hook 分叉修复：主题玩家 = card.Owner/target.Player/applier.Player/forger/
+     hook 参数；无主题遍历所有玩家
+  5. 购买走自定义同步 action（`Scripts/Multiplayer/UpgradePurchaseAction.cs`）：
+     `NetUpgradePurchaseAction`（INetAction+IPacketSerializable）+ `UpgradePurchaseAction`
+     （GameAction，ActionType.Any，两端同 action id 执行同一购买）；UI 改走
+     `UpgradePurchaseFlow.EnqueuePurchase`
+  6. 点数随机改确定性哈希：`HashCode.Combine(StringSeed, player.NetId, ActFloor, CurrentMapCoord)`
+  7. store 权威优先：`SyncOnRunStarted` —— store 有数据（RitsuLib 从 run save 恢复）用其刷新缓存，
+     否则从旧 JSON（静态容器）迁移；修复读档后缓存与 store 不一致
+- **行为变化（需验证）**：
+  - `PowerCmd.Apply` 会触发 AfterPowerAmountChanged 等 Hook（旧反射 ApplyInternal 不触发）
+    → 中毒施加可能额外触发 block_on_poison 等技能，需逐技能回归
+  - 购买从同步回调改为同步 action（异步入队 + await CompletionTask），UI 有短暂等待
+  - 点数发放从 Rng.Chaotic 改为确定性哈希，同 seed 重开点数一致
+- **依赖**：新增 RitsuLib（NuGet `STS2.RitsuLib`，版本 `*`；manifest 声明 `STS2-RitsuLib` v0.5.11）；
+  **联机双方必须装齐 mod（含 RitsuLib）**，否则 store 不可用（降级为空，购买/点数失效）
+- **待办**：单人回归测试 + 双端多人联调（Step 6）
