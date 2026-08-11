@@ -1,4 +1,5 @@
 using System;
+using Godot;
 using HarmonyLib;
 using InfiniteUpgradeSystem.UiComponents;
 using MegaCrit.Sts2.Core.Localization;
