@@ -39,48 +39,48 @@ public static class SkillCardPlayPatch
             SkillRegistry.AddCombatPlay();
             if (SkillRegistry.AnyOwned())
                 GD.Print($"[IU-Skill] AfterCardPlayed: plays={SkillRegistry.CombatPlayCount} " +
-                         $"block={SkillRegistry.Has("block_on_play")} str4={SkillRegistry.Has("strength_every_4_plays")} " +
-                         $"agi4={SkillRegistry.Has("agility_every_4_plays")} forge={SkillRegistry.Has("forge_on_play")} " +
-                         $"vigor={SkillRegistry.Has("vigor_on_skill_play")} summon={SkillRegistry.Has("summon_on_play")} " +
-                         $"ethereal={SkillRegistry.Has("dmg_on_ethereal_play")} power={SkillRegistry.Has("draw_on_power_play")}");
+                         $"block={UpgradeDataStore.HasSkill(player, "block_on_play")} str4={UpgradeDataStore.HasSkill(player, "strength_every_4_plays")} " +
+                         $"agi4={UpgradeDataStore.HasSkill(player, "agility_every_4_plays")} forge={UpgradeDataStore.HasSkill(player, "forge_on_play")} " +
+                         $"vigor={UpgradeDataStore.HasSkill(player, "vigor_on_skill_play")} summon={UpgradeDataStore.HasSkill(player, "summon_on_play")} " +
+                         $"ethereal={UpgradeDataStore.HasSkill(player, "dmg_on_ethereal_play")} power={UpgradeDataStore.HasSkill(player, "draw_on_power_play")}");
 
             // 1. 每打出1张牌，都获得1格挡
-            if (SkillRegistry.Has("block_on_play"))
+            if (UpgradeDataStore.HasSkill(player, "block_on_play"))
                 await CreatureCmd.GainBlock(player.Creature, 1m, default, null, false);
 
             // 2/3. 每当打出4张牌，获得1敏捷/力量（计数 4 的倍数触发）
             if (SkillRegistry.CombatPlayCount % 4 == 0)
             {
-                if (SkillRegistry.Has("agility_every_4_plays"))
-                    await AbilityOperationHelper.ApplyOnePower(player.Creature, "dexterity", 1);
-                if (SkillRegistry.Has("strength_every_4_plays"))
-                    await AbilityOperationHelper.ApplyOnePower(player.Creature, "strength", 1);
+                if (UpgradeDataStore.HasSkill(player, "agility_every_4_plays"))
+                    await AbilityOperationHelper.ApplyPower(player.Creature, "dexterity", 1);
+                if (UpgradeDataStore.HasSkill(player, "strength_every_4_plays"))
+                    await AbilityOperationHelper.ApplyPower(player.Creature, "strength", 1);
             }
 
             // 4. 每打出1张牌时，铸造1
-            if (SkillRegistry.Has("forge_on_play"))
+            if (UpgradeDataStore.HasSkill(player, "forge_on_play"))
                 await ForgeCmd.Forge(1m, player, card);
 
             // 5. 每打出1张技能牌时，获得2点活力
-            if (SkillRegistry.Has("vigor_on_skill_play") && card.Type == CardType.Skill)
-                await AbilityOperationHelper.ApplyOnePower(player.Creature, "vigor", 2);
+            if (UpgradeDataStore.HasSkill(player, "vigor_on_skill_play") && card.Type == CardType.Skill)
+                await AbilityOperationHelper.ApplyPower(player.Creature, "vigor", 2);
 
             // 6. 每打出1张牌时，召唤1
-            if (SkillRegistry.Has("summon_on_play"))
+            if (UpgradeDataStore.HasSkill(player, "summon_on_play"))
                 await OstyCmd.Summon(context, player, 1m, card);
 
             // 7. 每打出1张虚无牌，对所有敌人造成3点伤害
-            if (SkillRegistry.Has("dmg_on_ethereal_play") && card.Keywords.Contains(CardKeyword.Ethereal))
+            if (UpgradeDataStore.HasSkill(player, "dmg_on_ethereal_play") && card.Keywords.Contains(CardKeyword.Ethereal))
                 await CreatureCmd.Damage(context, state.Enemies, 3m, default, player.Creature);
 
             // 8. 每打出1张能力牌，抽一张牌
-            if (SkillRegistry.Has("draw_on_power_play") && card.Type == CardType.Power)
+            if (UpgradeDataStore.HasSkill(player, "draw_on_power_play") && card.Type == CardType.Power)
                 await CardPileCmd.Draw(context, player);
 
             // 9. 每打出1张牌，给予所有敌人1层中毒
-            if (SkillRegistry.Has("poison_all_on_card_play"))
+            if (UpgradeDataStore.HasSkill(player, "poison_all_on_card_play"))
                 foreach (var enemy in state.Enemies)
-                    await AbilityOperationHelper.ApplyOnePower(enemy, "poison", 1);
+                    await AbilityOperationHelper.ApplyPower(enemy, "poison", 1);
         }
         catch (Exception ex)
         {
@@ -103,7 +103,7 @@ public static class SkillHandEmptyPatch
     // 参数名与原方法一致（choiceContext/player）
     public static void Postfix(PlayerChoiceContext choiceContext, Player player)
     {
-        if (player == null || !SkillRegistry.Has("draw_when_no_hand")) return;
+        if (player == null || !UpgradeDataStore.HasSkill(player, "draw_when_no_hand")) return;
         _ = HandleAsync(choiceContext, player);
     }
 
@@ -126,8 +126,9 @@ public static class SkillOstyDoubleAttackPatch
 {
     public static void Postfix(ICombatState combatState, AttackCommand attackCommand, ref decimal __result)
     {
-        if (!SkillRegistry.Has("osty_extra_attack")) return;
-        if (attackCommand?.Attacker?.Monster is Osty)
+        var owner = attackCommand?.Attacker?.Player;
+        if (owner == null || !UpgradeDataStore.HasSkill(owner, "osty_extra_attack")) return;
+        if (attackCommand!.Attacker!.Monster is Osty)
             __result *= 2m;
     }
 }

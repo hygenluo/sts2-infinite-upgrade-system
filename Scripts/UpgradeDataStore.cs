@@ -93,12 +93,27 @@ public static class UpgradeDataStore
     public static PlayerUpgradeData? Mutate(Player player, Action<PlayerUpgradeData> mutate)
     {
         if (Slots == null || player == null) return null;
-        try { return Slots.Modify(player, mutate); }
+        try
+        {
+            var result = Slots.Modify(player, mutate);
+            if (LocalContext.IsMe(player))
+                RefreshLocalCache(player);
+            return result;
+        }
         catch (Exception ex)
         {
             Log.Error($"InfiniteUpgradeSystem: store Modify failed: {ex.Message}");
             return null;
         }
+    }
+
+    /// <summary>本地玩家数据变更后刷新静态缓存（UI 读取：CurrentPoints / s_boosts / s_levels）。</summary>
+    private static void RefreshLocalCache(Player player)
+    {
+        var data = For(player);
+        UpgradePointManager.SetPointsDirect(data.Points);
+        AbilityOperationHelper.ReplaceBoosts(data.Boosts);
+        SkillRegistry.ReplaceLevels(data.Skills);
     }
 
     // ═══════════════════════════════════════════════════════════════

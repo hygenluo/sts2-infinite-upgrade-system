@@ -7,11 +7,15 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Godot;
 using HarmonyLib;
+using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
+using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Powers;
 
 namespace InfiniteUpgradeSystem;
 
@@ -23,9 +27,16 @@ public static class AbilityOperationHelper
 
     public static bool TryPurchase(string key, int cost)
     {
-        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
-        s_boosts.TryGetValue(key, out int cur);
-        s_boosts[key] = cur + 1;
+        var player = CardOperationHelper.GetLocalPlayer();
+        if (player == null) return false;
+        if (UpgradeDataStore.GetPoints(player) < cost) return false;
+        // 方案 B：扣点 + 加 boost 一并写入 store（Mutate 刷新本地缓存）
+        UpgradeDataStore.Mutate(player, d =>
+        {
+            d.Points -= cost;
+            d.Boosts.TryGetValue(key, out int cur);
+            d.Boosts[key] = cur + 1;
+        });
         // 每次购买立即写盘，避免中途退出丢失
         var seed = MegaCrit.Sts2.Core.Runs.RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
         SaveCheckpoint(seed);
@@ -41,7 +52,7 @@ public static class AbilityOperationHelper
     {
         var player = CardOperationHelper.GetLocalPlayer();
         if (player == null) return;
-        s_boosts.TryGetValue(key, out int count);
+        int count = UpgradeDataStore.GetBoost(player, key);
         if (count <= 0) return;
         switch (key)
         {
@@ -55,28 +66,37 @@ public static class AbilityOperationHelper
         }
     }
 
-    public static async void ApplyInitialBoosts()
+    /// <summary>
+    /// 战斗开始：给所有玩家按各自的 store 数据施加持久化 boost（方案 B，遍历不按本地玩家）。
+    /// CombatSetUp 事件在两端同一逻辑点触发，store 数据两端一致则结果确定性一致。
+    /// </summary>
+    public static async void ApplyInitialBoosts(CombatState state)
     {
         if (s_appliedThisRun) return;
         s_appliedThisRun = true;
-        var player = CardOperationHelper.GetLocalPlayer();
-        if (player?.Creature == null) return;
-        var creature = player.Creature;
-
-        foreach (var kv in s_boosts)
+        if (state == null) return;
+        foreach (var player in state.Players)
         {
-            if (kv.Value <= 0) continue;
-            await ApplyOnePower(creature, kv.Key, kv.Value);
+            if (player?.Creature == null) continue;
+            foreach (var kv in UpgradeDataStore.For(player).Boosts)
+            {
+                if (kv.Value <= 0) continue;
+                await ApplyPower(player.Creature, kv.Key, kv.Value);
+            }
         }
     }
 
-    /// <summary>CombatSetUp时应用辉星（一次性，非每回合）。</summary>
-    public static async void ApplyStarsAtCombatStart()
+    /// <summary>CombatSetUp时应用辉星（一次性，非每回合）。给所有玩家按各自 stars boost 施加。</summary>
+    public static async void ApplyStarsAtCombatStart(CombatState state)
     {
-        var player = CardOperationHelper.GetLocalPlayer();
-        if (player == null) return;
-        if (s_boosts.TryGetValue("stars", out int stars) && stars > 0)
-            await PlayerCmd.GainStars(stars, player);
+        if (state == null) return;
+        foreach (var player in state.Players)
+        {
+            if (player == null) continue;
+            int stars = UpgradeDataStore.GetBoost(player, "stars");
+            if (stars > 0)
+                await PlayerCmd.GainStars(stars, player);
+        }
     }
 
     // 格挡跨回合不消失 — 通过 BarricadePower 实现（与壁垒卡牌相同效果），
@@ -94,108 +114,66 @@ public static class AbilityOperationHelper
     /// 因此：已有同类 Power 时改用 SetAmount 叠加数量（触发 PowerModified 更新显示与数值），
     /// 否则走「模板克隆 + ApplyInternal」应用路径。
     /// </summary>
-    public static async Task ApplyOnePower(Creature creature, string key, int count)
+    /// <summary>
+    /// 应用 Power（方案 B：走游戏原生 PowerCmd.Apply，进同步 Hook 链路）。
+    /// key 映射：能力系统 + 技能效果（vigor/weak 等）。
+    /// PowerCmd.Apply 自带叠加（HasPower → ModifyAmount）与完整 Hook 链
+    /// （BeforePowerAmountChanged / ModifyPowerAmountGiven/Received / AfterPowerAmountChanged），
+    /// 替代旧反射 ApplyInternal（绕过 Hook，导致多人 checksum 分歧）。
+    /// </summary>
+    public static async Task ApplyPower(Creature creature, string key, int count, Creature? applier = null, CardModel? cardSource = null, PlayerChoiceContext? context = null)
     {
-        var typeName = key switch
-        {
-            "strength" => "MegaCrit.Sts2.Core.Models.Powers.StrengthPower",
-            "dexterity" => "MegaCrit.Sts2.Core.Models.Powers.DexterityPower",
-            "focus" => "MegaCrit.Sts2.Core.Models.Powers.FocusPower",
-            "plating" => "MegaCrit.Sts2.Core.Models.Powers.PlatingPower",
-            "thorns" => "MegaCrit.Sts2.Core.Models.Powers.ThornsPower",
-            "artifact" => "MegaCrit.Sts2.Core.Models.Powers.ArtifactPower",
-            "blockKeep" => "MegaCrit.Sts2.Core.Models.Powers.BarricadePower",
-            "vigor" => "MegaCrit.Sts2.Core.Models.Powers.VigorPower",
-            "weak" => "MegaCrit.Sts2.Core.Models.Powers.WeakPower",
-            "poison" => "MegaCrit.Sts2.Core.Models.Powers.PoisonPower",
-            "parry" => "MegaCrit.Sts2.Core.Models.Powers.ParryPower",
-            "freeFirstCard" => "MegaCrit.Sts2.Core.Models.Powers.VoidFormPower",
-            _ => null
-        };
-        if (typeName == null) return;
+        if (creature == null || count <= 0) return;
+        // PowerCmd.Apply 需要 PlayerChoiceContext；skill hook 有 context，无 context 场景（如 CombatSetUp）
+        // 复用最近一次 hook context，兜底用无操作 BlockingPlayerChoiceContext。
+        context ??= SkillContextCache.Last ?? new BlockingPlayerChoiceContext();
         try
         {
-            Type? powerType = null;
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            { powerType = asm.GetType(typeName); if (powerType != null) break; }
-            if (powerType == null) return;
-
-            // 1) 已有同类 Power → 叠加数量（避免 ApplyPowerInternal 的重复类型异常）
-            var existing = GetExistingPower(creature, powerType);
-            if (existing != null)
+            switch (key)
             {
-                existing.SetAmount(existing._amount + count, false);
-                return;
+                case "strength": await PowerCmd.Apply<StrengthPower>(context, creature, count, applier, cardSource); break;
+                case "dexterity": await PowerCmd.Apply<DexterityPower>(context, creature, count, applier, cardSource); break;
+                case "focus": await PowerCmd.Apply<FocusPower>(context, creature, count, applier, cardSource); break;
+                case "plating": await PowerCmd.Apply<PlatingPower>(context, creature, count, applier, cardSource); break;
+                case "thorns": await PowerCmd.Apply<ThornsPower>(context, creature, count, applier, cardSource); break;
+                case "artifact": await PowerCmd.Apply<ArtifactPower>(context, creature, count, applier, cardSource); break;
+                case "blockKeep": await PowerCmd.Apply<BarricadePower>(context, creature, count, applier, cardSource); break;
+                case "vigor": await PowerCmd.Apply<VigorPower>(context, creature, count, applier, cardSource); break;
+                case "weak": await PowerCmd.Apply<WeakPower>(context, creature, count, applier, cardSource); break;
+                case "poison": await PowerCmd.Apply<PoisonPower>(context, creature, count, applier, cardSource); break;
+                case "parry": await PowerCmd.Apply<ParryPower>(context, creature, count, applier, cardSource); break;
+                case "freeFirstCard": await PowerCmd.Apply<VoidFormPower>(context, creature, count, applier, cardSource); break;
             }
-
-            // 2) 原路径：模板克隆 + ApplyInternal
-            var modelDb = Type.GetType("MegaCrit.Sts2.Core.Models.ModelDb, sts2");
-            if (modelDb == null) foreach (var a in AppDomain.CurrentDomain.GetAssemblies()) { modelDb = a.GetType("MegaCrit.Sts2.Core.Models.ModelDb"); if (modelDb != null) break; }
-            if (modelDb == null) return;
-
-            var powerGetter = modelDb.GetMethod("Power", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null);
-            if (powerGetter == null) return;
-            var template = powerGetter.MakeGenericMethod(powerType).Invoke(null, null);
-            if (template == null) return;
-
-            var cloneMethod = template.GetType().GetMethod("MutableClone", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (cloneMethod == null) return;
-            var mutable = cloneMethod.Invoke(template, null);
-            if (mutable == null) return;
-
-            var applyMethod = mutable.GetType().GetMethod("ApplyInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (applyMethod == null) return;
-            applyMethod.Invoke(mutable, new object[] { creature, (decimal)count, false });
         }
         catch (Exception ex)
         {
-            // 解包 TargetInvocationException，打印真实内层异常与堆栈（技能战斗中应用失败排查）
-            var inner = ex is System.Reflection.TargetInvocationException tie && tie.InnerException != null
-                ? tie.InnerException
-                : ex;
-            GD.PrintErr($"[IU] ApplyPower {key}: {inner}");
+            GD.PrintErr($"[IU] ApplyPower {key}: {ex}");
         }
     }
 
     /// <summary>
-    /// 技能「每铸造一次君王之剑永久+1格挡」：铸造时给玩家 +1 招架。
-    /// 君王之剑格挡 = 招架层数（CalculatedBlockVar，参照招架能力牌：OnPlay 仅在 GetOwnerParryAmount>0 时 GainBlock）。
-    /// 招架数作为持久 boost 存储（s_boosts["parry"]），每场战斗开始由 ApplyInitialBoosts 重新应用 → 跨战斗永久。
+    /// 技能「每铸造一次君王之剑永久+1格挡」：铸造时给 forger +1 招架。
+    /// 招架数作为持久 boost 写入每玩家 store（方案 B），随 run 存档持久化，
+    /// 每场战斗开始由 ApplyInitialBoosts 重新应用 → 跨战斗永久。
     /// </summary>
     public static async Task AddSovereignBladeForgeParry(Player player)
     {
-        s_boosts.TryGetValue("parry", out int cur);
-        s_boosts["parry"] = cur + 1;
-        var seed = MegaCrit.Sts2.Core.Runs.RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
-        SaveCheckpoint(seed);
-        if (player?.Creature != null)
-            await ApplyOnePower(player.Creature, "parry", 1);
+        if (player == null) return;
+        UpgradeDataStore.Mutate(player, d =>
+        {
+            d.Boosts.TryGetValue("parry", out int cur);
+            d.Boosts["parry"] = cur + 1;
+        });
+        if (player.Creature != null)
+            await ApplyPower(player.Creature, "parry", 1);
     }
 
-    /// <summary>查找生物身上已应用的指定类型 Power（publicized 泛型方法反射调用）。</summary>
-    private static PowerModel? GetExistingPower(Creature creature, Type powerType)
+    /// <summary>用 store 数据替换本地缓存 s_boosts（UI 显示用，方案 B 本地玩家缓存）。</summary>
+    public static void ReplaceBoosts(Dictionary<string, int> boosts)
     {
-        try
-        {
-            var hasPower = creature.GetType()
-                .GetMethods()
-                .FirstOrDefault(m => m.Name == "HasPower" && m.GetParameters().Length == 0 && m.IsGenericMethodDefinition)?
-                .MakeGenericMethod(powerType)
-                .Invoke(creature, null);
-            if (hasPower is not true) return null;
-
-            var power = creature.GetType()
-                .GetMethods()
-                .FirstOrDefault(m => m.Name == "GetPower" && m.GetParameters().Length == 0 && m.IsGenericMethodDefinition)?
-                .MakeGenericMethod(powerType)
-                .Invoke(creature, null) as PowerModel;
-            return power;
-        }
-        catch (Exception ex)
-        {
-            GD.PrintErr($"[IU] GetExistingPower: {ex.Message}");
-            return null;
-        }
+        s_boosts.Clear();
+        foreach (var kv in boosts)
+            s_boosts[kv.Key] = kv.Value;
     }
 
     public static void SaveCheckpoint(string seed)

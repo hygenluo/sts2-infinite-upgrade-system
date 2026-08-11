@@ -11,6 +11,7 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Runs;
 
 namespace InfiniteUpgradeSystem;
 
@@ -31,7 +32,7 @@ public static class SkillExhaustPatch
     {
         SkillContextCache.Last = choiceContext;
         var player = card?.Owner;
-        if (player == null || !SkillRegistry.Has("draw_on_exhaust")) return;
+        if (player == null || !UpgradeDataStore.HasSkill(player, "draw_on_exhaust")) return;
         _ = HandleAsync(choiceContext, player);
     }
 
@@ -48,16 +49,16 @@ public static class SkillExhaustPatch
     }
 }
 
-/// <summary>2. 每当失去生命值时，抽一张牌（铁甲战士）——每段伤害触发一次（多段攻击 6×3 触发 3 次）。</summary>
+/// <summary>2. 每当失去生命值时，抽一张牌（铁甲战士）——每段伤害触发一次（多段攻击 6×3 触发 3 次）。主题玩家 = 受伤生物的主人。</summary>
 [HarmonyPatch(typeof(Hook), nameof(Hook.AfterDamageReceived))]
 public static class SkillHpLossPatch
 {
     public static void Postfix(PlayerChoiceContext choiceContext, Creature target)
     {
         SkillContextCache.Last = choiceContext;
-        var player = CardOperationHelper.GetLocalPlayer();
-        if (player?.Creature == null || target != player.Creature) return;
-        if (!SkillRegistry.Has("draw_on_hp_loss")) return;
+        var player = target?.Player;
+        if (player?.Creature == null) return;
+        if (!UpgradeDataStore.HasSkill(player, "draw_on_hp_loss")) return;
         _ = HandleAsync(choiceContext, player);
     }
 
@@ -82,7 +83,7 @@ public static class SkillDiscardPatch
     {
         SkillContextCache.Last = choiceContext;
         var player = card?.Owner;
-        if (player == null || !SkillRegistry.Has("weak_on_discard")) return;
+        if (player == null || !UpgradeDataStore.HasSkill(player, "weak_on_discard")) return;
         _ = HandleAsync(combatState, player);
     }
 
@@ -91,7 +92,7 @@ public static class SkillDiscardPatch
         try
         {
             foreach (var enemy in combatState.Enemies)
-                await AbilityOperationHelper.ApplyOnePower(enemy, "weak", 1);
+                await AbilityOperationHelper.ApplyPower(enemy, "weak", 1);
         }
         catch (Exception ex)
         {
@@ -109,9 +110,9 @@ public static class SkillPoisonPatch
         SkillContextCache.Last = choiceContext;
         if (power == null || applier == null || amount <= 0) return;
         if (power.GetType().Name != "PoisonPower") return; // 只响应中毒
-        var player = CardOperationHelper.GetLocalPlayer();
-        if (player?.Creature == null || applier != player.Creature) return; // 必须由玩家施加
-        if (!SkillRegistry.Has("block_on_poison")) return;
+        var player = applier.Player; // 施加者必须是玩家
+        if (player?.Creature == null) return;
+        if (!UpgradeDataStore.HasSkill(player, "block_on_poison")) return;
         // 数值调整（2026-08-04 用户确认）：一次施加中毒（含多层）触发 1 次，格挡 1 → 3
         _ = CreatureCmd.GainBlock(player.Creature, 3m, default, null, false);
     }
@@ -124,7 +125,7 @@ public static class SkillTurnStartPatch
     public static void Postfix(PlayerChoiceContext choiceContext, Player player)
     {
         SkillContextCache.Last = choiceContext;
-        if (player == null || !SkillRegistry.Has("block_at_turn_start")) return;
+        if (player == null || !UpgradeDataStore.HasSkill(player, "block_at_turn_start")) return;
         _ = HandleAsync(player);
     }
 
@@ -150,7 +151,7 @@ public static class SkillStrAtTurnStartPatch
     public static void Postfix(PlayerChoiceContext choiceContext, Player player)
     {
         SkillContextCache.Last = choiceContext;
-        if (player?.Creature == null || !SkillRegistry.Has("str_at_turn_start")) return;
+        if (player?.Creature == null || !UpgradeDataStore.HasSkill(player, "str_at_turn_start")) return;
         _ = HandleAsync(player);
     }
 
@@ -158,7 +159,7 @@ public static class SkillStrAtTurnStartPatch
     {
         try
         {
-            await AbilityOperationHelper.ApplyOnePower(player.Creature, "strength", 2);
+            await AbilityOperationHelper.ApplyPower(player.Creature, "strength", 2);
         }
         catch (Exception ex)
         {
@@ -174,7 +175,7 @@ public static class SkillHealAtTurnStartPatch
     public static void Postfix(PlayerChoiceContext choiceContext, Player player)
     {
         SkillContextCache.Last = choiceContext;
-        if (player?.Creature == null || !SkillRegistry.Has("heal_at_turn_start")) return;
+        if (player?.Creature == null || !UpgradeDataStore.HasSkill(player, "heal_at_turn_start")) return;
         _ = HandleAsync(player);
     }
 
@@ -198,7 +199,7 @@ public static class SkillDrawAtTurnStartPatch
     public static void Postfix(PlayerChoiceContext choiceContext, Player player)
     {
         SkillContextCache.Last = choiceContext;
-        if (player == null || !SkillRegistry.Has("draw_at_turn_start")) return;
+        if (player == null || !UpgradeDataStore.HasSkill(player, "draw_at_turn_start")) return;
         _ = HandleAsync(choiceContext, player);
     }
 
@@ -222,7 +223,7 @@ public static class SkillSummonAtTurnStartPatch
     public static void Postfix(PlayerChoiceContext choiceContext, Player player)
     {
         SkillContextCache.Last = choiceContext;
-        if (player == null || !SkillRegistry.Has("summon_at_turn_start")) return;
+        if (player == null || !UpgradeDataStore.HasSkill(player, "summon_at_turn_start")) return;
         _ = HandleAsync(choiceContext, player);
     }
 
@@ -246,7 +247,7 @@ public static class SkillOrbAtTurnStartPatch
     public static void Postfix(PlayerChoiceContext choiceContext, Player player)
     {
         SkillContextCache.Last = choiceContext;
-        if (player == null || !SkillRegistry.Has("orb_at_turn_start")) return;
+        if (player == null || !UpgradeDataStore.HasSkill(player, "orb_at_turn_start")) return;
         _ = HandleAsync(choiceContext, player);
     }
 
@@ -286,11 +287,15 @@ public static class SkillOrbTurnEndPatch
     public static void Postfix(ICombatState combatState, CombatSide side)
     {
         if (side != CombatSide.Enemy) return; // 敌方回合开始 = 玩家回合结束
-        if (!SkillRegistry.Has("orb_dmg_at_turn_end")) return;
-        var player = CardOperationHelper.GetLocalPlayer();
         var context = SkillContextCache.Last;
-        if (player?.Creature == null || context == null || combatState == null) return;
-        _ = HandleAsync(combatState, context, player);
+        if (context == null || combatState == null) return;
+        var state = RunManager.Instance?.State;
+        if (state == null) return;
+        foreach (var player in state.Players)
+        {
+            if (player?.Creature == null || !UpgradeDataStore.HasSkill(player, "orb_dmg_at_turn_end")) continue;
+            _ = HandleAsync(combatState, context, player);
+        }
     }
 
     private static async Task HandleAsync(ICombatState combatState, PlayerChoiceContext context, Player player)
@@ -315,10 +320,13 @@ public static class SkillDoubleBlockPatch
     public static void Postfix(CombatSide side)
     {
         if (side != CombatSide.Player) return; // 玩家回合结束
-        if (!SkillRegistry.Has("double_block_at_turn_end")) return;
-        var player = CardOperationHelper.GetLocalPlayer();
-        if (player?.Creature == null) return;
-        _ = HandleAsync(player);
+        var state = RunManager.Instance?.State;
+        if (state == null) return;
+        foreach (var player in state.Players)
+        {
+            if (player?.Creature == null || !UpgradeDataStore.HasSkill(player, "double_block_at_turn_end")) continue;
+            _ = HandleAsync(player);
+        }
     }
 
     private static async Task HandleAsync(Player player)
@@ -342,11 +350,9 @@ public static class SkillSovereignBladeBlockPatch
 {
     public static void Postfix(ICombatState combatState, decimal amount, Player forger, AbstractModel? source)
     {
-        if (forger == null || !SkillRegistry.Has("sovereign_blade_block_on_forge")) return;
-        var player = CardOperationHelper.GetLocalPlayer();
-        if (player == null || forger != player) return;
+        if (forger == null || !UpgradeDataStore.HasSkill(forger, "sovereign_blade_block_on_forge")) return;
         // 君王之剑 OnPlay 仅在玩家有招架层数时 GainBlock（参照招架能力牌实现）。
-        // 铸造 → 玩家 +1 招架（持久化，每场战斗重新应用）→ 君王之剑按招架层数获得格挡 = 铸造次数。
+        // 铸造 → forger +1 招架（写 store，持久化，每场战斗重新应用）→ 君王之剑按招架层数获得格挡 = 铸造次数。
         _ = AbilityOperationHelper.AddSovereignBladeForgeParry(forger);
     }
 }
@@ -357,10 +363,9 @@ public static class SkillAutoPlayPowerPatch
 {
     public static void Postfix(ICombatState combatState, PlayerChoiceContext choiceContext, CardModel card, bool fromHandDraw)
     {
-        if (card?.Owner == null || !SkillRegistry.Has("auto_play_power_on_draw")) return;
-        var player = CardOperationHelper.GetLocalPlayer();
-        if (player == null || card.Owner != player) return;
-        if (card.Type != CardType.Power) return;
+        var player = card?.Owner;
+        if (player == null || !UpgradeDataStore.HasSkill(player, "auto_play_power_on_draw")) return;
+        if (card!.Type != CardType.Power) return;
         _ = HandleAsync(choiceContext, card);
     }
 

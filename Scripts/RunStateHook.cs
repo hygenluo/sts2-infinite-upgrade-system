@@ -35,9 +35,10 @@ public static class RunStateHook
     /// <summary>战斗开始 → 应用能力 + 保存检查点</summary>
     private static void OnCombatSetUp(CombatState state)
     {
-        AbilityOperationHelper.ApplyInitialBoosts();
-        AbilityOperationHelper.ApplyStarsAtCombatStart();
-        ApplySkillCombatStartPowers();
+        // 方案 B：遍历所有玩家，按各自 store 数据施加（不按本地玩家分叉）
+        AbilityOperationHelper.ApplyInitialBoosts(state);
+        AbilityOperationHelper.ApplyStarsAtCombatStart(state);
+        ApplySkillCombatStartPowers(state);
         UpgradePointManager.SaveCheckpoint();
         var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
         CardUpgradeTracker.SaveCheckpoint(seed);
@@ -46,14 +47,17 @@ public static class RunStateHook
         GD.Print($"[InfiniteUpgrade] Checkpoint SAVED (combat start) — pts={UpgradePointManager.CurrentPoints}");
     }
 
-    /// <summary>技能战斗开始效果（应用战斗级 Power，随战斗重置、每场重新应用）。</summary>
-    private static async void ApplySkillCombatStartPowers()
+    /// <summary>技能战斗开始效果（应用战斗级 Power，随战斗重置、每场重新应用）。给所有玩家按各自技能施加。</summary>
+    private static async void ApplySkillCombatStartPowers(CombatState state)
     {
-        var player = CardOperationHelper.GetLocalPlayer();
-        if (player?.Creature == null) return;
-        // 储君「免费打出第一张牌」→ VoidFormPower(1)：能量+辉星免费 + 原生绿色荧光显示
-        if (SkillRegistry.Has("free_first_card"))
-            await AbilityOperationHelper.ApplyOnePower(player.Creature, "freeFirstCard", 1);
+        if (state == null) return;
+        foreach (var player in state.Players)
+        {
+            if (player?.Creature == null) continue;
+            // 储君「免费打出第一张牌」→ VoidFormPower(1)：能量+辉星免费 + 原生绿色荧光显示
+            if (UpgradeDataStore.HasSkill(player, "free_first_card"))
+                await AbilityOperationHelper.ApplyPower(player.Creature, "freeFirstCard", 1);
+        }
     }
 
     /// <summary>当前房间是否为问号房（进入时已发问号房点数；其战斗不再额外发放）。</summary>

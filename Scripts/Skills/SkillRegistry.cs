@@ -38,6 +38,14 @@ public static class SkillRegistry
     /// <summary>s_levels 副本（供 UpgradeDataStore 旧档迁移，Step 1）。</summary>
     public static Dictionary<string, int> SnapshotLevels() => new(s_levels);
 
+    /// <summary>用 store 数据替换本地缓存 s_levels（UI 显示用，方案 B 本地玩家缓存）。</summary>
+    public static void ReplaceLevels(Dictionary<string, int> levels)
+    {
+        s_levels.Clear();
+        foreach (var kv in levels)
+            s_levels[kv.Key] = kv.Value;
+    }
+
     public static void AddCombatPlay() => s_combatPlayCount++;
     public static void ResetCombatPlay() => s_combatPlayCount = 0;
 
@@ -49,16 +57,20 @@ public static class SkillRegistry
 
     /// <summary>
     /// 购买：扣点 → 升级（不超过 maxLevel）→ 立即写盘。点数不足/已满级返回 false。
+    /// 方案 B：扣点 + 技能等级一并写入每玩家 store（Mutate 刷新本地缓存）。
     /// </summary>
     public static bool TryPurchase(string id, int cost, int maxLevel = 1)
     {
-        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
-        if (GetLevel(id) >= maxLevel)
+        var player = CardOperationHelper.GetLocalPlayer();
+        if (player == null) return false;
+        if (UpgradeDataStore.GetPoints(player) < cost) return false;
+        if (GetLevel(id) >= maxLevel) return false; // 已满级：不扣点
+        UpgradeDataStore.Mutate(player, d =>
         {
-            UpgradePointManager.AddPoints(cost); // 已满级：退款
-            return false;
-        }
-        s_levels[id] = GetLevel(id) + 1;
+            d.Points -= cost;
+            d.Skills.TryGetValue(id, out int lv);
+            d.Skills[id] = lv + 1;
+        });
         var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
         SaveCheckpoint(seed);
         return true;

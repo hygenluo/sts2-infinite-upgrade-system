@@ -25,7 +25,10 @@ public static class UpgradePointManager
     {
         if (amount < 0)
             throw new ArgumentException("Amount must be non-negative.", nameof(amount));
-        CurrentPoints += amount;
+        // 方案 B：点数写入每玩家 store（Mutate 内部刷新本地缓存 CurrentPoints）
+        var player = CardOperationHelper.GetLocalPlayer();
+        if (player == null) return;
+        UpgradeDataStore.Mutate(player, d => d.Points += amount);
         SaveCheckpoint(); // 点数变化立即写盘，避免中途退出丢失
     }
 
@@ -33,13 +36,12 @@ public static class UpgradePointManager
     {
         if (amount < 0)
             throw new ArgumentException("Amount must be non-negative.", nameof(amount));
-        if (CurrentPoints >= amount)
-        {
-            CurrentPoints -= amount;
-            SaveCheckpoint(); // 点数变化立即写盘，避免中途退出丢失
-            return true;
-        }
-        return false;
+        var player = CardOperationHelper.GetLocalPlayer();
+        if (player == null) return false;
+        if (UpgradeDataStore.GetPoints(player) < amount) return false;
+        UpgradeDataStore.Mutate(player, d => d.Points -= amount);
+        SaveCheckpoint(); // 点数变化立即写盘，避免中途退出丢失
+        return true;
     }
 
     /// <summary>保存检查点（战斗开始/结束时调用）。</summary>
