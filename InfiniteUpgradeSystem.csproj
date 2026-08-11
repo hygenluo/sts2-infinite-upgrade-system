@@ -90,6 +90,7 @@
   <!-- NuGet packages -->
   <ItemGroup>
     <PackageReference Include="Alchyr.Sts2.BaseLib" Version="$(BaseLibNuGetVersion)" PrivateAssets="All" />
+    <PackageReference Include="STS2.RitsuLib" Version="*" PrivateAssets="All" />
     <PackageReference Include="Alchyr.Sts2.ModAnalyzers" Version="0.1.6" PrivateAssets="All" />
     <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.3">
       <PrivateAssets>all</PrivateAssets>
