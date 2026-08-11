@@ -18,20 +18,35 @@ namespace InfiniteUpgradeSystem;
 public static class LocStringPromptPatch
 {
     private const string KeyPrefix = "INFINITEUPGRADESYSTEM-";
+    private const string CompositeTitle = "多重附魔";
+    private static bool s_diagLogged;
 
+    /// <summary>最高优先级：确保本 Postfix 最后执行，覆盖 RitsuLib 等其它补丁设置的占位结果。</summary>
+    [HarmonyPriority(Priority.First)]
     public static void Postfix(LocString __instance, ref string __result)
     {
         try
         {
-            // 合成附魔（CompositeEnchantment）标题/描述：统一解析为「多重附魔」，
-            // 具体内容由悬停提示里聚合的子附魔描述展示。Id.Entry 经 ModelDb.GetId
+            // 合成附魔（CompositeEnchantment）标题/描述/附加文本。Id.Entry 经 ModelDb.GetId
             // 的 Slugify 生成，为 COMPOSITE_ENCHANTMENT（大写蛇形）。
             if (__instance.LocTable == "enchantments"
                 && __instance.LocEntryKey.StartsWith("COMPOSITE_ENCHANTMENT.", StringComparison.OrdinalIgnoreCase))
             {
-                var compositeText = UpgradeLoc.Get("INFINITEUPGRADESYSTEM-ENCHANT_COMPOSITE", __result);
-                if (!string.IsNullOrEmpty(compositeText))
-                    __result = compositeText;
+                if (!s_diagLogged)
+                {
+                    s_diagLogged = true;
+                    GD.Print($"[IU-Loc] composite key='{__instance.LocEntryKey}' prevResult='{__result}'");
+                }
+                // extraCardText（卡面附加文本）→ 显示子附魔名称（如「腐化」）
+                if (__instance.LocEntryKey.EndsWith(".extraCardText", StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrEmpty(CompositeEnchantment.LastSummary))
+                {
+                    __result = CompositeEnchantment.LastSummary;
+                    return;
+                }
+                // title/description → 通用「多重附魔」；UpgradeLoc 不可用时硬编码回退
+                __result = UpgradeLoc.Get("INFINITEUPGRADESYSTEM-ENCHANT_COMPOSITE", null)
+                           ?? CompositeTitle;
                 return;
             }
 

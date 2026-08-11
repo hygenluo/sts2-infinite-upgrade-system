@@ -6,6 +6,7 @@ using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.HoverTips;
+using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.ValueProps;
 
@@ -142,8 +143,28 @@ public sealed class CompositeEnchantment : EnchantmentModel
 
     public override bool ShowAmount => Subs.Any(s => s.ShowAmount);
 
+    /// <summary>最近一次生成的卡面附加文本摘要（子附魔名称，供 LocStringPromptPatch 解析 extraCardText）。</summary>
+    public static string? LastSummary;
+
     // 子附魔的描述/数值由 ExtraHoverTips 聚合展示，合成附魔自身不聚合子附魔变量
     // （避免子附魔 DynamicVar 名称冲突/渲染异常）。
+}
+
+/// <summary>
+/// 卡面附加文本（DynamicExtraCardText 非虚不能重写）：用 Harmony Postfix 在基类 getter 后
+/// 生成子附魔名称摘要（LastSummary），供 LocStringPromptPatch 解析合成附魔的 extraCardText key。
+/// </summary>
+[HarmonyPatch(typeof(EnchantmentModel), "get_DynamicExtraCardText")]
+public static class CompositeEnchantmentExtraCardTextPatch
+{
+    public static void Postfix(EnchantmentModel __instance)
+    {
+        if (__instance is CompositeEnchantment composite && composite.HasExtraCardText)
+        {
+            CompositeEnchantment.LastSummary = string.Join(
+                "、", composite.Subs.Select(s => s.Title.GetFormattedText()));
+        }
+    }
 }
 
 /// <summary>
