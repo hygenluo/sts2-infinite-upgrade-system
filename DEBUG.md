@@ -404,3 +404,12 @@
   - `ApplyEnchantmentToCard` 返回 bool：子附魔创建失败不挂空合成附魔，`AddEnchantment` 退款不记录
   - 移除 `CanonicalVars` 聚合（子附魔描述由 ExtraHoverTips 展示，聚合有变量名冲突风险）
 - **教训**：合成附魔必须正确处理 `DeepCloneFields`（克隆子附魔而非清空）；乘性修饰符空聚合时返回恒等值
+
+### C9 修复 v5：卡面附魔文本显示原始 key → 显示子附魔名称
+- **现象**：附魔腐化(Corrupted)后，卡面附加文本显示 `COMPOSITE_ENCHANTMENT.extraCardText` 而非「腐化」
+- **根因**：合成附魔的 `ExtraCardText` key（`enchantments/COMPOSITE_ENCHANTMENT.extraCardText`）不存在于游戏表 → RitsuLib 返回 key 占位；`LocStringPromptPatch` 的 Postfix 未能覆盖（可能被 RitsuLib 等其它补丁的更高优先级 Postfix 覆盖，或 UpgradeLoc 加载失败时 `Get` 返回回退值）
+- **修复**：
+  - `LocStringPromptPatch` 加 `[HarmonyPriority(Priority.First)]`（最高优先级，确保最后执行覆盖其它 Postfix）
+  - 合成附魔 title/description 用硬编码「多重附魔」回退（`UpgradeLoc.Get(key, null) ?? "多重附魔"`，不依赖 UpgradeLoc 加载）
+  - `extraCardText` 经 `CompositeEnchantment.LastSummary`（子附魔名称，如「腐化」「腐化、动量」）解析——`DynamicExtraCardText` 非虚不能重写，用 Harmony Postfix on `EnchantmentModel.get_DynamicExtraCardText` 生成摘要
+- **一次性诊断**：首次解析合成附魔 key 时 `GD.Print` 打印 key 与前置结果（`[IU-Loc]`），用于确认补丁是否命中
