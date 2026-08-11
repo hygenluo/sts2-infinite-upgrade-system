@@ -23,22 +23,12 @@ namespace InfiniteUpgradeSystem;
 [HarmonyPatch(typeof(LocString), nameof(LocString.GetRawText))]
 public static class LocStringRawTextPatch
 {
-    private static bool s_diagLogged;
-
     [HarmonyPriority(Priority.First)]
     public static void Postfix(LocString __instance, ref string __result)
     {
         try
         {
-            string before = __result;
             ResolveComposite(__instance.LocTable, __instance.LocEntryKey, ref __result);
-            if (!s_diagLogged && __result != before
-                && __instance.LocTable == "enchantments"
-                && __instance.LocEntryKey.StartsWith("COMPOSITE_ENCHANTMENT.", StringComparison.OrdinalIgnoreCase))
-            {
-                s_diagLogged = true;
-                GD.Print($"[IU-Loc] GetRawText key='{__instance.LocEntryKey}' '{before}' -> '{__result}'");
-            }
         }
         catch { /* 非致命 */ }
     }

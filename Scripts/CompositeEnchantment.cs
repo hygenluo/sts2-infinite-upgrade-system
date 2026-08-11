@@ -52,28 +52,15 @@ public sealed class CompositeEnchantment : EnchantmentModel
 
     // ── 数值修饰符转发 ─────────────────────────────────────────────
 
-    public override decimal EnchantDamageAdditive(decimal originalDamage, ValueProp props)
-    {
-        var result = Subs.Sum(s => s.EnchantDamageAdditive(originalDamage, props));
-        LogDamageOnce($"additive result={result} subs=[{string.Join(",", Subs.Select(s => $"{s.GetType().Name}(Amount={s.Amount})"))}]");
-        return result;
-    }
+    public override decimal EnchantDamageAdditive(decimal originalDamage, ValueProp props) =>
+        Subs.Sum(s => s.EnchantDamageAdditive(originalDamage, props));
 
     public override decimal EnchantDamageMultiplicative(decimal originalDamage, ValueProp props)
     {
         if (Subs.Count == 0) return 1m;
         var result = 1m;
         foreach (var s in Subs) result *= s.EnchantDamageMultiplicative(originalDamage, props);
-        LogDamageOnce($"multiplicative result={result} subs=[{string.Join(",", Subs.Select(s => $"{s.GetType().Name}(Amount={s.Amount})"))}]");
         return result;
-    }
-
-    private static bool s_damageDiagLogged;
-    private static void LogDamageOnce(string msg)
-    {
-        if (s_damageDiagLogged) return;
-        s_damageDiagLogged = true;
-        Godot.GD.Print($"[IU-Ench] {msg}");
     }
 
     public override decimal EnchantBlockAdditive(decimal originalBlock) =>
