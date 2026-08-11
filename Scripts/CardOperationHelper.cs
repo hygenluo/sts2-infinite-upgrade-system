@@ -543,14 +543,22 @@ public static class CardOperationHelper
     /// <summary>
     /// 给卡牌应用附魔：同种 +1 层，新种添加。读档 ReapplyAll 也走此方法（幂等重建）。
     /// 游戏存档把合成附魔记为无附魔，由 CardUpgradeTracker 持久化附魔列表。
+    /// 子附魔创建失败时返回 false 且不挂空合成附魔（空合成附魔会导致伤害倍率异常）。
     /// </summary>
-    public static void ApplyEnchantmentToCard(CardModel card, string enchantType)
+    public static bool ApplyEnchantmentToCard(CardModel card, string enchantType)
     {
-        if (card == null) return;
+        if (card == null) return false;
         if (!card.IsMutable)
         {
             Log.Warn($"InfiniteUpgrade: ApplyEnchantment skip on immutable card {card.Id.Entry}.");
-            return;
+            return false;
+        }
+
+        var sub = CreateEnchantmentSub(card, enchantType);
+        if (sub == null)
+        {
+            Log.Warn($"InfiniteUpgrade: cannot create enchantment {enchantType} for {card.Id.Entry}.");
+            return false;
         }
 
         var composite = card.Enchantment as CompositeEnchantment;
@@ -559,9 +567,6 @@ public static class CardOperationHelper
             composite = CreateCompositeInstance();
             card.EnchantInternal(composite, 1);
         }
-
-        var sub = CreateEnchantmentSub(card, enchantType);
-        if (sub == null) return;
 
         var existing = composite.Subs.FirstOrDefault(s => s.GetType() == sub.GetType());
         if (existing != null)
@@ -579,6 +584,7 @@ public static class CardOperationHelper
 
         if (card.Owner != null)
             RefreshAllVisuals(card.Owner);
+        return true;
     }
 
     /// <summary>
@@ -707,7 +713,13 @@ public static class CardOperationHelper
             if (!currentTypes.Any(e => e.Type == enchantType) && currentTypes.Count >= GetEnchantLimit(cardMutable))
                 replacedType = currentTypes[0].Type;
 
-            ApplyEnchantmentToCard(cardMutable, enchantType);
+            if (!ApplyEnchantmentToCard(cardMutable, enchantType))
+            {
+                // 附魔应用失败（子附魔创建失败等）→ 退款 + 恢复面板，不记录
+                UpgradePointManager.AddPoints(cost);
+                UpgradeUIHandler.Instance?.SetUIVisible(true);
+                return false;
+            }
             if (replacedType != null && cardMutable.Enchantment is CompositeEnchantment composite)
                 composite.RemoveSub(replacedType);
 

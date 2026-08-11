@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using HarmonyLib;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.HoverTips;
-using MegaCrit.Sts2.Core.Localization.DynamicVars;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.ValueProps;
 
@@ -23,14 +23,18 @@ namespace InfiniteUpgradeSystem;
 /// </summary>
 public sealed class CompositeEnchantment : EnchantmentModel
 {
-    /// <summary>子附魔列表（MutableClone 时经 DeepCloneFields 重建为独立列表）。</summary>
+    /// <summary>子附魔列表（MutableClone 时经 DeepCloneFields 深拷贝为独立列表）。</summary>
     public List<EnchantmentModel> Subs = new();
 
     public override void DeepCloneFields()
     {
         base.DeepCloneFields();
-        // MutableClone 的 MemberwiseClone 会共享 Subs 引用，必须重建为独立列表
-        Subs = new List<EnchantmentModel>();
+        // MutableClone 的 MemberwiseClone 会共享 Subs 引用，且游戏克隆卡牌时也会克隆附魔
+        // —— 必须深拷贝子附魔（克隆每个子附魔），否则克隆出的合成附魔丢失全部子附魔。
+        var old = Subs;
+        Subs = new List<EnchantmentModel>(old.Count);
+        foreach (var s in old)
+            Subs.Add((EnchantmentModel)s.ClonePreservingMutability());
     }
     /// <summary>用首个子附魔刷新显示身份（图标）；无子附魔时清空。</summary>
     public void RefreshPrimaryDisplay()
@@ -52,8 +56,10 @@ public sealed class CompositeEnchantment : EnchantmentModel
 
     public override decimal EnchantDamageMultiplicative(decimal originalDamage, ValueProp props)
     {
-        var result = originalDamage;
-        foreach (var s in Subs) result = s.EnchantDamageMultiplicative(result, props);
+        // 空合成附魔（如卡牌克隆后）必须返回恒等 1，否则 base 语义下 originalDamage 会被误当倍率
+        if (Subs.Count == 0) return 1m;
+        var result = 1m;
+        foreach (var s in Subs) result *= s.EnchantDamageMultiplicative(originalDamage, props);
         return result;
     }
 
@@ -62,8 +68,9 @@ public sealed class CompositeEnchantment : EnchantmentModel
 
     public override decimal EnchantBlockMultiplicative(decimal originalBlock)
     {
-        var result = originalBlock;
-        foreach (var s in Subs) result = s.EnchantBlockMultiplicative(result);
+        if (Subs.Count == 0) return 1m;
+        var result = 1m;
+        foreach (var s in Subs) result *= s.EnchantBlockMultiplicative(originalBlock);
         return result;
     }
 
@@ -135,6 +142,28 @@ public sealed class CompositeEnchantment : EnchantmentModel
 
     public override bool ShowAmount => Subs.Any(s => s.ShowAmount);
 
-    public override IEnumerable<DynamicVar> CanonicalVars =>
-        Subs.SelectMany(s => s.DynamicVars.Values);
+    // 子附魔的描述/数值由 ExtraHoverTips 聚合展示，合成附魔自身不聚合子附魔变量
+    // （避免子附魔 DynamicVar 名称冲突/渲染异常）。
+}
+
+/// <summary>
+/// 卡牌克隆后（CardModel.DeepCloneFields 内部 EnchantInternal 只设合成附魔的 Card），
+/// 子附魔克隆的 Card 被清空——重新挂到克隆卡上，避免依赖 base.Card 的子附魔 Hook 空引用。
+/// </summary>
+[HarmonyPatch(typeof(CardModel), nameof(CardModel.DeepCloneFields))]
+public static class CompositeEnchantmentCardClonePatch
+{
+    public static void Postfix(CardModel __instance)
+    {
+        if (__instance?.Enchantment is not CompositeEnchantment composite) return;
+        foreach (var sub in composite.Subs)
+        {
+            try
+            {
+                if (sub.Card == null)
+                    sub.ApplyInternal(__instance, sub.Amount);
+            }
+            catch { /* 卡不可变/子附魔异常：忽略，不影响克隆 */ }
+        }
+    }
 }

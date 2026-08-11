@@ -392,3 +392,15 @@
 - **根因 3**：`LocStringPromptPatch` 匹配的 entry 名写错——`ModelDb.GetEntry` 用 `Slugify(type.Name)` → `CompositeEnchantment` → `COMPOSITE_ENCHANTMENT`（大写蛇形），合成附魔标题 key 应为 `enchantments/COMPOSITE_ENCHANTMENT.title`
   - **修复**：改为 `OrdinalIgnoreCase` 匹配 `COMPOSITE_ENCHANTMENT.`
 - **教训**：publicized 程序集里 `protected` 成员都是 `public`（OnEnchant/CanonicalVars/DeepCloneFields 等），override 时必须用 `public`；**模组自定义 AbstractModel 子类会被 ModelDb 自动注册，绝不能 `new`，要用 `ModelDb.Xxx<T>().ToMutable()`**
+
+### C9 修复 v4：卡牌克隆丢失子附魔 → 附魔失效 + 36 点伤害
+- **根因**：`CardModel.DeepCloneFields`（卡牌克隆时）会克隆附魔 → `CompositeEnchantment.ClonePreservingMutability()` → 我的 `DeepCloneFields` 把 `Subs` 重置为空 → **克隆出的卡牌附魔是空合成附魔**（无子附魔）
+  - 附魔效果全部失效（Instinct 减费 / Momentum 伤害加成等不触发）
+  - `EnchantDamageMultiplicative` 空时返回 `originalDamage`（6）而非恒等 1 → `Hook.ModifyDamage: 6 × 6 = 36` 点伤害
+- **修复**：
+  - `EnchantDamageMultiplicative`/`EnchantBlockMultiplicative`：空时返回恒等 1，聚合用乘法
+  - `DeepCloneFields`：改为**深拷贝子附魔**（克隆每个子附魔），不再清空
+  - `CompositeEnchantmentCardClonePatch`（Harmony on `CardModel.DeepCloneFields` Postfix）：克隆后把子附魔 Card 重新挂到克隆卡（子附魔克隆后 Card 被清空，依赖 base.Card 的 Hook 会空引用）
+  - `ApplyEnchantmentToCard` 返回 bool：子附魔创建失败不挂空合成附魔，`AddEnchantment` 退款不记录
+  - 移除 `CanonicalVars` 聚合（子附魔描述由 ExtraHoverTips 展示，聚合有变量名冲突风险）
+- **教训**：合成附魔必须正确处理 `DeepCloneFields`（克隆子附魔而非清空）；乘性修饰符空聚合时返回恒等值
