@@ -413,3 +413,10 @@
   - 合成附魔 title/description 用硬编码「多重附魔」回退（`UpgradeLoc.Get(key, null) ?? "多重附魔"`，不依赖 UpgradeLoc 加载）
   - `extraCardText` 经 `CompositeEnchantment.LastSummary`（子附魔名称，如「腐化」「腐化、动量」）解析——`DynamicExtraCardText` 非虚不能重写，用 Harmony Postfix on `EnchantmentModel.get_DynamicExtraCardText` 生成摘要
 - **一次性诊断**：首次解析合成附魔 key 时 `GD.Print` 打印 key 与前置结果（`[IU-Loc]`），用于确认补丁是否命中
+
+### C9 修复 v6：卡面 extraCardText 仍显示原始 key + 多附魔标记
+- **根因 1（extraCardText）**：v5 的 `GetFormattedText` Postfix 只命中悬停 title（诊断 `[IU-Loc]` 只打了 title），卡面附加文本（extraCardText）的解析路径不走 `GetFormattedText` 直接入口——`SmartFormat` 内部调用 `locString.GetRawText()`（LocManager.cs:238）。补丁 `GetRawText` 才能覆盖两条路径（直接调用 + SmartFormat 内部）
+  - **修复**：新增 `LocStringRawTextPatch`（Harmony on `LocString.GetRawText`，Priority.First），`ResolveComposite` 供两补丁共用；extraCardText → `CompositeEnchantment.LastSummary`（子附魔名称），title/description → 硬编码「多重附魔」
+- **根因 2（多附魔标记）**：NCard 只显示一个附魔标记（`%Enchantment/Icon` 单图标）
+  - **修复**：`NCardEnchantMarkersPatch`（Harmony on `NCard.UpdateEnchantmentVisuals` Postfix）——合成附魔有多个子附魔时，为第 2 个起每个子附魔追加一个图标标记堆叠在下方；`ConditionalWeakTable` 按卡牌实例跟踪，可视化更新时先清理旧标记
+- **遗留风险**：`%Enchantment` 若为自动布局容器，手动定位可能被覆盖（需实测）；多标记无独立层数标签
