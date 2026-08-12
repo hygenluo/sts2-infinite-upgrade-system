@@ -16,6 +16,7 @@ public enum UpgradeDataOp
     AddPoints,
     SpendPoints,
     CardMod,
+    ApplyEvery4, // v1.4.9：每4张+力量/敏捷，走 action 避免 fire-and-forget 与 checksum 时序竞争
 }
 
 /// <summary>
@@ -128,6 +129,18 @@ public sealed class UpgradeDataAction : GameAction
             case UpgradeDataOp.CardMod:
                 Succeeded = await CardOperationHelper.TryApplyCardMod(_player, _cardIdentity, _cost, (CardUpgradeTracker.ModType)_modType, _key, _flag2);
                 break;
+            case UpgradeDataOp.ApplyEvery4:
+                // 每4张+力量/敏捷：走 action 由 ActionExecutor 等待完成（checksum 在其后），避免
+                // fire-and-forget async 施加与 checksum 的时序竞争导致两端落地时机不同。
+                if (_player?.Creature != null)
+                {
+                    if (UpgradeDataStore.HasSkill(_player, "strength_every_4_plays"))
+                        await AbilityOperationHelper.ApplyPower(_player.Creature, "strength", 1);
+                    if (UpgradeDataStore.HasSkill(_player, "agility_every_4_plays"))
+                        await AbilityOperationHelper.ApplyPower(_player.Creature, "dexterity", 1);
+                }
+                Succeeded = true;
+                break;
         }
         await Task.CompletedTask;
     }
@@ -166,12 +179,22 @@ public static class UpgradePurchaseFlow
     public static Task<bool> EnqueueCardMod(int cost, string cardIdentity, int modType, string arg, bool add)
         => EnqueueLocal(UpgradeDataOp.CardMod, arg, cost, 0, false, add, cardIdentity, modType);
 
-    private static async Task<bool> EnqueueLocal(UpgradeDataOp op, string key, int cost, int amount,
+    /// <summary>每4张+力量/敏捷（由 host 检测到 %4 时入队，owner=打牌玩家，跨端同步执行）。</summary>
+    public static Task<bool> EnqueueApplyEvery4(Player owner)
+        => EnqueueFor(owner, UpgradeDataOp.ApplyEvery4, "", 0, 0, false, false, "", 0);
+
+    private static Task<bool> EnqueueLocal(UpgradeDataOp op, string key, int cost, int amount,
         bool flag1, bool flag2, string cardIdentity, int modType)
     {
         var player = CardOperationHelper.GetLocalPlayer();
-        if (player == null) return false;
-        var action = new UpgradeDataAction(player, (int)op, key, cost, amount, flag1, flag2, cardIdentity, modType);
+        if (player == null) return Task.FromResult(false);
+        return EnqueueFor(player, op, key, cost, amount, flag1, flag2, cardIdentity, modType);
+    }
+
+    private static async Task<bool> EnqueueFor(Player owner, UpgradeDataOp op, string key, int cost, int amount,
+        bool flag1, bool flag2, string cardIdentity, int modType)
+    {
+        var action = new UpgradeDataAction(owner, (int)op, key, cost, amount, flag1, flag2, cardIdentity, modType);
         var sync = RunManager.Instance?.ActionQueueSynchronizer;
         if (sync == null) // 无 run / 同步器未就绪：本地执行
         {

@@ -578,3 +578,21 @@
   host 权威 action + 确定性初始强制（方案待诊断结果后实施）。
 - **版本**：1.4.8 / BUILD v38。
 
+
+---
+
+## 多人分歧：每4张+力量（fire-and-forget async 施加与 checksum 时序竞争）（2026-08-13）
+
+- **现象**：v1.4.8 联机（checksum 5）分歧。RitsuLib report 确认：host 端 host 玩家只有
+  `DEXTERITY:1`，friend 端有 `DEXTERITY:1 + STRENGTH:1`（怪物仍活着，非战斗结束）。
+- **根因**：`%4 hit`（每4张+力量/敏捷）的施加在 `SkillCombatPatches.HandleAsync`（**fire-and-forget
+  async**）里 `await ApplyPower`（PowerCmd.Apply 内部 `CustomScaledWait` 真实 await，跨帧）→
+  **施加与打牌 action 的 checksum 生成存在时序竞争**，两端 ApplyPower 落地时机可能不同 →
+  一端有力量、一端没有（分歧转储在分歧后打印，两端均已补齐，故显示一致）。
+- **修复**：`%4 hit` 的施加改走**同步 action**（`UpgradeDataOp.ApplyEvery4`，host/singleplayer 入队
+  `EnqueueApplyEvery4(owner)`，ActionExecutor 执行并等待 → checksum 在其后）→ 两端一致落地。
+- **已知同类风险**：其他「打牌/回合触发」里 `await ApplyPower` 的效果（vigor_on_skill_play、
+  poison_all_on_card_play、str_at_turn_start、free_first_card 等）同为 fire-and-forget async，
+  若发生分歧按同样模式走 action（分歧转储可定位）。
+- **版本**：1.4.9 / BUILD v39。
+

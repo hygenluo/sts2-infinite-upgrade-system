@@ -3,7 +3,7 @@
   "name": "无限升级系统",
   "author": "InfiniteUpgrade",
   "description": "提供无限升级系统UI，消耗点数对卡牌进行无限升级。",
-  "version": "1.4.8",
+  "version": "1.4.9",
   "minGameVersion": "v0.107.1",
   "has_pck": false,
   "has_dll": true,

@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Godot;
 using HarmonyLib;
+using InfiniteUpgradeSystem.Multiplayer;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Commands.Builders;
@@ -12,6 +13,8 @@ using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Monsters;
+using MegaCrit.Sts2.Core.Multiplayer.Game;
+using MegaCrit.Sts2.Core.Runs;
 
 namespace InfiniteUpgradeSystem;
 
@@ -56,10 +59,12 @@ public static class SkillCardPlayPatch
                 Log.Info($"[IU-Skill] %4 hit {player.NetId} count={combatPlays} " +
                          $"str={UpgradeDataStore.HasSkill(player, "strength_every_4_plays")} " +
                          $"agi={UpgradeDataStore.HasSkill(player, "agility_every_4_plays")}");
-                if (UpgradeDataStore.HasSkill(player, "agility_every_4_plays"))
-                    await AbilityOperationHelper.ApplyPower(player.Creature, "dexterity", 1);
-                if (UpgradeDataStore.HasSkill(player, "strength_every_4_plays"))
-                    await AbilityOperationHelper.ApplyPower(player.Creature, "strength", 1);
+                // v1.4.9：施加改走同步 action（ActionExecutor 等待完成 → checksum 在其后），
+                // 避免 fire-and-forget async 施加与 checksum 的时序竞争（此前 friend 端触发、host 端未落地）。
+                // 只有 host/singleplayer 入队（防两端重复入队），action 广播到两端执行。
+                var type = RunManager.Instance?.NetService?.Type;
+                if (type == NetGameType.Host || type == NetGameType.Singleplayer)
+                    _ = UpgradePurchaseFlow.EnqueueApplyEvery4(player);
             }
 
             // 4. 每打出1张牌时，铸造1
