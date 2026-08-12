@@ -526,3 +526,21 @@
   3. 加诊断日志（SyncOnRunStarted 初始数据 / RoomEntry 加点 / 购买结果 / %4 触发）便于下次定位。
 - **版本**：1.4.5 / BUILD v35。
 
+
+---
+
+## 多人中途分歧（每4张触发，client 端 CombatWon 可能不加点）（2026-08-12）
+
+- **现象**：v1.4.5 联机中途（checksum 420）提示不同步；host 玩家身上 host 端多 `STRENGTH:1`。
+- **host 端诊断**（v1.4.5 日志已确认正常）：
+  - store init：两端玩家均 pts=7；
+  - IU RoomEntry +3（给所有玩家）；
+  - IU purchase strength_every_4_plays OK（pts_after=1，host 端点数 11）；
+  - %4 hit count=8 str=True（host 端触发力量）。
+- **推断根因**：`OnCombatWon` 仍用 `RunManager.Instance?.State` 遍历玩家 —— client 端 CombatWon
+  触发时 RunManager.State 可能未就绪 → client 端不加战斗点数 → host 玩家点数在 client 端偏少 →
+  购买 strength_every_4_plays（10）在 client 端校验失败 → 打牌第 4/8 张只 host 端触发力量 → 分歧。
+- **修复**：`OnCombatWon` 玩家源改用 `RunManager.State?.Players ?? CombatManager.DebugOnlyGetState()?.Players`
+  （CombatWon 时战斗状态可用），并加诊断日志（IU CombatWon）。
+- **版本**：1.4.6 / BUILD v36。
+

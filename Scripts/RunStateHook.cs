@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
@@ -71,13 +72,18 @@ public static class RunStateHook
     private static void OnCombatWon(CombatRoom room)
     {
         if (room == null) return;
-        var state = RunManager.Instance?.State;
-        if (state == null) return;
+        // 玩家源：优先 RunManager.State，回退 CombatManager 当前战斗状态（client 端 CombatWon 时
+        // RunManager.State 可能未就绪 → 此前会导致 client 端不加战斗点数 → 点数两端不一致）。
+        var runPlayers = RunManager.Instance?.State?.Players;
+        var combatPlayers = CombatManager.Instance?.DebugOnlyGetState()?.Players;
+        Log.Info($"IU CombatWon room={room?.RoomType} runPlayers={runPlayers?.Count} combatPlayers={combatPlayers?.Count}");
+        var players = (IEnumerable<Player>?)(runPlayers ?? combatPlayers);
 
         bool isEvent = s_enteredEventRoom;
         s_enteredEventRoom = false;
         int total = 0;
-        foreach (var player in state.Players)
+        if (players == null) return;
+        foreach (var player in players)
         {
             if (player == null) continue;
             int points;
@@ -88,7 +94,7 @@ public static class RunStateHook
             }
             else
             {
-                points = room.RoomType switch
+                points = room!.RoomType switch
                 {
                     RoomType.Monster => Roll(player, 1, 3),
                     RoomType.Elite => Roll(player, 5, 7),
@@ -99,6 +105,7 @@ public static class RunStateHook
             if (points > 0)
             {
                 UpgradePointManager.AddPoints(player, points);
+                Log.Info($"IU CombatWon +{points} for {player.NetId}");
                 total += points;
             }
         }
