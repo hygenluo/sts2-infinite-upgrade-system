@@ -561,3 +561,20 @@
   （随 run save 保存、两端派生一致、不依赖坐标同步）；RoomEntry/CombatWon 两端同步触发 → 消耗同一流一致。
 - **版本**：1.4.7 / BUILD v37。
 
+
+---
+
+## 多人分歧排查工具：分歧状态转储 + 策略反思（2026-08-13）
+
+- **现象**：v1.4.7 后 Roll/点数/购买两端已一致，但分歧仍发生在「每4张触发施加 str+agi 后」（checksum 12）。
+  RitsuLib 分歧 zip 未生成 → 无字段。
+- **新增排查工具**（`Scripts/Patches/DivergenceDiagnostics.cs`）：Harmony patch
+  `ChecksumTracker.CompareChecksums`（host 检测分歧）/ `OnReceivedStateDivergenceMessage`（client 收到分歧），
+  在分歧时打印本端各玩家 powers / 点数 / 技能 / 计数，两端日志对比即可精确定位。
+- **策略反思（官方同步模型）**：STS2 多人 = host 权威 action 广播 + 两端确定性模拟 + checksum 校验；
+  「状态 = action 流的确定性函数」，任何只在单端执行/依赖单端独有数据的修改必然分歧。
+  本 mod 数据（点数/技能/能力/计数）一致性依赖「所有修改两端严格同步」的脆弱链条（点数发放不走 action、
+  购买校验依赖 store、有状态计数），任何一环单端出错即永久分叉。**根本方向**：所有数据变更收口到
+  host 权威 action + 确定性初始强制（方案待诊断结果后实施）。
+- **版本**：1.4.8 / BUILD v38。
+
