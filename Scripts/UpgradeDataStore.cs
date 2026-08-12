@@ -121,47 +121,41 @@ public static class UpgradeDataStore
     // ═══════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// RunStarted 时同步本地玩家数据：
-    /// - store 已有该玩家数据（RitsuLib 从 run save 恢复，权威）→ 用 store 刷新本地缓存；
-    /// - store 为空（新局 / 旧档）→ 从旧 JSON（静态容器）填 store 并刷新缓存。
+    /// RunStarted 时同步**所有**玩家的数据（方案 B 修复）：
+    /// - store 已有该玩家数据（RitsuLib 从 run save 恢复，host 权威）→ 用之（本地玩家刷新缓存）；
+    /// - store 为空 → 填初始：本地玩家从旧 JSON（静态容器）迁移，**非本地玩家用默认 Points=7**
+    ///   （保证两端对同一玩家的初始数据一致，否则购买 action 的校验在另一端失败）。
     /// </summary>
     public static void SyncOnRunStarted(RunState runState)
     {
         if (Slots == null || runState == null) return;
-        var local = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault();
-        if (local == null) return;
-        if (Slots.TryGet(runState, local.NetId, out _))
+        foreach (var player in runState.Players)
         {
-            RefreshLocalCache(local);
-            Log.Info("InfiniteUpgradeSystem: RunStarted — store has authoritative data, cache synced from store.");
+            if (player == null) continue;
+            bool isLocal = LocalContext.IsMe(player);
+            if (Slots.TryGet(runState, player.NetId, out _))
+            {
+                if (isLocal) RefreshLocalCache(player); // store 权威 → 本地缓存
+            }
+            else
+            {
+                var data = isLocal ? BuildFromLegacy() : new PlayerUpgradeData { Points = 7 };
+                try { Slots.Set(runState, player.NetId, data); }
+                catch (Exception ex)
+                {
+                    Log.Warn($"InfiniteUpgradeSystem: SyncOnRunStarted set failed for {player.NetId}: {ex.Message}");
+                }
+                if (isLocal) RefreshLocalCache(player);
+            }
         }
-        else
-        {
-            SeedFromLegacy(runState);
-        }
+        Log.Info("InfiniteUpgradeSystem: RunStarted — store synced for all players.");
     }
 
-    /// <summary>
-    /// 旧 JSON（points/skills/abilities）迁移给本地玩家。store 已有该玩家数据则跳过，不覆盖。
-    /// 旧 JSON 是单机语义，数据归本地玩家。
-    /// </summary>
-    private static void SeedFromLegacy(RunState runState)
+    /// <summary>本地玩家旧数据（静态容器，旧 JSON 迁移源）。</summary>
+    private static PlayerUpgradeData BuildFromLegacy() => new()
     {
-        if (Slots == null || runState == null) return;
-        var local = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault();
-        if (local == null) return;
-        if (Slots.TryGet(runState, local.NetId, out _)) return; // 已有权威数据，跳过
-
-        var data = new PlayerUpgradeData
-        {
-            Points = UpgradePointManager.CurrentPoints,
-            Skills = SkillRegistry.SnapshotLevels(),
-            Boosts = AbilityOperationHelper.SnapshotBoosts(),
-        };
-        try { Slots.Set(runState, local.NetId, data); }
-        catch (Exception ex)
-        {
-            Log.Warn($"InfiniteUpgradeSystem: SeedFromLegacy failed: {ex.Message}");
-        }
-    }
+        Points = UpgradePointManager.CurrentPoints,
+        Skills = SkillRegistry.SnapshotLevels(),
+        Boosts = AbilityOperationHelper.SnapshotBoosts(),
+    };
 }
