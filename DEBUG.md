@@ -544,3 +544,20 @@
   （CombatWon 时战斗状态可用），并加诊断日志（IU CombatWon）。
 - **版本**：1.4.6 / BUILD v36。
 
+
+---
+
+## 多人中途分歧（Roll 用 CurrentMapCoord 两端不同步 → 点数分叉）（2026-08-13）
+
+- **现象**：v1.4.6 联机中途（checksum 45）提示不同步；host 玩家身上 host 端多 STRENGTH/敏捷。
+- **朋友日志对比（决定性证据）**：
+  - friend 为 BUILD v36（v1.4.6），store init 两端均 pts=7（初始一致）；
+  - **RoomEntry Event 加点：host 端 host 玩家 +2，friend 端 host 玩家 +1** → 两端对同一玩家 Roll 值不同；
+  - 此后 host 玩家点数在两端分叉 → 后续购买（strength/agility）在 friend 端校验结果可能不同 →
+    每4张触发只一端 → STRENGTH 分歧。
+- **根因**：`Roll` 用 `HashCode.Combine(seed, NetId, ActFloor, CurrentMapCoord)`，但 **AfterRoomEntered 触发瞬间
+  两端 CurrentMapCoord/ActFloor 可能未同步**（一端已进新房、另一端还没）→ Roll 值两端不同。
+- **修复**：`Roll` 改用 RitsuLib **每玩家确定性 RNG 流** `ModRunRngRegistry.Get(player, modId, "points")`
+  （随 run save 保存、两端派生一致、不依赖坐标同步）；RoomEntry/CombatWon 两端同步触发 → 消耗同一流一致。
+- **版本**：1.4.7 / BUILD v37。
+

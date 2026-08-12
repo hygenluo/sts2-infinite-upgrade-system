@@ -10,6 +10,7 @@ using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
+using STS2RitsuLib.RunRngs;
 
 namespace InfiniteUpgradeSystem;
 
@@ -143,19 +144,16 @@ public static class RunStateHook
     }
 
     /// <summary>
-    /// 随机区间（含两端）。方案 B：确定性哈希（seed + 玩家 NetId + ActFloor + 房间坐标），
-    /// 用 player.RunState（两端一致，不依赖 RunManager.Instance.State 是否就绪）。
-    /// 同一玩家在同一房间的同一时刻，两端计算一致。
+    /// 随机区间（含两端）。方案 B：用 RitsuLib 每玩家确定性 RNG 流（points stream，随 run save
+    /// 保存、两端派生一致）。此前用 HashCode(seed, NetId, ActFloor, CurrentMapCoord)，但
+    /// AfterRoomEntered 触发瞬间两端 CurrentMapCoord/ActFloor 可能未同步 → Roll 值两端不同
+    /// （实测 host +2 / friend +1）→ 点数分叉。RNG 流不依赖坐标同步，两端消耗同一玩家流一致。
     /// </summary>
     internal static int Roll(Player player, int min, int maxInclusive)
     {
-        var rs = player?.RunState;
-        if (rs == null) return min;
-        string mapCoord = rs.CurrentMapCoord?.ToString() ?? "none";
-        string seed = rs.Rng?.StringSeed ?? "unknown";
-        long h = unchecked(HashCode.Combine(seed, player!.NetId, rs.ActFloor, mapCoord));
-        int range = maxInclusive - min + 1;
-        return min + (int)(((ulong)h) % (uint)range);
+        if (player == null) return min;
+        var rng = ModRunRngRegistry.Get(player, Entry.ModId, "points");
+        return min + rng.NextInt(0, maxInclusive - min + 1);
     }
 
     /// <summary>房间进入回调（update05 问号房/商店/火堆点数）。</summary>
