@@ -113,11 +113,48 @@ public static class AbilityOperationHelper
     /// 否则走「模板克隆 + ApplyInternal」应用路径。
     /// </summary>
     /// <summary>
+    /// 同步施加 Power（publicized 直接调用，无 await；用于两端本地确定性同步的场合，如每4张触发）。
+    /// 不触发 Hook 链（Before/AfterPowerAmountChanged）——PowerCmd.Apply 在战斗内有 CustomScaledWait
+    /// 跨帧 await，fire-and-forget 调用会与 checksum 时序竞争；此处两端一致优先。
+    /// 已有同类 power 时叠加（PowerCmd 的重复应用检查对同类会抛异常）。
+    /// </summary>
+    public static void ApplyPowerSync(Creature creature, string key, int count)
+    {
+        if (creature == null || count <= 0) return;
+        try
+        {
+            switch (key)
+            {
+                case "strength": ApplySync<StrengthPower>(creature, count); break;
+                case "dexterity": ApplySync<DexterityPower>(creature, count); break;
+            }
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[IU] ApplyPowerSync {key}: {ex}");
+        }
+    }
+
+    private static void ApplySync<T>(Creature creature, int count) where T : PowerModel
+    {
+        var existing = creature.GetPower<T>();
+        if (existing != null)
+        {
+            existing.SetAmount(existing.Amount + count, false);
+            return;
+        }
+        var power = ModelDb.Power<T>().ToMutable();
+        power.ApplyInternal(creature, count, false);
+    }
+
+    /// <summary>
     /// 应用 Power（方案 B：走游戏原生 PowerCmd.Apply，进同步 Hook 链路）。
     /// key 映射：能力系统 + 技能效果（vigor/weak 等）。
     /// PowerCmd.Apply 自带叠加（HasPower → ModifyAmount）与完整 Hook 链
     /// （BeforePowerAmountChanged / ModifyPowerAmountGiven/Received / AfterPowerAmountChanged），
     /// 替代旧反射 ApplyInternal（绕过 Hook，导致多人 checksum 分歧）。
+    /// 注意：战斗内其内部有 CustomScaledWait 跨帧 await——fire-and-forget 调用会与 checksum
+    /// 时序竞争，需走 action（如 ApplyEvery4）或改用 ApplyPowerSync。
     /// </summary>
     public static async Task ApplyPower(Creature creature, string key, int count, Creature? applier = null, CardModel? cardSource = null, PlayerChoiceContext? context = null)
     {

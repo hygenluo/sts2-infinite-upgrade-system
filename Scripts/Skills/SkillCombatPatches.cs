@@ -38,17 +38,20 @@ public static class SkillCardPlayPatch
     }
 
     /// <summary>
-    /// 每4张触发（v1.4.10）：用 CombatManager.History.CardPlaysStarted 确定性计数（官方 Normality 同款来源），
-    /// 在 Postfix 同步部分由 host/singleplayer 入队 ApplyEvery4 action（ActionExecutor 等待完成 → checksum 在其后）。
-    /// 此前在 fire-and-forget HandleAsync 里入队 → 两端入队时机可能不同 → action 流错位 → 分歧。
+    /// 每4张触发（v1.4.11）：用 CombatManager.History.CardPlaysStarted 确定性计数（官方 Normality 同款来源），
+    /// 在 Postfix 同步部分**两端本地同步施加**（ApplyPowerSync 无 await、无广播）。
+    /// AfterCardPlayed 两端确定性触发 + History 确定性计数 → 两端一致。
+    /// 此前 ApplyEvery4 广播方案不可靠：friend 玩家的 action 因 RunLocationTargetedMessageBuffer 的
+    /// location 时序在 client 端丢失 → 两端执行次数不同（STRENGTH 2 vs 1）。
     /// </summary>
     private static void TryTriggerEvery4(Player player)
     {
         int plays = CombatManager.Instance?.History?.CardPlaysStarted?.Count(e => e.CardPlay?.Player == player) ?? 0;
         if (plays <= 0 || plays % 4 != 0) return;
-        var type = RunManager.Instance?.NetService?.Type;
-        if (type == NetGameType.Host || type == NetGameType.Singleplayer)
-            _ = UpgradePurchaseFlow.EnqueueApplyEvery4(player);
+        if (UpgradeDataStore.HasSkill(player, "strength_every_4_plays"))
+            AbilityOperationHelper.ApplyPowerSync(player.Creature, "strength", 1);
+        if (UpgradeDataStore.HasSkill(player, "agility_every_4_plays"))
+            AbilityOperationHelper.ApplyPowerSync(player.Creature, "dexterity", 1);
     }
 
     private static async Task HandleAsync(ICombatState state, PlayerChoiceContext context, Player player, CardModel card)

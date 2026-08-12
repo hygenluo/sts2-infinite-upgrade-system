@@ -617,3 +617,22 @@
   若发生，按同样模式走 action。
 - **版本**：1.4.10 / BUILD v40。
 
+
+---
+
+## 多人分歧：ApplyEvery4 广播在 client 端丢失 → 两端执行次数不同（2026-08-13）
+
+- **现象**：v1.4.10 联机（checksum 56）分歧。转储+report：friend 端 host 玩家 STRENGTH:2、host 端 1
+  （两端 pts=4 cp=4 skills 一致，仅 power 层数不同）。
+- **根因**：ApplyEvery4 由 host 入队广播，但 **friend 玩家的 action 在 client 端丢失**——host 在打牌 action
+  内的 AfterCardPlayed Postfix 里入队时，`RunLocationTargetedMessageBuffer` 的 currentLocation 与消息
+  Source Location 不一致（client 端尚未推进到新战斗）→ 消息被缓冲/丢弃 → client 端该 action 不入队
+  → 两端 action 流数量不同 → 后续 STRENGTH 施加次数不同。
+- **修复（放弃广播，两端本地确定性同步）**：`%4 hit` 改为 **Postfix 同步部分两端本地同步施加**
+  `ApplyPowerSync`（publicized `ModelDb.Power<T>().ToMutable().ApplyInternal`，无 await、无广播、
+  已有同类叠加）；计数用 `CombatManager.History.CardPlaysStarted`（确定性）。
+  AfterCardPlayed 两端确定性触发 + 确定性计数 + 同步施加 → 两端一致。
+- **关键认知**：战斗内「Hook 同步部分 + 无 await 施加」比「入队 action」更可靠（广播受 location
+  缓冲时序影响；async 受 checksum 时序影响）。
+- **版本**：1.4.11 / BUILD v41。
+
