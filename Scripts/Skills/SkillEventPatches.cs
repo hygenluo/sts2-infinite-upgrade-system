@@ -268,14 +268,15 @@ public static class SkillOrbAtTurnStartPatch
 /// <summary>
 /// 你可以在休息处选择任意数量的选项（通用，参照遗物 微型帐篷 MiniatureTent）。
 /// 休息处逻辑调用 Hook.ShouldDisableRemainingRestSiteOptions 决定是否禁用剩余选项；
-/// 技能已购时强制返回 false（永不禁用）。
+/// 按**被处理玩家**从 store 判断（两端一致）—— 修复 v1.4.3：此前读本地缓存导致
+/// host/client 对同一玩家的选项状态判定不同 → RestSiteSynchronizer 分歧 → 休息处黑屏。
 /// </summary>
 [HarmonyPatch(typeof(Hook), nameof(Hook.ShouldDisableRemainingRestSiteOptions))]
 public static class SkillRestSitePatch
 {
-    public static void Postfix(ref bool __result)
+    public static void Postfix(Player player, ref bool __result)
     {
-        if (SkillRegistry.Has("rest_all_options"))
+        if (player != null && UpgradeDataStore.HasSkill(player, "rest_all_options"))
             __result = false;
     }
 }

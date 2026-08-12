@@ -473,3 +473,21 @@
 - **依赖**：新增 RitsuLib（NuGet `STS2.RitsuLib`，版本 `*`；manifest 声明 `STS2-RitsuLib` v0.5.11）；
   **联机双方必须装齐 mod（含 RitsuLib）**，否则 store 不可用（降级为空，购买/点数失效）
 - **待办**：单人回归测试 + 双端多人联调（Step 6）
+
+---
+
+## 多人休息处黑屏修复 + v1.4.3 优化（2026-08-12）
+
+- **黑屏现象**：host 有 rest_all_options（休息处任意选项），联机休息处做 3 次操作（HEAL/SMITH/MEND）后退出，黑屏。
+- **根因**：`SkillRestSitePatch`（ShouldDisableRemainingRestSiteOptions Postfix）用本地缓存 `SkillRegistry.Has("rest_all_options")`
+  判断，但游戏按**每个玩家**调用该 hook（RestSiteSynchronizer.ChooseOption）。host 端处理 friend 的 rest site 时返回 false
+  （host 缓存有技能），friend 端处理 friend 时返回 true（friend 缓存无）→ 两端对 friend 选项状态判定不同 →
+  RestSiteSynchronizer 分歧（checksum 127）→ friend 断开 → host RestSiteRoom.Exit 抛 `Could not find connection for peer` → 黑屏。
+- **修复**：Postfix 增加 `Player player` 参数，改用 `UpgradeDataStore.HasSkill(player, "rest_all_options")`（两端按同一玩家 store 判断）。
+- **v1.4.3 优化**：
+  1. **合并网络 action**：3 个 INetAction（购买/加点/扣点）合并为 1 个通用 `NetUpgradeDataAction`（Op 枚举 + 通用字段），
+     `UpgradeDataAction` 按 Op 分发。mod 仅 1 个 INetAction 类型 → 两端类型集合稳定，新增操作不破坏 net-id（减少版本不兼容崩溃）。
+  2. **卡牌操作同步化**：升级/攻击+/格挡+/抽牌+/重放+/耗能-/词条/删牌/附魔 全部改为「选卡 → 预校验 → 入队 CardMod action
+     （原子扣点+按 CardIdentity 找卡+改卡+记录）」，两端一致执行。`CardUpgradeTracker` 方法增加 Player 参数（按 owner 记录）。
+- **行为变化**：卡牌操作从「先扣点后选卡（取消退款）」改为「选卡后 action 原子扣点」（取消选卡不再扣点）。
+

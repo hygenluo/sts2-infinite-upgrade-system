@@ -39,6 +39,7 @@ public static class CardUpgradeTracker
         KeywordRemove,
         EnergyReduce,
         Enchant,
+        DeckRemove, // v1.4.3：删牌（CardMod action 分发用，不记录修改）
     }
 
     [Serializable]
@@ -73,10 +74,10 @@ public static class CardUpgradeTracker
         return r.Entries.Count(e => e.Type == nameof(ModType.Upgrade));
     }
 
-    public static void RecordModification(CardModel card, string seed, ModType type, string? keyword = null)
+    /// <summary>记录修改（按被修改卡的 owner 玩家，方案 B：两端 action 内一致调用）。</summary>
+    public static void RecordModification(Player player, CardModel card, string seed, ModType type, string? keyword = null)
     {
-        var player = CardOperationHelper.GetLocalPlayer();
-        if (player == null) return;
+        if (player == null || card == null) return;
 
         string identity = GetCardIdentity(card, player.Deck.Cards);
 
@@ -257,12 +258,9 @@ public static class CardUpgradeTracker
     /// 删牌后修正按身份记录的修改。
     /// 被删卡的记录丢弃，剩余卡按当前牌组顺序重新分配身份。
     /// </summary>
-    public static void OnCardRemoved(int removedIndex, string seed)
+    public static void OnCardRemoved(Player player, int removedIndex, string seed)
     {
-        if (removedIndex < 0) return;
-
-        var player = CardOperationHelper.GetLocalPlayer();
-        if (player == null) return;
+        if (player == null || removedIndex < 0) return;
 
         var cards = player.Deck.Cards;
 
@@ -397,11 +395,10 @@ public static class CardUpgradeTracker
     }
 
     /// <summary>
-    /// 计算卡牌身份 = "{TemplateId}__{实例序号}"。
+    /// 计算卡牌身份 = "{TemplateId}__{实例序号}"（public：CardMod action 选卡后编码 / 两端找卡用）。
     /// 实例序号 = 在牌组中从头扫描，遇到同 TemplateId 的卡牌时递增，到目标卡为止。
-    /// 使用 ReferenceEquals 精确匹配目标卡牌。
     /// </summary>
-    private static string GetCardIdentity(CardModel target, IReadOnlyList<CardModel> deck)
+    public static string GetCardIdentity(CardModel target, IReadOnlyList<CardModel> deck)
     {
         int counter = 0;
         for (int i = 0; i < deck.Count; i++)
@@ -487,10 +484,9 @@ public static class CardUpgradeTracker
     }
 
     /// <summary>移除某张卡指定附魔类型的全部记录（多种附魔替换用）。</summary>
-    public static void RemoveEnchantmentEntries(CardModel card, string seed, string enchantType)
+    public static void RemoveEnchantmentEntries(Player player, CardModel card, string seed, string enchantType)
     {
-        var player = CardOperationHelper.GetLocalPlayer();
-        if (player == null) return;
+        if (player == null || card == null) return;
         string identity = GetCardIdentity(card, player.Deck.Cards);
         if (!s_records.TryGetValue(identity, out var rec)) return;
         rec.Entries.RemoveAll(e => e.Type == nameof(ModType.Enchant) && e.Keyword == enchantType);

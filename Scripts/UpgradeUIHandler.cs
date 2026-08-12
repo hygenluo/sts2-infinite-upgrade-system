@@ -786,33 +786,26 @@ public sealed partial class UpgradeUIHandler : Control
         return ok;
     };
 
-    /// <summary>升级卡牌流程（选牌取消自动退款并恢复面板）。</summary>
+    /// <summary>升级卡牌流程（v1.4.3：选牌后入队 CardMod action，跨端一致）。</summary>
     private async Task<bool> UpgradeCardFlow(string promptKey)
     {
-        if (!await UpgradePointManager.TrySpendPointsAsync(CardOperationHelper.UpgradeCost)) return false;
         var player = CardOperationHelper.GetLocalPlayer();
         if (player == null) return false;
         SetUIVisible(false);
         try
         {
             var card = await CardOperationHelper.SelectCardFromDeck(player, promptKey);
-            if (card == null)
-            {
-                await UpgradePurchaseFlow.EnqueueAddPoints(CardOperationHelper.UpgradeCost);
-                RefreshPointsLabel();
-                SetUIVisible(true);
-                return false;
-            }
-            CardOperationHelper.PerformInfiniteUpgrade(card);
+            if (card == null) { SetUIVisible(true); return false; }
+            card = CardOperationHelper.EnsureMutableInDeck(player, card); // 写回 deck，确保 identity 可被 action 端匹配
+            string identity = CardUpgradeTracker.GetCardIdentity(card, player.Deck.Cards);
+            var ok = await UpgradePurchaseFlow.EnqueueCardMod(CardOperationHelper.UpgradeCost, identity, (int)CardUpgradeTracker.ModType.Upgrade, "", false);
             RefreshPointsLabel();
-            HideUI();
-            return true;
+            if (ok) { CardOperationHelper.RefreshAllVisuals(player); HideUI(); } else SetUIVisible(true);
+            return ok;
         }
         catch (Exception ex)
         {
             Log.Error($"Upgrade error: {ex.Message}");
-            await UpgradePurchaseFlow.EnqueueAddPoints(CardOperationHelper.UpgradeCost);
-            RefreshPointsLabel();
             SetUIVisible(true);
             return false;
         }

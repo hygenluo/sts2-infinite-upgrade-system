@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using Godot;
+using InfiniteUpgradeSystem.Multiplayer;
 using MegaCrit.Sts2.Core.CardSelection;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
@@ -209,36 +210,133 @@ public static class CardOperationHelper
         }
     }
 
-    public static void PerformInfiniteUpgrade(CardModel card)
+    // ═══════════════════════════════════════════════════════════════
+    // v1.4.3：CardMod action 执行（两端一致，原子扣点+改卡+记录）
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>CardMod action 执行：按身份找卡 → 校验 → 扣点 → 改卡 → 记录。两端一致。</summary>
+    public static async Task<bool> TryApplyCardMod(Player player, string cardIdentity, int cost,
+        CardUpgradeTracker.ModType modType, string arg, bool add)
     {
-        card.AssertMutable();
-        var pileType = card.Pile?.Type ?? PileType.Deck;
-        int originalLevel = card.CurrentUpgradeLevel;
-        bool wasAlreadyUpgraded = originalLevel > 0;
-
-        if (originalLevel >= card.MaxUpgradeLevel)
-            WriteUpgradeLevelField(card, 0);
-
-        card.UpgradeInternal();
-        card.FinalizeUpgradeInternal();
-
-        var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
-
-        if (wasAlreadyUpgraded)
+        if (player == null) return false;
+        var card = FindCardByIdentity(player, cardIdentity);
+        if (card == null)
         {
-            // 非首次：恢复到原始等级，追踪额外升级
-            WriteUpgradeLevelField(card, originalLevel);
+            GD.Print($"[IU] CardMod: card not found ({cardIdentity})");
+            return false;
         }
-        // else: 首次升级 → CurrentUpgradeLevel 保持为 1，卡牌外观自动变为"已升级"
+        if (!CanApplyCardMod(card, modType, arg, add))
+        {
+            GD.Print($"[IU] CardMod: cannot apply {modType} to {card.Id.Entry}");
+            return false;
+        }
+        if (!UpgradePointManager.TrySpendPoints(player, cost)) return false;
+        card = EnsureMutableInDeck(player, card);
+        await ApplyCardMod(player, card, modType, arg, add);
+        return true;
+    }
 
-        // 始终追踪：CardUpgradeTracker 是唯一权威修改记录
-        CardUpgradeTracker.RecordModification(card, seed, CardUpgradeTracker.ModType.Upgrade);
+    /// <summary>按卡牌身份（TemplateId__实例序号）在玩家牌组找卡。</summary>
+    public static CardModel? FindCardByIdentity(Player player, string identity)
+    {
+        if (player == null) return null;
+        var counter = new Dictionary<string, int>();
+        foreach (var card in player.Deck.Cards)
+        {
+            string t = card.Id.Entry;
+            counter.TryGetValue(t, out int n);
+            if ($"{t}__{n}" == identity) return card;
+            counter[t] = n + 1;
+        }
+        return null;
+    }
 
-        var ncard = NCard.FindOnTable(card);
-        if (ncard != null)
-            ncard.UpdateVisuals(pileType, CardPreviewMode.Normal);
+    /// <summary>卡牌修改前置校验（选卡后 UI 预校验 + action 两端校验，结果一致）。</summary>
+    public static bool CanApplyCardMod(CardModel card, CardUpgradeTracker.ModType modType, string arg, bool add)
+    {
+        if (card == null) return false;
+        switch (modType)
+        {
+            case CardUpgradeTracker.ModType.DamagePlus: return card.DynamicVars.Damage != null;
+            case CardUpgradeTracker.ModType.BlockPlus: return card.DynamicVars.Block != null;
+            case CardUpgradeTracker.ModType.DrawPlus: return card.DynamicVars.Cards != null;
+            case CardUpgradeTracker.ModType.ReplayPlus: return true;
+            case CardUpgradeTracker.ModType.EnergyReduce: return card.EnergyCost.Canonical > 0;
+            case CardUpgradeTracker.ModType.KeywordAdd:
+                return Enum.TryParse<CardKeyword>(arg, out var ka) && !card.Keywords.Contains(ka);
+            case CardUpgradeTracker.ModType.KeywordRemove:
+                return Enum.TryParse<CardKeyword>(arg, out var kr) && card.Keywords.Contains(kr);
+            case CardUpgradeTracker.ModType.Enchant: return CanEnchant(card, arg);
+            case CardUpgradeTracker.ModType.DeckRemove: return true;
+            case CardUpgradeTracker.ModType.Upgrade: return true;
+            default: return false;
+        }
+    }
 
-        ShowUpgradeVfx(card);
+    /// <summary>应用卡牌修改（action 两端执行）。</summary>
+    private static async Task ApplyCardMod(Player player, CardModel card, CardUpgradeTracker.ModType modType, string arg, bool add)
+    {
+        var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
+        switch (modType)
+        {
+            case CardUpgradeTracker.ModType.Upgrade:
+                UpgradeWithoutTracking(card);
+                CardUpgradeTracker.RecordModification(player, card, seed, modType);
+                break;
+            case CardUpgradeTracker.ModType.DamagePlus:
+                card.DynamicVars.Damage.BaseValue += 1m;
+                CardUpgradeTracker.RecordModification(player, card, seed, modType);
+                break;
+            case CardUpgradeTracker.ModType.BlockPlus:
+                card.DynamicVars.Block.BaseValue += 1m;
+                CardUpgradeTracker.RecordModification(player, card, seed, modType);
+                break;
+            case CardUpgradeTracker.ModType.DrawPlus:
+                card.DynamicVars.Cards.BaseValue += 1m;
+                CardUpgradeTracker.RecordModification(player, card, seed, modType);
+                break;
+            case CardUpgradeTracker.ModType.ReplayPlus:
+                card.BaseReplayCount += 1;
+                CardUpgradeTracker.RecordModification(player, card, seed, modType);
+                break;
+            case CardUpgradeTracker.ModType.KeywordAdd:
+                if (Enum.TryParse<CardKeyword>(arg, out var ka))
+                { card.AddKeyword(ka); CardUpgradeTracker.RecordModification(player, card, seed, modType, arg); }
+                break;
+            case CardUpgradeTracker.ModType.KeywordRemove:
+                if (Enum.TryParse<CardKeyword>(arg, out var kr))
+                { card.RemoveKeyword(kr); CardUpgradeTracker.RecordModification(player, card, seed, modType, arg); }
+                break;
+            case CardUpgradeTracker.ModType.EnergyReduce:
+                var cur = card.EnergyCost.Canonical;
+                if (cur > 0) { card.EnergyCost.SetCustomBaseCost(cur - 1); CardUpgradeTracker.RecordModification(player, card, seed, modType); }
+                break;
+            case CardUpgradeTracker.ModType.Enchant:
+                // 替换逻辑在 action 内重算（两端附魔列表一致 → replacedType 一致）
+                var currentTypes = GetCardEnchantments(card);
+                string? replacedType = null;
+                if (!currentTypes.Any(e => e.Type == arg) && currentTypes.Count >= GetEnchantLimit(card))
+                    replacedType = currentTypes[0].Type;
+                if (!ApplyEnchantmentToCard(card, arg)) break;
+                if (replacedType != null && card.Enchantment is CompositeEnchantment composite)
+                    composite.RemoveSub(replacedType);
+                if (replacedType != null)
+                    CardUpgradeTracker.RemoveEnchantmentEntries(player, card, seed, replacedType);
+                CardUpgradeTracker.RecordModification(player, card, seed, CardUpgradeTracker.ModType.Enchant, arg);
+                break;
+            case CardUpgradeTracker.ModType.DeckRemove:
+                int idx = FindCardIndexInDeck(player, card);
+                await MegaCrit.Sts2.Core.Commands.CardPileCmd.RemoveFromDeck(card);
+                CardUpgradeTracker.OnCardRemoved(player, idx, seed);
+                break;
+        }
+    }
+
+    private static int FindCardIndexInDeck(Player player, CardModel card)
+    {
+        for (int i = 0; i < player.Deck.Cards.Count; i++)
+            if (ReferenceEquals(player.Deck.Cards[i], card)) return i;
+        return -1;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -246,28 +344,14 @@ public static class CardOperationHelper
     // ═══════════════════════════════════════════════════════════════
 
     public static async Task<bool> ModifyDamage(int cost, string promptKey = "")
-    {
-        if (!await UpgradePointManager.TrySpendPointsAsync(cost)) return false;
-        var result = await PickAndModifyCard("攻击", c => c.DynamicVars.Damage?.BaseValue,
-            c => c.DynamicVars.Damage.BaseValue += 1m,
-            CardUpgradeTracker.ModType.DamagePlus, promptKey);
-        if (!result) await UpgradePointManager.AddPointsAsync(cost);
-        return result;
-    }
+        => await PickAndModifyCard(cost, "攻击", CardUpgradeTracker.ModType.DamagePlus, promptKey: promptKey);
 
     public static async Task<bool> ModifyBlock(int cost, string promptKey = "")
-    {
-        if (!await UpgradePointManager.TrySpendPointsAsync(cost)) return false;
-        var result = await PickAndModifyCard("格挡", c => c.DynamicVars.Block?.BaseValue,
-            c => c.DynamicVars.Block.BaseValue += 1m,
-            CardUpgradeTracker.ModType.BlockPlus, promptKey);
-        if (!result) await UpgradePointManager.AddPointsAsync(cost);
-        return result;
-    }
+        => await PickAndModifyCard(cost, "格挡", CardUpgradeTracker.ModType.BlockPlus, promptKey: promptKey);
 
-    private static async Task<bool> PickAndModifyCard(string propName,
-        Func<CardModel, decimal?> getter, Action<CardModel> modifier,
-        CardUpgradeTracker.ModType? modType = null, string promptKey = "")
+    /// <summary>v1.4.3：选卡 → 预校验 → 入队 CardMod action（原子扣点+改卡+记录，跨端一致）。</summary>
+    private static async Task<bool> PickAndModifyCard(int cost, string propName,
+        CardUpgradeTracker.ModType modType, string arg = "", bool add = false, string promptKey = "")
     {
         var player = GetLocalPlayer();
         if (player == null) return false;
@@ -276,22 +360,18 @@ public static class CardOperationHelper
         {
             var card = await SelectCardFromDeck(player, promptKey);
             if (card == null) { UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
-            card = EnsureMutableInDeck(player, card);
-            if (getter(card) == null)
+            card = EnsureMutableInDeck(player, card); // 写回 deck，确保 identity 可被 action 端匹配
+            if (!CanApplyCardMod(card, modType, arg, add))
             {
-                GD.Print($"此卡牌没有{propName}属性。");
+                GD.Print($"此卡牌无法进行{propName}操作。");
                 UpgradeUIHandler.Instance?.SetUIVisible(true);
                 return false;
             }
-            modifier(card);
-            if (modType != null)
-            {
-                var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
-                CardUpgradeTracker.RecordModification(card, seed, modType.Value);
-            }
-            UpgradeUIHandler.Instance?.RefreshPointsLabel();
-            UpgradeUIHandler.Instance?.HideUI();
-            return true;
+            string identity = CardUpgradeTracker.GetCardIdentity(card, player.Deck.Cards);
+            var ok = await UpgradePurchaseFlow.EnqueueCardMod(cost, identity, (int)modType, arg, add);
+            if (ok) { UpgradeUIHandler.Instance?.RefreshPointsLabel(); UpgradeUIHandler.Instance?.HideUI(); }
+            else UpgradeUIHandler.Instance?.SetUIVisible(true);
+            return ok;
         }
         catch (Exception ex)
         {
@@ -307,36 +387,8 @@ public static class CardOperationHelper
 
     public static async Task<bool> ToggleKeyword(int cost, CardKeyword keyword, bool add, string promptKey = "")
     {
-        if (!await UpgradePointManager.TrySpendPointsAsync(cost)) return false;
-        var player = GetLocalPlayer();
-        if (player == null) return false;
-        UpgradeUIHandler.Instance?.SetUIVisible(false);
-        try
-        {
-            var card = await SelectCardFromDeck(player, promptKey);
-            if (card == null) { await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
-            card = EnsureMutableInDeck(player, card);
-
-            if (add)
-            {
-                if (card.Keywords.Contains(keyword))
-                { GD.Print("此卡牌已有该词条。"); await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
-                card.AddKeyword(keyword);
-            }
-            else
-            {
-                if (!card.Keywords.Contains(keyword))
-                { GD.Print("此卡牌没有该词条。"); await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
-                card.RemoveKeyword(keyword);
-            }
-            var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
-            var modType = add ? CardUpgradeTracker.ModType.KeywordAdd : CardUpgradeTracker.ModType.KeywordRemove;
-            CardUpgradeTracker.RecordModification(card, seed, modType, keyword.ToString());
-            UpgradeUIHandler.Instance?.RefreshPointsLabel();
-            UpgradeUIHandler.Instance?.HideUI();
-            return true;
-        }
-        catch (Exception ex) { Log.Error($"Keyword error: {ex.Message}"); await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+        var modType = add ? CardUpgradeTracker.ModType.KeywordAdd : CardUpgradeTracker.ModType.KeywordRemove;
+        return await PickAndModifyCard(cost, add ? "添加词条" : "移除词条", modType, keyword.ToString(), add, promptKey);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -344,96 +396,25 @@ public static class CardOperationHelper
     // ═══════════════════════════════════════════════════════════════
 
     public static async Task<bool> ReduceEnergyCost(int cost, string promptKey = "")
-    {
-        if (!await UpgradePointManager.TrySpendPointsAsync(cost)) return false;
-        var player = GetLocalPlayer();
-        if (player == null) return false;
-        UpgradeUIHandler.Instance?.SetUIVisible(false);
-        try
-        {
-            var card = await SelectCardFromDeck(player, promptKey);
-            if (card == null) { await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
-            card = EnsureMutableInDeck(player, card);
-            var cur = card.EnergyCost.Canonical;
-            if (cur <= 0) { GD.Print("此卡牌已是0费。"); await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
-            card.EnergyCost.SetCustomBaseCost(cur - 1);
-            var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
-            CardUpgradeTracker.RecordModification(card, seed, CardUpgradeTracker.ModType.EnergyReduce);
-            UpgradeUIHandler.Instance?.RefreshPointsLabel();
-            UpgradeUIHandler.Instance?.HideUI();
-            return true;
-        }
-        catch (Exception ex) { Log.Error($"Energy cost error: {ex.Message}"); await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
-    }
+        => await PickAndModifyCard(cost, "耗能", CardUpgradeTracker.ModType.EnergyReduce, promptKey: promptKey);
 
     // ═══════════════════════════════════════════════════════════════
     // Phase 3.4: 抽牌+1 / 重放+1 / 次数+1
     // ═══════════════════════════════════════════════════════════════
 
     public static async Task<bool> ModifyDrawCount(int cost, string promptKey = "")
-    {
-        if (!await UpgradePointManager.TrySpendPointsAsync(cost)) return false;
-        var result = await PickAndModifyCard("抽牌", c => c.DynamicVars.Cards?.BaseValue,
-            c => c.DynamicVars.Cards.BaseValue += 1m,
-            CardUpgradeTracker.ModType.DrawPlus, promptKey);
-        if (!result) await UpgradePointManager.AddPointsAsync(cost);
-        return result;
-    }
+        => await PickAndModifyCard(cost, "抽牌", CardUpgradeTracker.ModType.DrawPlus, promptKey: promptKey);
 
     public static async Task<bool> ModifyReplayCount(int cost, string promptKey = "")
-    {
-        if (!await UpgradePointManager.TrySpendPointsAsync(cost)) return false;
-        var player = GetLocalPlayer();
-        if (player == null) return false;
-        UpgradeUIHandler.Instance?.SetUIVisible(false);
-        try
-        {
-            var card = await SelectCardFromDeck(player, promptKey);
-            if (card == null) { await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
-            card = EnsureMutableInDeck(player, card);
-            card.BaseReplayCount += 1;
-            var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
-            CardUpgradeTracker.RecordModification(card, seed, CardUpgradeTracker.ModType.ReplayPlus);
-            UpgradeUIHandler.Instance?.RefreshPointsLabel();
-            UpgradeUIHandler.Instance?.HideUI();
-            return true;
-        }
-        catch (Exception ex) { Log.Error($"Replay error: {ex.Message}"); await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
-    }
+        => await PickAndModifyCard(cost, "重放", CardUpgradeTracker.ModType.ReplayPlus, promptKey: promptKey);
 
     // ═══════════════════════════════════════════════════════════════
     // Phase 6: 牌组操作
     // ═══════════════════════════════════════════════════════════════
 
-    /// <summary>从牌组选择一张牌删除。</summary>
+    /// <summary>从牌组选择一张牌删除（v1.4.3：走 CardMod action，跨端一致）。</summary>
     public static async Task<bool> RemoveCardFromDeck(int cost, string promptKey = "")
-    {
-        if (!await UpgradePointManager.TrySpendPointsAsync(cost)) return false;
-        var player = GetLocalPlayer();
-        if (player == null) { await UpgradePointManager.AddPointsAsync(cost); return false; }
-        UpgradeUIHandler.Instance?.SetUIVisible(false);
-        try
-        {
-            var card = await SelectCardFromDeck(player, promptKey);
-            if (card == null) { await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
-
-            // 删除前记下标，删除后修正 CardUpgradeTracker 的按下标记录
-            var deckCards = player.Deck.Cards;
-            int removedIndex = -1;
-            for (int i = 0; i < deckCards.Count; i++)
-                if (ReferenceEquals(deckCards[i], card)) { removedIndex = i; break; }
-
-            await MegaCrit.Sts2.Core.Commands.CardPileCmd.RemoveFromDeck(card);
-
-            var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
-            CardUpgradeTracker.OnCardRemoved(removedIndex, seed);
-
-            UpgradeUIHandler.Instance?.RefreshPointsLabel();
-            UpgradeUIHandler.Instance?.HideUI();
-            return true;
-        }
-        catch (Exception ex) { Log.Error($"RemoveCard: {ex.Message}"); await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
-    }
+        => await PickAndModifyCard(cost, "删牌", CardUpgradeTracker.ModType.DeckRemove, promptKey: promptKey);
 
     /// <summary>从指定卡牌池随机添加一张牌到牌组（免费）。</summary>
     public static async Task<bool> AddCardFromPool(string poolKey)
@@ -711,52 +692,35 @@ public static class CardOperationHelper
     }
 
     /// <summary>
-    /// 卡牌附魔流程（update05）：扣点 → 选卡 → 选附魔 → 应用 + 记录。
-    /// 已达上限且选新种：替换最早添加的那个（移除旧记录 + 合成模型中删除）。
+    /// 卡牌附魔流程（v1.4.3）：选卡 → 选附魔 → 入队 CardMod action（原子扣点+附魔+替换+记录，跨端一致）。
+    /// 替换逻辑（replacedType）在 action 内重算，两端一致。
     /// </summary>
     public static async Task<bool> AddEnchantment(int cost, string promptKey = "")
     {
-        if (!await UpgradePointManager.TrySpendPointsAsync(cost)) return false;
         var player = GetLocalPlayer();
-        if (player == null) { await UpgradePointManager.AddPointsAsync(cost); return false; }
+        if (player == null) return false;
         UpgradeUIHandler.Instance?.SetUIVisible(false);
         try
         {
             var card = await SelectCardFromDeck(player, promptKey);
-            if (card == null) { await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+            if (card == null) { UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
 
             var cardMutable = EnsureMutableInDeck(player, card);
             var enchantType = await UiComponents.EnchantSelectPanel.Show(cardMutable);
-            if (enchantType == null) { await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+            if (enchantType == null) { UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
 
-            var currentTypes = GetCardEnchantments(cardMutable);
-            string? replacedType = null;
-            if (!currentTypes.Any(e => e.Type == enchantType) && currentTypes.Count >= GetEnchantLimit(cardMutable))
-                replacedType = currentTypes[0].Type;
+            if (!CanApplyCardMod(cardMutable, CardUpgradeTracker.ModType.Enchant, enchantType, false))
+            { GD.Print("此卡牌无法施加该附魔。"); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
 
-            if (!ApplyEnchantmentToCard(cardMutable, enchantType))
-            {
-                // 附魔应用失败（子附魔创建失败等）→ 退款 + 恢复面板，不记录
-                await UpgradePointManager.AddPointsAsync(cost);
-                UpgradeUIHandler.Instance?.SetUIVisible(true);
-                return false;
-            }
-            if (replacedType != null && cardMutable.Enchantment is CompositeEnchantment composite)
-                composite.RemoveSub(replacedType);
-
-            var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
-            if (replacedType != null)
-                CardUpgradeTracker.RemoveEnchantmentEntries(cardMutable, seed, replacedType);
-            CardUpgradeTracker.RecordModification(cardMutable, seed, CardUpgradeTracker.ModType.Enchant, enchantType);
-
-            UpgradeUIHandler.Instance?.RefreshPointsLabel();
-            UpgradeUIHandler.Instance?.HideUI();
-            return true;
+            string identity = CardUpgradeTracker.GetCardIdentity(cardMutable, player.Deck.Cards);
+            var ok = await UpgradePurchaseFlow.EnqueueCardMod(cost, identity, (int)CardUpgradeTracker.ModType.Enchant, enchantType, false);
+            if (ok) { UpgradeUIHandler.Instance?.RefreshPointsLabel(); UpgradeUIHandler.Instance?.HideUI(); }
+            else UpgradeUIHandler.Instance?.SetUIVisible(true);
+            return ok;
         }
         catch (Exception ex)
         {
             Log.Error($"AddEnchantment: {ex.Message}");
-            await UpgradePointManager.AddPointsAsync(cost);
             UpgradeUIHandler.Instance?.SetUIVisible(true);
             return false;
         }
