@@ -83,9 +83,11 @@ public static class SkillRegistry
     /// </summary>
     public static bool TryPurchase(Player player, string id, int cost, int maxLevel = 1)
     {
-        if (player == null) return false;
-        if (UpgradeDataStore.GetPoints(player) < cost) return false;
-        if (UpgradeDataStore.GetLevel(player, id) >= maxLevel) return false; // 已满级：不扣点
+        if (player == null) { Log.Info($"IU purchase {id} FAIL player=null"); return false; }
+        if (UpgradeDataStore.GetPoints(player) < cost)
+        { Log.Info($"IU purchase {id} cost={cost} pts={UpgradeDataStore.GetPoints(player)} FAIL(pts)"); return false; }
+        if (UpgradeDataStore.GetLevel(player, id) >= maxLevel)
+        { Log.Info($"IU purchase {id} FAIL(maxlevel)"); return false; }
         UpgradeDataStore.Mutate(player, d =>
         {
             d.Points -= cost;
@@ -94,6 +96,7 @@ public static class SkillRegistry
         });
         var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
         SaveCheckpoint(seed);
+        Log.Info($"IU purchase {id} cost={cost} pts_after={UpgradeDataStore.GetPoints(player)} OK");
         return true;
     }
 

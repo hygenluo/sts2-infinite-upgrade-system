@@ -9,6 +9,7 @@ using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Hooks;
+using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Monsters;
 
@@ -49,8 +50,12 @@ public static class SkillCardPlayPatch
                 await CreatureCmd.GainBlock(player.Creature, 1m, default, null, false);
 
             // 2/3. 每当打出4张牌，获得1敏捷/力量（计数 4 的倍数触发，store 计数两端一致）
-            if (SkillRegistry.GetCombatPlayCount(player) % 4 == 0)
+            var combatPlays = SkillRegistry.GetCombatPlayCount(player);
+            if (combatPlays % 4 == 0)
             {
+                Log.Info($"[IU-Skill] %4 hit {player.NetId} count={combatPlays} " +
+                         $"str={UpgradeDataStore.HasSkill(player, "strength_every_4_plays")} " +
+                         $"agi={UpgradeDataStore.HasSkill(player, "agility_every_4_plays")}");
                 if (UpgradeDataStore.HasSkill(player, "agility_every_4_plays"))
                     await AbilityOperationHelper.ApplyPower(player.Creature, "dexterity", 1);
                 if (UpgradeDataStore.HasSkill(player, "strength_every_4_plays"))

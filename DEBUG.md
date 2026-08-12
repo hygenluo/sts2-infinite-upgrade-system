@@ -508,3 +508,21 @@
   `GetCombatPlayCount(player) % 4`。UI 显示保留 static 本地缓存。
 - **版本**：1.4.4 / BUILD v34。
 
+
+---
+
+## 多人中途分歧：每4张+1敏捷/力量（client 端点数不足 → 购买失败 → store 不一致）（2026-08-12）
+
+- **现象**：v1.4.4 联机中途（checksum 208）提示不同步；host 玩家身上 host 端多 `STRENGTH:1`。
+- **根因链**：
+  1. `RoomEntryPointsPatch` 用 `RunManager.Instance?.State` 遍历玩家 —— **client 端 AfterRoomEntered 触发时
+     RunManager.State 可能未就绪** → client 端不进房加点 → host 玩家点数在 client 端 store 偏少；
+  2. host 玩家购买 `strength_every_4_plays`（10 点）走同步 action，但 client 端校验
+     `GetPoints(host玩家) < 10` 失败 → 购买失败 → client store 无该技能；
+  3. 打牌到第 4 张时 host 端触发力量、client 端不触发 → STRENGTH 分歧。
+- **修复**：
+  1. `Roll` 改用 `player.RunState`（不依赖 RunManager.State 是否就绪）；
+  2. `RoomEntryPointsPatch` 用 hook 的 `runState.Players` 遍历加点（client 端也能加点，点数两端一致）；
+  3. 加诊断日志（SyncOnRunStarted 初始数据 / RoomEntry 加点 / 购买结果 / %4 触发）便于下次定位。
+- **版本**：1.4.5 / BUILD v35。
+

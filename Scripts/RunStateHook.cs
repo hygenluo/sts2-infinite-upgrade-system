@@ -137,15 +137,16 @@ public static class RunStateHook
 
     /// <summary>
     /// 随机区间（含两端）。方案 B：确定性哈希（seed + 玩家 NetId + ActFloor + 房间坐标），
-    /// 不依赖 Rng.Chaotic（两端随机不同 → 点数分歧），也不扰动 run RNG 各流的确定性。
+    /// 用 player.RunState（两端一致，不依赖 RunManager.Instance.State 是否就绪）。
     /// 同一玩家在同一房间的同一时刻，两端计算一致。
     /// </summary>
     internal static int Roll(Player player, int min, int maxInclusive)
     {
-        var state = RunManager.Instance?.State;
-        if (state == null || player == null) return min;
-        string mapCoord = state.CurrentMapCoord?.ToString() ?? "none";
-        long h = unchecked(HashCode.Combine(state.Rng.StringSeed, player.NetId, state.ActFloor, mapCoord));
+        var rs = player?.RunState;
+        if (rs == null) return min;
+        string mapCoord = rs.CurrentMapCoord?.ToString() ?? "none";
+        string seed = rs.Rng?.StringSeed ?? "unknown";
+        long h = unchecked(HashCode.Combine(seed, player!.NetId, rs.ActFloor, mapCoord));
         int range = maxInclusive - min + 1;
         return min + (int)(((ulong)h) % (uint)range);
     }
@@ -166,7 +167,11 @@ public static class RoomEntryPointsPatch
     {
         if (room == null || runState == null) return;
 
-        var (min, max) = room.RoomType switch
+        var state = RunManager.Instance?.State;
+        var players = runState.Players;
+        Log.Info($"IU RoomEntry room={room?.RoomType} runState_null={runState == null} state_null={state == null} players={players?.Count}");
+
+        var (min, max) = room!.RoomType switch
         {
             RoomType.Event => (1, 5),
             RoomType.Shop => (1, 5),
@@ -175,16 +180,17 @@ public static class RoomEntryPointsPatch
         };
 
         RunStateHook.NotifyRoomEntered(room.RoomType == RoomType.Event);
-        if (max <= 0) return;
-        var state = RunManager.Instance?.State;
-        if (state == null) return;
-        foreach (var player in state.Players)
+        if (max <= 0 || players == null) return;
+        // 用 hook 的 runState.Players（而非 RunManager.State）：client 端 AfterRoomEntered 时
+        // RunManager.State 可能未就绪 → 此前会导致 client 端不加点 → 点数两端不一致。
+        foreach (var player in players)
         {
             if (player == null) continue;
             int points = RunStateHook.Roll(player, min, max);
             if (points > 0)
             {
                 UpgradePointManager.AddPoints(player, points);
+                Log.Info($"IU RoomEntry +{points} for {player.NetId}");
                 GD.Print($"[InfiniteUpgrade] Room entry +{points} ({room.RoomType}) — pts={UpgradePointManager.CurrentPoints}");
             }
         }

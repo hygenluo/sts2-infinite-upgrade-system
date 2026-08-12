@@ -150,6 +150,13 @@ public static class UpgradeDataStore
                 if (isLocal) RefreshLocalCache(player);
             }
         }
+        foreach (var player in runState.Players)
+        {
+            if (player == null) continue;
+            var d = For(player);
+            Log.Info($"IU store init {player.NetId} pts={d.Points} " +
+                     $"skills=[{string.Join(",", d.Skills)}] boosts=[{string.Join(",", d.Boosts)}] cp={d.CombatPlayCount}");
+        }
         Log.Info("InfiniteUpgradeSystem: RunStarted — store synced for all players.");
     }
 
