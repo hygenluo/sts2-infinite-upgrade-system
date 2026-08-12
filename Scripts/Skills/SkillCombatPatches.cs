@@ -36,9 +36,9 @@ public static class SkillCardPlayPatch
     {
         try
         {
-            SkillRegistry.AddCombatPlay();
+            SkillRegistry.AddCombatPlay(player);
             if (SkillRegistry.AnyOwned())
-                GD.Print($"[IU-Skill] AfterCardPlayed: plays={SkillRegistry.CombatPlayCount} " +
+                GD.Print($"[IU-Skill] AfterCardPlayed: plays={SkillRegistry.GetCombatPlayCount(player)} " +
                          $"block={UpgradeDataStore.HasSkill(player, "block_on_play")} str4={UpgradeDataStore.HasSkill(player, "strength_every_4_plays")} " +
                          $"agi4={UpgradeDataStore.HasSkill(player, "agility_every_4_plays")} forge={UpgradeDataStore.HasSkill(player, "forge_on_play")} " +
                          $"vigor={UpgradeDataStore.HasSkill(player, "vigor_on_skill_play")} summon={UpgradeDataStore.HasSkill(player, "summon_on_play")} " +
@@ -48,8 +48,8 @@ public static class SkillCardPlayPatch
             if (UpgradeDataStore.HasSkill(player, "block_on_play"))
                 await CreatureCmd.GainBlock(player.Creature, 1m, default, null, false);
 
-            // 2/3. 每当打出4张牌，获得1敏捷/力量（计数 4 的倍数触发）
-            if (SkillRegistry.CombatPlayCount % 4 == 0)
+            // 2/3. 每当打出4张牌，获得1敏捷/力量（计数 4 的倍数触发，store 计数两端一致）
+            if (SkillRegistry.GetCombatPlayCount(player) % 4 == 0)
             {
                 if (UpgradeDataStore.HasSkill(player, "agility_every_4_plays"))
                     await AbilityOperationHelper.ApplyPower(player.Creature, "dexterity", 1);

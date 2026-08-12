@@ -20,6 +20,8 @@ public sealed class PlayerUpgradeData
     public int Points { get; set; }
     public Dictionary<string, int> Skills { get; set; } = new();
     public Dictionary<string, int> Boosts { get; set; } = new();
+    /// <summary>本场战斗打牌计数（v1.4.3：每玩家 store，两端一致；每4张触发敏捷/力量技能）。</summary>
+    public int CombatPlayCount { get; set; }
 }
 
 /// <summary>

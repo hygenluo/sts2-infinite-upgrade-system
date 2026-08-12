@@ -491,3 +491,20 @@
      （原子扣点+按 CardIdentity 找卡+改卡+记录）」，两端一致执行。`CardUpgradeTracker` 方法增加 Player 参数（按 owner 记录）。
 - **行为变化**：卡牌操作从「先扣点后选卡（取消退款）」改为「选卡后 action 原子扣点」（取消选卡不再扣点）。
 
+
+---
+
+## 多人中途分歧：每4张+1敏捷/力量（CombatPlayCount static 计数器不可靠）（2026-08-12）
+
+- **现象**：v1.4.3 联机玩到中途（checksum 413）提示数据不同步；分歧为 host 玩家身上
+  client 端多一个 `DEXTERITY_POWER:1`（host 端没有）。
+- **根因**：host 玩家购买 `agility_every_4_plays`（每4张牌+1敏捷）技能。触发判断用
+  `SkillRegistry.CombatPlayCount`（**static 每端独立计数器**）——多人下两端对"已打牌数"
+  计数不可靠（ResetCombatPlay/AddCombatPlay 时序或某端漏触发），`%4` 触发时机不一致 →
+  一端加敏捷、另一端不加 → 分歧。
+- **修复**：`CombatPlayCount` 从 static 改为**每玩家 store 字段**（PlayerUpgradeData.CombatPlayCount）：
+  `AddCombatPlay(player)` 写该玩家 store（AfterCardPlayed 两端执行 → 计数一致），
+  `ResetCombatPlay()` 在 BeforeCombatStart 遍历所有玩家置 0（两端执行）；触发判断改
+  `GetCombatPlayCount(player) % 4`。UI 显示保留 static 本地缓存。
+- **版本**：1.4.4 / BUILD v34。
+

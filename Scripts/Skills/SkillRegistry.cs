@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using Godot;
+using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Runs;
@@ -22,11 +23,34 @@ public static class SkillRegistry
     private static readonly Dictionary<string, int> s_levels = new();
     private static readonly JsonSerializerOptions s_jsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    /// <summary>本场战斗打牌计数（每 4 张触发一次敏捷/力量技能，BeforeCombatStart 清零）。</summary>
+    /// <summary>本场战斗打牌计数（v1.4.3：每玩家 store，两端一致；每 4 张触发敏捷/力量技能）。</summary>
     private static int s_combatPlayCount;
 
-    /// <summary>当前战斗打牌计数（UI 显示用：战斗间打开面板可见上一场计数）。</summary>
+    /// <summary>当前战斗打牌计数（本地玩家缓存，UI 显示用：战斗间打开面板可见上一场计数）。</summary>
     public static int CombatPlayCount => s_combatPlayCount;
+
+    /// <summary>指定玩家本场战斗打牌计数（store，两端一致）。</summary>
+    public static int GetCombatPlayCount(Player player) => UpgradeDataStore.For(player).CombatPlayCount;
+
+    /// <summary>打牌计数 +1（写该玩家 store，刷新本地缓存）。AfterCardPlayed 两端执行 → 计数一致。</summary>
+    public static void AddCombatPlay(Player player)
+    {
+        if (player == null) return;
+        UpgradeDataStore.Mutate(player, d => d.CombatPlayCount++);
+        if (LocalContext.IsMe(player))
+            s_combatPlayCount = UpgradeDataStore.For(player).CombatPlayCount;
+    }
+
+    /// <summary>战斗开始清零所有玩家打牌计数（BeforeCombatStart 两端执行，确定性）。</summary>
+    public static void ResetCombatPlay()
+    {
+        s_combatPlayCount = 0;
+        var state = RunManager.Instance?.State;
+        if (state == null) return;
+        foreach (var player in state.Players)
+            if (player != null)
+                UpgradeDataStore.Mutate(player, d => d.CombatPlayCount = 0);
+    }
 
     /// <summary>是否拥有任何技能（诊断日志门槛：仅技能拥有者打印，避免打牌刷屏）。</summary>
     public static bool AnyOwned()
@@ -46,9 +70,6 @@ public static class SkillRegistry
         foreach (var kv in levels)
             s_levels[kv.Key] = kv.Value;
     }
-
-    public static void AddCombatPlay() => s_combatPlayCount++;
-    public static void ResetCombatPlay() => s_combatPlayCount = 0;
 
     /// <summary>当前等级（0 = 未拥有）。</summary>
     public static int GetLevel(string id) => s_levels.TryGetValue(id, out var v) ? v : 0;
