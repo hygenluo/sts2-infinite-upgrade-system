@@ -33,7 +33,22 @@ public static class SkillCardPlayPatch
         var player = cardPlay?.Player;
         var card = cardPlay?.Card;
         if (player == null || card == null || combatState == null) return;
+        TryTriggerEvery4(player); // 同步：确定性 History 计数 + host 入队（避免 fire-and-forget 入队致 action 流错位）
         _ = HandleAsync(combatState, choiceContext, player, card);
+    }
+
+    /// <summary>
+    /// 每4张触发（v1.4.10）：用 CombatManager.History.CardPlaysStarted 确定性计数（官方 Normality 同款来源），
+    /// 在 Postfix 同步部分由 host/singleplayer 入队 ApplyEvery4 action（ActionExecutor 等待完成 → checksum 在其后）。
+    /// 此前在 fire-and-forget HandleAsync 里入队 → 两端入队时机可能不同 → action 流错位 → 分歧。
+    /// </summary>
+    private static void TryTriggerEvery4(Player player)
+    {
+        int plays = CombatManager.Instance?.History?.CardPlaysStarted?.Count(e => e.CardPlay?.Player == player) ?? 0;
+        if (plays <= 0 || plays % 4 != 0) return;
+        var type = RunManager.Instance?.NetService?.Type;
+        if (type == NetGameType.Host || type == NetGameType.Singleplayer)
+            _ = UpgradePurchaseFlow.EnqueueApplyEvery4(player);
     }
 
     private static async Task HandleAsync(ICombatState state, PlayerChoiceContext context, Player player, CardModel card)
@@ -51,21 +66,6 @@ public static class SkillCardPlayPatch
             // 1. 每打出1张牌，都获得1格挡
             if (UpgradeDataStore.HasSkill(player, "block_on_play"))
                 await CreatureCmd.GainBlock(player.Creature, 1m, default, null, false);
-
-            // 2/3. 每当打出4张牌，获得1敏捷/力量（计数 4 的倍数触发，store 计数两端一致）
-            var combatPlays = SkillRegistry.GetCombatPlayCount(player);
-            if (combatPlays % 4 == 0)
-            {
-                Log.Info($"[IU-Skill] %4 hit {player.NetId} count={combatPlays} " +
-                         $"str={UpgradeDataStore.HasSkill(player, "strength_every_4_plays")} " +
-                         $"agi={UpgradeDataStore.HasSkill(player, "agility_every_4_plays")}");
-                // v1.4.9：施加改走同步 action（ActionExecutor 等待完成 → checksum 在其后），
-                // 避免 fire-and-forget async 施加与 checksum 的时序竞争（此前 friend 端触发、host 端未落地）。
-                // 只有 host/singleplayer 入队（防两端重复入队），action 广播到两端执行。
-                var type = RunManager.Instance?.NetService?.Type;
-                if (type == NetGameType.Host || type == NetGameType.Singleplayer)
-                    _ = UpgradePurchaseFlow.EnqueueApplyEvery4(player);
-            }
 
             // 4. 每打出1张牌时，铸造1
             if (UpgradeDataStore.HasSkill(player, "forge_on_play"))

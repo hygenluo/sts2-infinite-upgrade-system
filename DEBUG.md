@@ -596,3 +596,24 @@
   若发生分歧按同样模式走 action（分歧转储可定位）。
 - **版本**：1.4.9 / BUILD v39。
 
+
+---
+
+## 多人分歧：ApplyEvery4 fire-and-forget 入队 → 两端 action 流错位（2026-08-13）
+
+- **现象**：v1.4.9 联机（checksum 19）分歧，context 为 `UpgradeDataAction op=ApplyEvery4`。
+  两端 checksum 编号错位（friend 端 host 玩家的 ApplyEvery4=checksum19，host 端 friend 玩家的=19）
+  → 两端 action 序列本身不同。
+- **根因**：`%4 hit` 判断与入队放在 fire-and-forget `HandleAsync` 里（AfterCardPlayed Postfix → `_ = HandleAsync`），
+  **入队时机两端可能不同**（HandleAsync 异步启动）→ 插入 action 队列的位置不同 → action 流错位 → 分歧。
+- **调研结论（官方/热门模组）**：STS2 无「每玩家任意数据 + 局中实时同步」官方机制；唯一被同步+校验的是
+  挂到模型（卡/遗物/附魔）的 `SavedProperties`（RitsuLib SavedAttachedState / BaseLib SavedSpireField），
+  Player 不是模型无法挂。官方范式 =「效果在 action 管线内执行、计数用确定性来源」；
+  游戏有确定性打牌数 `CombatManager.History.CardPlaysStarted`（官方 Normality 同款）。
+- **修复**：`%4 hit` 改为**在 Postfix 同步部分**用 `History.CardPlaysStarted` 确定性计数（按打牌玩家过滤），
+  由 host/singleplayer 入队 `ApplyEvery4` action → 两端在同一 action 流位置入队 → 一致。
+- **已知同类风险**：其他「战斗内 fire-and-forget async 施加 power」（vigor_on_skill_play、poison_all、
+  str_at_turn_start 等）因 PowerCmd.Apply 内部 CustomScaledWait 跨帧 await，理论上同样可能时序分叉；
+  若发生，按同样模式走 action。
+- **版本**：1.4.10 / BUILD v40。
+
