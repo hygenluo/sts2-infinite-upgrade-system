@@ -247,21 +247,21 @@ public static class CardOperationHelper
 
     public static async Task<bool> ModifyDamage(int cost, string promptKey = "")
     {
-        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
+        if (!await UpgradePointManager.TrySpendPointsAsync(cost)) return false;
         var result = await PickAndModifyCard("攻击", c => c.DynamicVars.Damage?.BaseValue,
             c => c.DynamicVars.Damage.BaseValue += 1m,
             CardUpgradeTracker.ModType.DamagePlus, promptKey);
-        if (!result) UpgradePointManager.AddPoints(cost);
+        if (!result) await UpgradePointManager.AddPointsAsync(cost);
         return result;
     }
 
     public static async Task<bool> ModifyBlock(int cost, string promptKey = "")
     {
-        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
+        if (!await UpgradePointManager.TrySpendPointsAsync(cost)) return false;
         var result = await PickAndModifyCard("格挡", c => c.DynamicVars.Block?.BaseValue,
             c => c.DynamicVars.Block.BaseValue += 1m,
             CardUpgradeTracker.ModType.BlockPlus, promptKey);
-        if (!result) UpgradePointManager.AddPoints(cost);
+        if (!result) await UpgradePointManager.AddPointsAsync(cost);
         return result;
     }
 
@@ -307,26 +307,26 @@ public static class CardOperationHelper
 
     public static async Task<bool> ToggleKeyword(int cost, CardKeyword keyword, bool add, string promptKey = "")
     {
-        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
+        if (!await UpgradePointManager.TrySpendPointsAsync(cost)) return false;
         var player = GetLocalPlayer();
         if (player == null) return false;
         UpgradeUIHandler.Instance?.SetUIVisible(false);
         try
         {
             var card = await SelectCardFromDeck(player, promptKey);
-            if (card == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+            if (card == null) { await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
             card = EnsureMutableInDeck(player, card);
 
             if (add)
             {
                 if (card.Keywords.Contains(keyword))
-                { GD.Print("此卡牌已有该词条。"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+                { GD.Print("此卡牌已有该词条。"); await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
                 card.AddKeyword(keyword);
             }
             else
             {
                 if (!card.Keywords.Contains(keyword))
-                { GD.Print("此卡牌没有该词条。"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+                { GD.Print("此卡牌没有该词条。"); await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
                 card.RemoveKeyword(keyword);
             }
             var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
@@ -336,7 +336,7 @@ public static class CardOperationHelper
             UpgradeUIHandler.Instance?.HideUI();
             return true;
         }
-        catch (Exception ex) { Log.Error($"Keyword error: {ex.Message}"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+        catch (Exception ex) { Log.Error($"Keyword error: {ex.Message}"); await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -345,17 +345,17 @@ public static class CardOperationHelper
 
     public static async Task<bool> ReduceEnergyCost(int cost, string promptKey = "")
     {
-        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
+        if (!await UpgradePointManager.TrySpendPointsAsync(cost)) return false;
         var player = GetLocalPlayer();
         if (player == null) return false;
         UpgradeUIHandler.Instance?.SetUIVisible(false);
         try
         {
             var card = await SelectCardFromDeck(player, promptKey);
-            if (card == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+            if (card == null) { await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
             card = EnsureMutableInDeck(player, card);
             var cur = card.EnergyCost.Canonical;
-            if (cur <= 0) { GD.Print("此卡牌已是0费。"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+            if (cur <= 0) { GD.Print("此卡牌已是0费。"); await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
             card.EnergyCost.SetCustomBaseCost(cur - 1);
             var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
             CardUpgradeTracker.RecordModification(card, seed, CardUpgradeTracker.ModType.EnergyReduce);
@@ -363,7 +363,7 @@ public static class CardOperationHelper
             UpgradeUIHandler.Instance?.HideUI();
             return true;
         }
-        catch (Exception ex) { Log.Error($"Energy cost error: {ex.Message}"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+        catch (Exception ex) { Log.Error($"Energy cost error: {ex.Message}"); await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -372,24 +372,24 @@ public static class CardOperationHelper
 
     public static async Task<bool> ModifyDrawCount(int cost, string promptKey = "")
     {
-        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
+        if (!await UpgradePointManager.TrySpendPointsAsync(cost)) return false;
         var result = await PickAndModifyCard("抽牌", c => c.DynamicVars.Cards?.BaseValue,
             c => c.DynamicVars.Cards.BaseValue += 1m,
             CardUpgradeTracker.ModType.DrawPlus, promptKey);
-        if (!result) UpgradePointManager.AddPoints(cost);
+        if (!result) await UpgradePointManager.AddPointsAsync(cost);
         return result;
     }
 
     public static async Task<bool> ModifyReplayCount(int cost, string promptKey = "")
     {
-        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
+        if (!await UpgradePointManager.TrySpendPointsAsync(cost)) return false;
         var player = GetLocalPlayer();
         if (player == null) return false;
         UpgradeUIHandler.Instance?.SetUIVisible(false);
         try
         {
             var card = await SelectCardFromDeck(player, promptKey);
-            if (card == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+            if (card == null) { await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
             card = EnsureMutableInDeck(player, card);
             card.BaseReplayCount += 1;
             var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
@@ -398,7 +398,7 @@ public static class CardOperationHelper
             UpgradeUIHandler.Instance?.HideUI();
             return true;
         }
-        catch (Exception ex) { Log.Error($"Replay error: {ex.Message}"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+        catch (Exception ex) { Log.Error($"Replay error: {ex.Message}"); await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -408,14 +408,14 @@ public static class CardOperationHelper
     /// <summary>从牌组选择一张牌删除。</summary>
     public static async Task<bool> RemoveCardFromDeck(int cost, string promptKey = "")
     {
-        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
+        if (!await UpgradePointManager.TrySpendPointsAsync(cost)) return false;
         var player = GetLocalPlayer();
-        if (player == null) { UpgradePointManager.AddPoints(cost); return false; }
+        if (player == null) { await UpgradePointManager.AddPointsAsync(cost); return false; }
         UpgradeUIHandler.Instance?.SetUIVisible(false);
         try
         {
             var card = await SelectCardFromDeck(player, promptKey);
-            if (card == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+            if (card == null) { await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
 
             // 删除前记下标，删除后修正 CardUpgradeTracker 的按下标记录
             var deckCards = player.Deck.Cards;
@@ -432,7 +432,7 @@ public static class CardOperationHelper
             UpgradeUIHandler.Instance?.HideUI();
             return true;
         }
-        catch (Exception ex) { Log.Error($"RemoveCard: {ex.Message}"); UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+        catch (Exception ex) { Log.Error($"RemoveCard: {ex.Message}"); await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
     }
 
     /// <summary>从指定卡牌池随机添加一张牌到牌组（免费）。</summary>
@@ -716,18 +716,18 @@ public static class CardOperationHelper
     /// </summary>
     public static async Task<bool> AddEnchantment(int cost, string promptKey = "")
     {
-        if (!UpgradePointManager.TrySpendPoints(cost)) return false;
+        if (!await UpgradePointManager.TrySpendPointsAsync(cost)) return false;
         var player = GetLocalPlayer();
-        if (player == null) { UpgradePointManager.AddPoints(cost); return false; }
+        if (player == null) { await UpgradePointManager.AddPointsAsync(cost); return false; }
         UpgradeUIHandler.Instance?.SetUIVisible(false);
         try
         {
             var card = await SelectCardFromDeck(player, promptKey);
-            if (card == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+            if (card == null) { await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
 
             var cardMutable = EnsureMutableInDeck(player, card);
             var enchantType = await UiComponents.EnchantSelectPanel.Show(cardMutable);
-            if (enchantType == null) { UpgradePointManager.AddPoints(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
+            if (enchantType == null) { await UpgradePointManager.AddPointsAsync(cost); UpgradeUIHandler.Instance?.SetUIVisible(true); return false; }
 
             var currentTypes = GetCardEnchantments(cardMutable);
             string? replacedType = null;
@@ -737,7 +737,7 @@ public static class CardOperationHelper
             if (!ApplyEnchantmentToCard(cardMutable, enchantType))
             {
                 // 附魔应用失败（子附魔创建失败等）→ 退款 + 恢复面板，不记录
-                UpgradePointManager.AddPoints(cost);
+                await UpgradePointManager.AddPointsAsync(cost);
                 UpgradeUIHandler.Instance?.SetUIVisible(true);
                 return false;
             }
@@ -756,7 +756,7 @@ public static class CardOperationHelper
         catch (Exception ex)
         {
             Log.Error($"AddEnchantment: {ex.Message}");
-            UpgradePointManager.AddPoints(cost);
+            await UpgradePointManager.AddPointsAsync(cost);
             UpgradeUIHandler.Instance?.SetUIVisible(true);
             return false;
         }

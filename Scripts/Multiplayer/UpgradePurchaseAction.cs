@@ -114,4 +114,119 @@ public static class UpgradePurchaseFlow
         await action.CompletionTask;
         return action.Succeeded;
     }
+
+    /// <summary>入队加点 action（UI 触发的点数变更跨端同步）。返回是否完成。</summary>
+    public static async Task<bool> EnqueueAddPoints(int amount)
+    {
+        var player = CardOperationHelper.GetLocalPlayer();
+        if (player == null) return false;
+        var sync = RunManager.Instance?.ActionQueueSynchronizer;
+        if (sync == null) // 无同步器：回退本地
+        {
+            UpgradePointManager.AddPoints(player, amount);
+            return true;
+        }
+        var action = new UpgradePointAddAction(player, amount);
+        sync.RequestEnqueue(action);
+        await action.CompletionTask;
+        return true;
+    }
+
+    /// <summary>入队扣点 action（带校验，UI 触发的点数扣减跨端同步）。返回是否扣减成功。</summary>
+    public static async Task<bool> EnqueueSpendPoints(int amount)
+    {
+        var player = CardOperationHelper.GetLocalPlayer();
+        if (player == null) return false;
+        var sync = RunManager.Instance?.ActionQueueSynchronizer;
+        if (sync == null) // 无同步器：回退本地
+            return UpgradePointManager.TrySpendPoints(player, amount);
+        var action = new UpgradePointSpendAction(player, amount);
+        sync.RequestEnqueue(action);
+        await action.CompletionTask;
+        return action.Succeeded;
+    }
+}
+
+/// <summary>加点 INetAction：UI 单端触发，广播到两端在同一 action id 上执行同一加点。</summary>
+public struct NetUpgradePointAddAction : INetAction, IPacketSerializable
+{
+    public int Amount;
+
+    public NetUpgradePointAddAction() { }
+
+    public GameAction ToGameAction(Player player) => new UpgradePointAddAction(player, Amount);
+
+    public void Serialize(PacketWriter writer) => writer.WriteInt(Amount);
+    public void Deserialize(PacketReader reader) => Amount = reader.ReadInt();
+
+    public override string ToString() => $"NetUpgradePointAddAction +{Amount}";
+}
+
+/// <summary>加点 GameAction：两端执行同一 AddPoints（写入 owner 玩家 store）。</summary>
+public sealed class UpgradePointAddAction : GameAction
+{
+    private readonly Player _player;
+    private readonly int _amount;
+
+    public override ulong OwnerId => _player.NetId;
+    public override GameActionType ActionType => GameActionType.Any;
+
+    public UpgradePointAddAction(Player player, int amount)
+    {
+        _player = player;
+        _amount = amount;
+    }
+
+    public override async Task ExecuteAction()
+    {
+        UpgradePointManager.AddPoints(_player, _amount);
+        await Task.CompletedTask;
+    }
+
+    public override INetAction ToNetAction() => new NetUpgradePointAddAction { Amount = _amount };
+
+    public override string ToString() => $"UpgradePointAddAction {_player.NetId} +{_amount}";
+}
+
+/// <summary>扣点 INetAction：UI 单端触发，广播到两端在同一 action id 上执行同一校验与扣减。</summary>
+public struct NetUpgradePointSpendAction : INetAction, IPacketSerializable
+{
+    public int Amount;
+
+    public NetUpgradePointSpendAction() { }
+
+    public GameAction ToGameAction(Player player) => new UpgradePointSpendAction(player, Amount);
+
+    public void Serialize(PacketWriter writer) => writer.WriteInt(Amount);
+    public void Deserialize(PacketReader reader) => Amount = reader.ReadInt();
+
+    public override string ToString() => $"NetUpgradePointSpendAction -{Amount}";
+}
+
+/// <summary>扣点 GameAction：两端执行同一校验（点数不足则 no-op）与扣减。</summary>
+public sealed class UpgradePointSpendAction : GameAction
+{
+    private readonly Player _player;
+    private readonly int _amount;
+
+    public bool Succeeded { get; private set; }
+
+    public override ulong OwnerId => _player.NetId;
+    public override GameActionType ActionType => GameActionType.Any;
+
+    public UpgradePointSpendAction(Player player, int amount)
+    {
+        _player = player;
+        _amount = amount;
+    }
+
+    public override async Task ExecuteAction()
+    {
+        Succeeded = UpgradePointManager.TrySpendPoints(_player, _amount);
+        await Task.CompletedTask;
+    }
+
+    public override INetAction ToNetAction() => new NetUpgradePointSpendAction { Amount = _amount };
+
+    public override string ToString() => $"UpgradePointSpendAction {_player.NetId} -{_amount}";
 }

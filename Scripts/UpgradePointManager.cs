@@ -1,4 +1,6 @@
 using System;
+using System.Threading.Tasks;
+using InfiniteUpgradeSystem.Multiplayer;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Runs;
 
@@ -40,15 +42,28 @@ public static class UpgradePointManager
 
     public static bool TrySpendPoints(int amount)
     {
+        var player = CardOperationHelper.GetLocalPlayer();
+        if (player == null) return false;
+        return TrySpendPoints(player, amount);
+    }
+
+    /// <summary>给指定玩家扣点（校验+扣减）。由同步 action / 确定性 hook 两端执行，保证两端一致。</summary>
+    public static bool TrySpendPoints(Player player, int amount)
+    {
         if (amount < 0)
             throw new ArgumentException("Amount must be non-negative.", nameof(amount));
-        var player = CardOperationHelper.GetLocalPlayer();
         if (player == null) return false;
         if (UpgradeDataStore.GetPoints(player) < amount) return false;
         UpgradeDataStore.Mutate(player, d => d.Points -= amount);
         SaveCheckpoint(); // 点数变化立即写盘，避免中途退出丢失
         return true;
     }
+
+    /// <summary>UI 触发的扣点（走同步 action，跨端一致）。</summary>
+    public static Task<bool> TrySpendPointsAsync(int amount) => UpgradePurchaseFlow.EnqueueSpendPoints(amount);
+
+    /// <summary>UI 触发的加点（走同步 action，跨端一致）。</summary>
+    public static Task AddPointsAsync(int amount) => UpgradePurchaseFlow.EnqueueAddPoints(amount);
 
     /// <summary>保存检查点（战斗开始/结束时调用）。</summary>
     public static void SaveCheckpoint()

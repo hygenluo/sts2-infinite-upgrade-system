@@ -753,7 +753,7 @@ public sealed partial class UpgradeUIHandler : Control
         SearchText = BuildSearchText("技能", locKey, fallbackName),
     };
 
-    /// <summary>测试条目构建。</summary>
+    /// <summary>测试条目构建（加点走同步 action，跨端一致）。</summary>
     private UpgradeItemDef TestItem(string fallbackName, string locKey, int amount) => new()
     {
         Category = "测试操作",
@@ -761,11 +761,11 @@ public sealed partial class UpgradeUIHandler : Control
         LocKey = locKey,
         Cost = 0,
         Kind = UpgradeItemKind.Action,
-        OnClick = () =>
+        OnClick = async () =>
         {
-            UpgradePointManager.AddPoints(amount);
-            RefreshPointsLabel();
-            return Task.FromResult(true);
+            var ok = await UpgradePurchaseFlow.EnqueueAddPoints(amount);
+            if (ok) RefreshPointsLabel();
+            return ok;
         },
         SearchText = BuildSearchText("测试操作", locKey, fallbackName),
     };
@@ -789,7 +789,7 @@ public sealed partial class UpgradeUIHandler : Control
     /// <summary>升级卡牌流程（选牌取消自动退款并恢复面板）。</summary>
     private async Task<bool> UpgradeCardFlow(string promptKey)
     {
-        if (!UpgradePointManager.TrySpendPoints(CardOperationHelper.UpgradeCost)) return false;
+        if (!await UpgradePointManager.TrySpendPointsAsync(CardOperationHelper.UpgradeCost)) return false;
         var player = CardOperationHelper.GetLocalPlayer();
         if (player == null) return false;
         SetUIVisible(false);
@@ -798,7 +798,7 @@ public sealed partial class UpgradeUIHandler : Control
             var card = await CardOperationHelper.SelectCardFromDeck(player, promptKey);
             if (card == null)
             {
-                UpgradePointManager.AddPoints(CardOperationHelper.UpgradeCost);
+                await UpgradePurchaseFlow.EnqueueAddPoints(CardOperationHelper.UpgradeCost);
                 RefreshPointsLabel();
                 SetUIVisible(true);
                 return false;
@@ -811,7 +811,7 @@ public sealed partial class UpgradeUIHandler : Control
         catch (Exception ex)
         {
             Log.Error($"Upgrade error: {ex.Message}");
-            UpgradePointManager.AddPoints(CardOperationHelper.UpgradeCost);
+            await UpgradePurchaseFlow.EnqueueAddPoints(CardOperationHelper.UpgradeCost);
             RefreshPointsLabel();
             SetUIVisible(true);
             return false;
