@@ -160,8 +160,8 @@ public static class AbilityOperationHelper
     {
         if (creature == null || count <= 0) return;
         // PowerCmd.Apply 需要 PlayerChoiceContext；skill hook 有 context，无 context 场景（如 CombatSetUp）
-        // 复用最近一次 hook context，兜底用无操作 BlockingPlayerChoiceContext。
-        context ??= SkillContextCache.Last ?? new BlockingPlayerChoiceContext();
+        // 用无操作 BlockingPlayerChoiceContext（两端确定性）。
+        context ??= new BlockingPlayerChoiceContext();
         try
         {
             switch (key)

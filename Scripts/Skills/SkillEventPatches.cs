@@ -1,17 +1,8 @@
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Entities.Players;
-using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Hooks;
 
 namespace InfiniteUpgradeSystem;
-
-/// <summary>
-/// 最近一次可用的 PlayerChoiceContext（v2.0 保留：AbilityOperationHelper.ApplyPower 兜底 context）。
-/// </summary>
-public static class SkillContextCache
-{
-    public static PlayerChoiceContext? Last { get; set; }
-}
 
 /// <summary>
 /// 你可以在休息处选择任意数量的选项（通用，参照遗物 微型帐篷 MiniatureTent）。

@@ -51,9 +51,9 @@ public sealed class SkillEffectsPower : CustomPowerModel
 
         SkillRegistry.AddCombatPlay(player); // 更新 UI 打牌计数缓存（store 两端一致）
 
-        // 每4张+力量/敏捷（确定性计数：官方 History.CardPlaysStarted）
+        // 每4张+力量/敏捷（确定性计数：官方 History.CardPlaysStarted；plays<=0 防御 off-by-one）
         int plays = CombatManager.Instance?.History?.CardPlaysStarted?.Count(e => e.CardPlay?.Player == player) ?? 0;
-        if (plays % 4 == 0)
+        if (plays > 0 && plays % 4 == 0)
         {
             if (UpgradeDataStore.HasSkill(player, "strength_every_4_plays"))
                 AbilityOperationHelper.ApplyPowerSync(creature, "strength", 1);
@@ -81,7 +81,7 @@ public sealed class SkillEffectsPower : CustomPowerModel
 
             if (UpgradeDataStore.HasSkill(player, "poison_all_on_card_play"))
                 foreach (var enemy in enemies)
-                    await AbilityOperationHelper.ApplyPower(enemy, "poison", 1);
+                    await AbilityOperationHelper.ApplyPower(enemy, "poison", 1, creature, null);
         }
 
         if (UpgradeDataStore.HasSkill(player, "draw_on_power_play") && card.Type == CardType.Power)
@@ -118,19 +118,21 @@ public sealed class SkillEffectsPower : CustomPowerModel
     public override async Task AfterPlayerTurnStart(PlayerChoiceContext choiceContext, Player player)
     {
         if (player == null || player != OwnerPlayer) return;
+        var creature = player.Creature;
+        if (creature == null) return;
 
         if (UpgradeDataStore.HasSkill(player, "block_at_turn_start"))
         {
             int exhaust = player.Piles.FirstOrDefault(p => p.Type == PileType.Exhaust)?.Cards.Count ?? 0;
             if (exhaust > 0)
-                await CreatureCmd.GainBlock(player.Creature, exhaust, default, null, false);
+                await CreatureCmd.GainBlock(creature, exhaust, default, null, false);
         }
 
         if (UpgradeDataStore.HasSkill(player, "str_at_turn_start"))
-            await AbilityOperationHelper.ApplyPower(player.Creature, "strength", 2);
+            await AbilityOperationHelper.ApplyPower(creature, "strength", 2);
 
         if (UpgradeDataStore.HasSkill(player, "heal_at_turn_start"))
-            await CreatureCmd.Heal(player.Creature, 3);
+            await CreatureCmd.Heal(creature, 3);
 
         if (UpgradeDataStore.HasSkill(player, "draw_at_turn_start"))
             await CardPileCmd.Draw(choiceContext, player);
@@ -204,7 +206,7 @@ public sealed class SkillEffectsPower : CustomPowerModel
     public override async Task AfterPowerAmountChanged(PlayerChoiceContext choiceContext, PowerModel power, decimal amount, Creature? applier, CardModel? cardSource)
     {
         if (power == null || applier == null || amount <= 0) return;
-        if (power.GetType().Name != "PoisonPower") return; // 只响应中毒
+        if (power is not PoisonPower) return; // 只响应中毒
         var player = applier.Player;
         if (player == null || player != OwnerPlayer) return;
         if (!UpgradeDataStore.HasSkill(player, "block_on_poison")) return;

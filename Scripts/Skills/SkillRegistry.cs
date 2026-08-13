@@ -29,9 +29,6 @@ public static class SkillRegistry
     /// <summary>当前战斗打牌计数（本地玩家缓存，UI 显示用：战斗间打开面板可见上一场计数）。</summary>
     public static int CombatPlayCount => s_combatPlayCount;
 
-    /// <summary>指定玩家本场战斗打牌计数（store，两端一致）。</summary>
-    public static int GetCombatPlayCount(Player player) => UpgradeDataStore.For(player).CombatPlayCount;
-
     /// <summary>打牌计数 +1（写该玩家 store，刷新本地缓存）。AfterCardPlayed 两端执行 → 计数一致。</summary>
     public static void AddCombatPlay(Player player)
     {
@@ -50,14 +47,6 @@ public static class SkillRegistry
         foreach (var player in state.Players)
             if (player != null)
                 UpgradeDataStore.Mutate(player, d => d.CombatPlayCount = 0);
-    }
-
-    /// <summary>是否拥有任何技能（诊断日志门槛：仅技能拥有者打印，避免打牌刷屏）。</summary>
-    public static bool AnyOwned()
-    {
-        foreach (var kv in s_levels)
-            if (kv.Value > 0) return true;
-        return false;
     }
 
     /// <summary>s_levels 副本（供 UpgradeDataStore 旧档迁移，Step 1）。</summary>

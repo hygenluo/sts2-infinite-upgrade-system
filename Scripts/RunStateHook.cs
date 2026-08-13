@@ -62,13 +62,20 @@ public static class RunStateHook
         foreach (var player in state.Players)
         {
             if (player?.Creature == null) continue;
-            // 储君「免费打出第一张牌」→ VoidFormPower(1)：能量+辉星免费 + 原生绿色荧光显示
-            if (UpgradeDataStore.HasSkill(player, "free_first_card"))
-                await AbilityOperationHelper.ApplyPower(player.Creature, "freeFirstCard", 1);
-            // 统一技能效果 power（v2.0 官方范式）：隐藏 SkillEffectsPower 承载全部技能/能力效果，
-            // hook 在游戏管线内被 await → 两端确定性。CombatSetUp 时施加无跨帧 await。
-            if (HasAnySkillOrBoost(player))
-                await MegaCrit.Sts2.Core.Commands.PowerCmd.Apply<SkillEffectsPower>(new MegaCrit.Sts2.Core.GameActions.Multiplayer.BlockingPlayerChoiceContext(), player.Creature, 1, null, null);
+            try
+            {
+                // 储君「免费打出第一张牌」→ VoidFormPower(1)
+                if (UpgradeDataStore.HasSkill(player, "free_first_card"))
+                    await AbilityOperationHelper.ApplyPower(player.Creature, "freeFirstCard", 1);
+                // 统一技能效果 power（v2.0 官方范式）：隐藏 SkillEffectsPower 承载全部技能/能力效果，
+                // hook 在游戏管线内被 await → 两端确定性。
+                if (HasAnySkillOrBoost(player))
+                    await MegaCrit.Sts2.Core.Commands.PowerCmd.Apply<SkillEffectsPower>(new MegaCrit.Sts2.Core.GameActions.Multiplayer.BlockingPlayerChoiceContext(), player.Creature, 1, null, null);
+            }
+            catch (Exception ex)
+            {
+                GD.PrintErr($"[InfiniteUpgrade] Combat-start skill power error for {player.NetId}: {ex.Message}");
+            }
         }
     }
 
