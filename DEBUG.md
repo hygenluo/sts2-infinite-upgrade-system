@@ -655,3 +655,25 @@
   Harmony Patch + fire-and-forget async = 时序竞争。后续其他技能若再分歧，应优先改为模型 hook。
 - **版本**：1.4.12 / BUILD v42。
 
+
+---
+
+## v2.0：统一多人安全方案 —— 一个隐藏 Power 承载所有技能/能力效果（官方范式重构）（2026-08-13）
+
+- **反复分歧根因**：技能/能力效果做在 Harmony Hook Postfix + **fire-and-forget async**（`_ = HandleAsync`）里，
+  内部 Command（PowerCmd.Apply / CardCmd.AutoPlay / PlayerCmd.GainGold 等）有跨帧 await → 与 checksum 时序竞争 → 两端落地时机不同 → 反复分歧（每4张、自动打出、金币…）。
+- **官方范式（确认）**：`Hook.AfterXxx` 遍历 `combatState.IterateHookListeners()`（含 creature 的 powers）
+  并在游戏 action 管线内 await 每个模型 → 效果做成**模型（power）的 hook 回调 = 两端确定性**（参照地狱狂徒）。
+- **重构**：
+  - 新增 `Scripts/Skills/SkillEffectsPower.cs`（CustomPowerModel，隐藏、Single）：override 全部技能 hook
+    （AfterCardPlayed / AfterHandEmptied / AfterCardExhausted / AfterPlayerTurnStart / AfterSideTurnStart /
+    BeforeSideTurnEnd / AfterCardDrawnEarly / AfterDamageReceived / AfterCardDiscarded / AfterPowerAmountChanged /
+    AfterForge / AfterDeath / ModifyAttackHitCount），内部按「主题玩家（power 所属玩家）已购技能」施加；
+    每4张用 `CombatManager.History.CardPlaysStarted` 确定性计数 + `ApplyPowerSync`（无 await）。
+  - `RunStateHook.ApplySkillCombatStartPowers` 给「有任意技能/能力」的玩家施加 SkillEffectsPower。
+  - **删除**全部 fire-and-forget async patch：`SkillCombatPatches.cs`、`AutoPlayPowerModel.cs`、`GoldOnKillPatch.cs`；
+    `SkillEventPatches.cs` 精简为仅 `SkillContextCache` + `SkillRestSitePatch`（同步 bool）。
+  - 保留：EnergyKeepPatch（同步）、CombatSetUp 能力 boost、卡牌修改/购买/加点（action）、点数发放（确定性 RNG 流）。
+- **结果**：所有技能/能力效果统一走「游戏管线内 await 的模型 hook」→ 多人确定性一致，代码集中（SkillEffectsPower ~230 行替代 3 个 patch ~500 行）。
+- **版本**：2.0.0 / BUILD v50。
+

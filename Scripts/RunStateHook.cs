@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
@@ -40,6 +41,7 @@ public static class RunStateHook
     private static void OnCombatSetUp(CombatState state)
     {
         // 方案 B：遍历所有玩家，按各自 store 数据施加（不按本地玩家分叉）
+        SkillRegistry.ResetCombatPlay(); // 新战斗打牌计数归零（v2.0：UI 显示用，%4 判断用 History）
         AbilityOperationHelper.ApplyInitialBoosts(state);
         AbilityOperationHelper.ApplyStarsAtCombatStart(state);
         ApplySkillCombatStartPowers(state);
@@ -63,11 +65,19 @@ public static class RunStateHook
             // 储君「免费打出第一张牌」→ VoidFormPower(1)：能量+辉星免费 + 原生绿色荧光显示
             if (UpgradeDataStore.HasSkill(player, "free_first_card"))
                 await AbilityOperationHelper.ApplyPower(player.Creature, "freeFirstCard", 1);
-            // 故障机器人「抽到能力牌自动打出」→ 官方范式 AutoPlayPowerModel（隐藏 power，
-            // AfterCardDrawnEarly 在抽牌管线内被 await，两端确定性；旧 fire-and-forget patch 会时序竞争）
-            if (UpgradeDataStore.HasSkill(player, "auto_play_power_on_draw"))
-                await MegaCrit.Sts2.Core.Commands.PowerCmd.Apply<AutoPlayPowerModel>(new MegaCrit.Sts2.Core.GameActions.Multiplayer.BlockingPlayerChoiceContext(), player.Creature, 1, null, null);
+            // 统一技能效果 power（v2.0 官方范式）：隐藏 SkillEffectsPower 承载全部技能/能力效果，
+            // hook 在游戏管线内被 await → 两端确定性。CombatSetUp 时施加无跨帧 await。
+            if (HasAnySkillOrBoost(player))
+                await MegaCrit.Sts2.Core.Commands.PowerCmd.Apply<SkillEffectsPower>(new MegaCrit.Sts2.Core.GameActions.Multiplayer.BlockingPlayerChoiceContext(), player.Creature, 1, null, null);
         }
+    }
+
+    /// <summary>玩家是否有任何技能或能力（需 SkillEffectsPower 承载效果）。</summary>
+    private static bool HasAnySkillOrBoost(Player player)
+    {
+        if (player == null) return false;
+        var data = UpgradeDataStore.For(player);
+        return data.Skills.Any(kv => kv.Value > 0) || data.Boosts.Any(kv => kv.Value > 0);
     }
 
     /// <summary>当前房间是否为问号房（进入时已发问号房点数；其战斗不再额外发放）。</summary>
