@@ -677,3 +677,23 @@
 - **结果**：所有技能/能力效果统一走「游戏管线内 await 的模型 hook」→ 多人确定性一致，代码集中（SkillEffectsPower ~230 行替代 3 个 patch ~500 行）。
 - **版本**：2.0.0 / BUILD v50。
 
+
+---
+
+## v2.0 多人联机验证通过 + 发布（2026-08-13）
+
+- 双端实测：完整一局正常游玩（host 多场战斗胜利、点数正常增长），**0 状态分歧、0 NullReferenceException**。
+- BaseLib 版本修复生效：friend 升级 Workshop BaseLib 3.4.4 后，卡牌预览 NRE 消失（此前 3.4.0 的
+  `ModifyBaseDamagePatches.AdjustBaseUnenchanted` 在刷新攻击牌时 NRE → 牌堆空、抽牌中断）。
+- 部署产物：InfiniteUpgradeSystem.dll + localization（cards/powers）+ resources；manifest 2.0.0，依赖 BaseLib + STS2-RitsuLib。
+- 发布 v2.0.0（创意工坊物品 3763412710 更新）。
+
+
+---
+
+## v2.0 多人联机验证通过 + 发布（2026-08-13）
+
+- 双端实测：完整一局正常游玩（host 多场战斗胜利、点数正常增长），0 状态分歧、0 NullReferenceException。
+- BaseLib 版本修复生效：friend 升级 Workshop BaseLib 3.4.4 后，卡牌预览 NRE 消失（此前 3.4.0 的 ModifyBaseDamagePatches.AdjustBaseUnenchanted 在刷新攻击牌时 NRE → 牌堆空、抽牌中断）。
+- 部署产物：InfiniteUpgradeSystem.dll + localization（cards/powers）+ resources；manifest 2.0.0，依赖 BaseLib + STS2-RitsuLib。
+- 发布 v2.0.0（创意工坊物品 3763412710 更新）。
