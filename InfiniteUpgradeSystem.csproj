@@ -132,7 +132,6 @@
     <!-- Clean previous deployment -->
     <RemoveDir Directories="$(ModsPath)InfiniteUpgradeSystem" Condition="Exists('$(ModsPath)InfiniteUpgradeSystem')" />
     <MakeDir Directories="$(ModsPath)InfiniteUpgradeSystem" />
-    <MakeDir Directories="$(ModsPath)BaseLib" Condition="!Exists('$(ModsPath)BaseLib')" />
 
     <!-- Copy mod DLL -->
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ModsPath)InfiniteUpgradeSystem\" />
@@ -152,10 +151,11 @@
     </ItemGroup>
     <Copy SourceFiles="@(LocFiles)" DestinationFolder="$(ModsPath)InfiniteUpgradeSystem\localization\%(RecursiveDir)" />
 
-    <!-- Copy BaseLib (if not already present) -->
-    <Copy SourceFiles="$(BaseLibResolvedDir)\lib\net9.0\BaseLib.dll" DestinationFolder="$(ModsPath)BaseLib\" />
-    <Copy SourceFiles="$(BaseLibResolvedDir)\Content\BaseLib.pck" DestinationFolder="$(ModsPath)BaseLib\" />
-    <Copy SourceFiles="$(BaseLibResolvedDir)\Content\BaseLib.json" DestinationFolder="$(ModsPath)BaseLib\" />
+    <!-- NOTE: BaseLib is NOT deployed here on purpose. It is a shared framework mod and must be installed
+         separately (Steam Workshop) so both players use the SAME version (e.g. 3.4.4). Deploying an older
+         cached NuGet copy (3.4.0) caused client-side card-preview NullReferenceException in
+         BaseLib.ModifyBaseDamagePatches.AdjustBaseUnenchanted when peers had no Workshop BaseLib.
+         manifest.json declares BaseLib dependency. -->
   </Target>
 
   <!-- Warning if game not found -->
