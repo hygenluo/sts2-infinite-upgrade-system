@@ -357,28 +357,3 @@ public static class SkillSovereignBladeBlockPatch
         _ = AbilityOperationHelper.AddSovereignBladeForgeParry(forger);
     }
 }
-
-/// <summary>每当你抽到能力牌时，自动打出（故障机器人，免费）。参照铁甲战士「地狱狂徒」HellraiserPower.AfterCardDrawnEarly → CardCmd.AutoPlay。</summary>
-[HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardDrawn))]
-public static class SkillAutoPlayPowerPatch
-{
-    public static void Postfix(ICombatState combatState, PlayerChoiceContext choiceContext, CardModel card, bool fromHandDraw)
-    {
-        var player = card?.Owner;
-        if (player == null || !UpgradeDataStore.HasSkill(player, "auto_play_power_on_draw")) return;
-        if (card!.Type != CardType.Power) return;
-        _ = HandleAsync(choiceContext, card);
-    }
-
-    private static async Task HandleAsync(PlayerChoiceContext context, CardModel card)
-    {
-        try
-        {
-            await CardCmd.AutoPlay(context, card, null);
-        }
-        catch (Exception ex)
-        {
-            GD.PrintErr($"[InfiniteUpgrade] Skill auto-play power error: {ex}");
-        }
-    }
-}

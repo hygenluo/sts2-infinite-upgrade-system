@@ -63,6 +63,10 @@ public static class RunStateHook
             // 储君「免费打出第一张牌」→ VoidFormPower(1)：能量+辉星免费 + 原生绿色荧光显示
             if (UpgradeDataStore.HasSkill(player, "free_first_card"))
                 await AbilityOperationHelper.ApplyPower(player.Creature, "freeFirstCard", 1);
+            // 故障机器人「抽到能力牌自动打出」→ 官方范式 AutoPlayPowerModel（隐藏 power，
+            // AfterCardDrawnEarly 在抽牌管线内被 await，两端确定性；旧 fire-and-forget patch 会时序竞争）
+            if (UpgradeDataStore.HasSkill(player, "auto_play_power_on_draw"))
+                await MegaCrit.Sts2.Core.Commands.PowerCmd.Apply<AutoPlayPowerModel>(new MegaCrit.Sts2.Core.GameActions.Multiplayer.BlockingPlayerChoiceContext(), player.Creature, 1, null, null);
         }
     }
 

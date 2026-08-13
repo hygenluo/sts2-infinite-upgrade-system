@@ -636,3 +636,22 @@
   缓冲时序影响；async 受 checksum 时序影响）。
 - **版本**：1.4.11 / BUILD v41。
 
+
+---
+
+## 多人分歧：「自动打出能力牌」fire-and-forget AutoPlay → 官方范式 CustomPowerModel（2026-08-13）
+
+- **现象**：v1.4.11 联机（checksum 515）分歧。report：friend 端 host 玩家多 `INFINITE_BLADES_POWER:1`
+  （无尽刀刃，游戏原版能力牌）——host 玩家买了 auto_play_power_on_draw（抽到能力牌自动打出），
+  抽到无尽刀刃后 friend 端自动打出了、host 端没有。
+- **根因**：旧实现为 Harmony `Hook.AfterCardDrawn` Postfix（fire-and-forget）+ `await CardCmd.AutoPlay`
+  （内部 OnPlayWrapper 跨帧 await）→ 与 checksum 时序竞争 → 一端自动打出、一端没有。
+- **官方范式（借鉴）**：地狱狂徒 `HellraiserPower` 是 PowerModel，其 `AfterCardDrawnEarly` 在游戏抽牌管线内
+  **被 await**（`Hook.AfterCardDrawn` 遍历模型并 await）→ 两端确定性一致。
+- **修复**：新建 `AutoPlayPowerModel : CustomPowerModel`（IsVisibleInternal=false 隐藏），
+  `AfterCardDrawnEarly` 里对能力牌 `await CardCmd.AutoPlay`；战斗开始 `ApplySkillCombatStartPowers`
+  给已购技能玩家施加（PowerCmd.Apply，CombatSetUp 时无跨帧 await）；删除旧 fire-and-forget patch。
+- **关键认知**：**效果做成模型（power/relic）的 hook 回调 = 官方确定性范式**（游戏管线 await）；
+  Harmony Patch + fire-and-forget async = 时序竞争。后续其他技能若再分歧，应优先改为模型 hook。
+- **版本**：1.4.12 / BUILD v42。
+
