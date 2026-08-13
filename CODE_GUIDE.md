@@ -14,9 +14,9 @@ Scripts/
 ├── PointsPersistence.cs          # 点数 JSON 持久化
 ├── UpgradeDataStore.cs           # 每玩家数据（RitsuLib PlayerRunSavedData，store 权威）
 ├── Skills/
-│   ├── SkillRegistry.cs          # 技能注册表（等级化 + 计数 + skills_<seed>.json 持久化）
-│   ├── SkillCombatPatches.cs     # 打出牌触发类 9 项（AfterCardPlayed/AfterHandEmptied）
-│   └── SkillEventPatches.cs      # 事件触发类 7 项（消耗/弃牌/受伤/中毒/回合/休息处）
+│   ├── SkillEffectsPower.cs       # 技能/能力效果统一承载（v2.0 官方范式：隐藏 Power，Hook 在游戏管线内 await → 多人确定性）
+│   ├── SkillRegistry.cs           # 技能注册表（等级化 + skills_<seed>.json 持久化 + UI 本地缓存）
+│   └── SkillEventPatches.cs       # 仅休息处任意选项（ShouldDisableRemainingRestSiteOptions 同步）
 ├── UiComponents/
 │   ├── UpgradeItemData.cs        # 数据模型 UpgradeItemDef（Kind/MaxLevel/等级化）
 │   ├── UpgradeLoc.cs             # 自包含双语本地化 + key 常量
