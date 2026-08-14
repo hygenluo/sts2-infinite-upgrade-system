@@ -697,3 +697,22 @@
 - BaseLib 版本修复生效：friend 升级 Workshop BaseLib 3.4.4 后，卡牌预览 NRE 消失（此前 3.4.0 的 ModifyBaseDamagePatches.AdjustBaseUnenchanted 在刷新攻击牌时 NRE → 牌堆空、抽牌中断）。
 - 部署产物：InfiniteUpgradeSystem.dll + localization（cards/powers）+ resources；manifest 2.0.0，依赖 BaseLib + STS2-RitsuLib。
 - 发布 v2.0.0（创意工坊物品 3763412710 更新）。
+
+---
+
+## 奥斯提额外攻击一次不生效：attacker.Player 恒为 null（pet 无 Player）（2026-08-14）
+
+- **现象**：亡灵契约师技能「奥斯提会额外攻击一次」（skill id `osty_extra_attack`）购买后无效果，奥斯提攻击命中次数仍是 1。
+- **复现**：购买技能（log 有 `IU purchase osty_extra_attack cost=15 ... OK`）→ 打出奥斯提攻击牌（Poke/Flatten/Fetch 等）→ 奥斯提只打一次。
+- **根因**：v2.0 把该技能从 Harmony `Hook.ModifyAttackHitCount` Postfix 迁移到 `SkillEffectsPower.ModifyAttackHitCount`
+  （CustomPowerModel 官方范式）时，用 `attack?.Attacker?.Player` 定位主题玩家。但奥斯提是**召唤物（pet）**：
+  `AttackCommand.FromOsty(osty, card)` 只设 `Attacker = osty`（Creature 的 `Player` 字段恒为 null，`Monster is Osty` 才是身份），
+  所以 `attack.Attacker.Player == null` → 第一行 `owner == null` 直接 `return hitCount`，永不翻倍。
+- **修复**：改为用 `attack.Attacker.PetOwner` 定位召唤者（OstyCmd.Summon → PlayerCmd.AddPet →
+  PlayerCombatState.AddPetInternal 会设 `pet.PetOwner = 召唤者`；OstyCmd 里也用 `c.PetOwner == summoner` 找奥斯提）。
+  判定顺序改为：先判 `Monster is Osty`，再取 `PetOwner` 比对 `OwnerPlayer`。
+- **多人安全**：`ModifyAttackHitCount` 是同步的模型 hook（`Hook.ModifyAttackHitCount` 遍历 `IterateHookListeners`
+  在内联数值计算，无 await）→ 两端确定性一致；`PetOwner` 由同一 `OstyCmd.Summon` 命令两端同步设置；
+  技能等级读 `UpgradeDataStore`（RitsuLib 每玩家 store，host 权威）→ 满足多人确定性要求。
+- **版本**：未 bump（bugfix）。
+

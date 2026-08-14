@@ -105,8 +105,11 @@ public sealed class SkillEffectsPower : CustomPowerModel
 
     public override int ModifyAttackHitCount(AttackCommand attack, int hitCount)
     {
-        var owner = attack?.Attacker?.Player;
-        if (owner == null || owner != OwnerPlayer || attack?.Attacker?.Monster is not Osty) return hitCount;
+        // 奥斯提是召唤物（pet），attacker.Player 恒为 null，须用 PetOwner 定位召唤者
+        var attacker = attack?.Attacker;
+        if (attacker?.Monster is not Osty) return hitCount;
+        var owner = attacker.PetOwner;
+        if (owner == null || owner != OwnerPlayer) return hitCount;
         if (!UpgradeDataStore.HasSkill(owner, "osty_extra_attack")) return hitCount;
         return hitCount * 2;
     }
