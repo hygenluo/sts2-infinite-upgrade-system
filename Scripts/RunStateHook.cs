@@ -43,7 +43,6 @@ public static class RunStateHook
         // 方案 B：遍历所有玩家，按各自 store 数据施加（不按本地玩家分叉）
         SkillRegistry.ResetCombatPlay(); // 新战斗打牌计数归零（v2.0：UI 显示用，%4 判断用 History）
         AbilityOperationHelper.ApplyInitialBoosts(state);
-        AbilityOperationHelper.ApplyStarsAtCombatStart(state);
         ApplySkillCombatStartPowers(state);
         // 以下 SaveCheckpoint 写本机 JSON 镜像（单人崩溃恢复/旧档迁移源），
         // 权威数据在 RitsuLib store（随 run 存档自动持久化）。

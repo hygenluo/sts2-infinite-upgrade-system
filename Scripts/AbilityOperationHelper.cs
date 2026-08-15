@@ -84,19 +84,6 @@ public static class AbilityOperationHelper
         }
     }
 
-    /// <summary>CombatSetUp时应用辉星（一次性，非每回合）。给所有玩家按各自 stars boost 施加。</summary>
-    public static async void ApplyStarsAtCombatStart(CombatState state)
-    {
-        if (state == null) return;
-        foreach (var player in state.Players)
-        {
-            if (player == null) continue;
-            int stars = UpgradeDataStore.GetBoost(player, "stars");
-            if (stars > 0)
-                await PlayerCmd.GainStars(stars, player);
-        }
-    }
-
     // 格挡跨回合不消失 — 通过 BarricadePower 实现（与壁垒卡牌相同效果），
     // 由 ApplyInitialBoosts → ApplyOnePower("blockKeep", ...) 在战斗开始时应用。
 

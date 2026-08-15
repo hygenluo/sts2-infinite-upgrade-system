@@ -124,6 +124,11 @@ public sealed class SkillEffectsPower : CustomPowerModel
         var creature = player.Creature;
         if (creature == null) return;
 
+        // 能力：每回合辉星 +N（update06 BUG修复：由战斗开始一次性改为每回合开始时发放）
+        int stars = UpgradeDataStore.GetBoost(player, "stars");
+        if (stars > 0)
+            await PlayerCmd.GainStars(stars, player);
+
         if (UpgradeDataStore.HasSkill(player, "block_at_turn_start"))
         {
             int exhaust = player.Piles.FirstOrDefault(p => p.Type == PileType.Exhaust)?.Cards.Count ?? 0;
