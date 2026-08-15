@@ -50,7 +50,7 @@
 | id | 效果 | 成本 | 参考实现 | Hook | 关键点 |
 |---|---|---|---|---|---|
 | `free_next_card_on_power` | 每打出1张能力牌，下一张牌免费 | 10 | 遗物「干瘪之手」MummifiedHand | `AfterCardPlayed` | `card.Type==Power` → 手牌中取一张「耗能量/辉星的牌」`SetToFreeThisTurn()`（见下方干瘪之手模式） |
-| `dmg_x_times_at_turn_start` | 回合开始对所有敌人造成 x 伤害 y 次（x=力量,y=敏捷,min 1） | 15 | `CreatureCmd.Damage` 多次 | `AfterPlayerTurnStart` | x=`GetPower<StrengthPower>()?.Amount`，y=`GetPower<DexterityPower>()?.Amount`，各 `Math.Max(1,·)`；y 次循环 `CreatureCmd.Damage(context,enemies,x,default,creature)` |
+| `dmg_x_times_at_turn_start` | 回合开始对所有敌人造成 x 伤害 y 次（x=力量+1,y=敏捷+1,最低1） | 15 | `CreatureCmd.Damage` 多次 | `AfterPlayerTurnStart` | x=`Math.Max(1, 力量+1)`，y=`Math.Max(1, 敏捷+1)`；y 次循环 `CreatureCmd.Damage(context,enemies,x,default,creature)` |
 
 ### 干瘪之手参考模式（`free_next_card_on_power` 直接照搬）
 

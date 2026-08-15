@@ -675,8 +675,10 @@ public sealed partial class UpgradeUIHandler : Control
             () =>
             {
                 var c = CardOperationHelper.GetLocalPlayer()?.Creature;
-                int x = Math.Max(1, c?.GetPower<StrengthPower>()?.Amount ?? 0);
-                int y = Math.Max(1, c?.GetPower<DexterityPower>()?.Amount ?? 0);
+                int str = c?.GetPower<StrengthPower>()?.Amount ?? 0;
+                int dex = c?.GetPower<DexterityPower>()?.Amount ?? 0;
+                int x = Math.Max(1, str + 1);
+                int y = Math.Max(1, dex + 1);
                 return $"{x}伤 {y}次";
             }));
         _allItems.Add(SkillItem(ClassTabBar.Ironclad, "每当有一张牌被消耗时，抽一张牌", UpgradeLoc.ItemSkillDrawOnExhaust, "draw_on_exhaust", 10));
