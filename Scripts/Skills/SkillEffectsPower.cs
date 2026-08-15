@@ -129,6 +129,11 @@ public sealed class SkillEffectsPower : CustomPowerModel
         if (stars > 0)
             await PlayerCmd.GainStars(stars, player);
 
+        // 能力：每回合铸造 +5N（update06 BUG修复：此前 forge boost 从未被应用）
+        int forge = UpgradeDataStore.GetBoost(player, "forge");
+        if (forge > 0)
+            await ForgeCmd.Forge(5m * forge, player, null);
+
         if (UpgradeDataStore.HasSkill(player, "block_at_turn_start"))
         {
             int exhaust = player.Piles.FirstOrDefault(p => p.Type == PileType.Exhaust)?.Cards.Count ?? 0;
