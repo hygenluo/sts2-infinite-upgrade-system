@@ -9,6 +9,7 @@ using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Runs;
 
 namespace InfiniteUpgradeSystem;
@@ -670,6 +671,14 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(SkillItem(ClassTabBar.Generic, "你可以在休息处选择任意数量的选项", UpgradeLoc.ItemSkillRestAllOptions, "rest_all_options", 10));
         _allItems.Add(SkillItem(ClassTabBar.Generic, "每回合开始时，获取消耗牌堆数等量格挡", UpgradeLoc.ItemSkillBlockAtTurnStart, "block_at_turn_start", 10));
         _allItems.Add(SkillItem(ClassTabBar.Generic, "你的回合开始时，获取2力量", UpgradeLoc.ItemSkillStrAtTurnStart, "str_at_turn_start", 12));
+        _allItems.Add(SkillItem(ClassTabBar.Generic, "回合开始时，对所有敌人造成x点伤害y次", UpgradeLoc.ItemSkillDmgXTimesAtTurnStart, "dmg_x_times_at_turn_start", 15,
+            () =>
+            {
+                var c = CardOperationHelper.GetLocalPlayer()?.Creature;
+                int x = Math.Max(0, c?.GetPower<StrengthPower>()?.Amount ?? 0);
+                int y = Math.Max(0, c?.GetPower<DexterityPower>()?.Amount ?? 0);
+                return $"{x}伤 {y}次";
+            }));
         _allItems.Add(SkillItem(ClassTabBar.Ironclad, "每当有一张牌被消耗时，抽一张牌", UpgradeLoc.ItemSkillDrawOnExhaust, "draw_on_exhaust", 10));
         _allItems.Add(SkillItem(ClassTabBar.Ironclad, "每当失去生命值时，抽一张牌", UpgradeLoc.ItemSkillDrawOnHpLoss, "draw_on_hp_loss", 10));
         _allItems.Add(SkillItem(ClassTabBar.Ironclad, "回合结束时，你的格挡翻倍", UpgradeLoc.ItemSkillDoubleBlockAtTurnEnd, "double_block_at_turn_end", 15));
