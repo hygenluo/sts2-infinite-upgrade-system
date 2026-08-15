@@ -134,14 +134,14 @@ public sealed class SkillEffectsPower : CustomPowerModel
         if (forge > 0)
             await ForgeCmd.Forge(5m * forge, player, null);
 
-        // 技能（通用）：回合开始时，对所有敌人造成 x 点伤害 y 次（x=力量,y=敏捷,min 0）
+        // 技能（通用）：回合开始时，对所有敌人造成 x 点伤害 y 次（x=力量,y=敏捷,min 1）
         if (UpgradeDataStore.HasSkill(player, "dmg_x_times_at_turn_start"))
         {
             var enemies = creature.CombatState?.Enemies;
             if (enemies != null && enemies.Count > 0)
             {
-                int x = Math.Max(0, creature.GetPower<StrengthPower>()?.Amount ?? 0);
-                int y = Math.Max(0, creature.GetPower<DexterityPower>()?.Amount ?? 0);
+                int x = Math.Max(1, creature.GetPower<StrengthPower>()?.Amount ?? 0);
+                int y = Math.Max(1, creature.GetPower<DexterityPower>()?.Amount ?? 0);
                 for (int i = 0; i < y; i++)
                     await CreatureCmd.Damage(choiceContext, enemies, x, default, creature);
             }
