@@ -68,6 +68,7 @@
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_OSTY_EXTRA_ATTACK": "Whenever Osty attacks, it attacks twice",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_SUMMON_AT_TURN_START": "Summon 2 extra at the start of your turn",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_ENEMY_LOSE_STR_ON_DOOM": "Whenever you apply Doom to an enemy, that enemy loses 1 Strength",
+ "INFINITEUPGRADESYSTEM-ITEM_SKILL_PLAY_ETHEREAL_FROM_EXHAUST": "At the end of your turn, play all Ethereal cards in your Exhaust pile",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_ON_POWER_PLAY": "Draw 1 card whenever you play a Power",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_ORB_DMG_AT_TURN_END": "At end of turn, deal 1 damage to ALL enemies for each Orb",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_AUTO_PLAY_POWER_ON_DRAW": "Whenever you draw a Power, automatically play it",

@@ -285,10 +285,26 @@ public sealed class SkillEffectsPower : CustomPowerModel
         if (side != CombatSide.Player) return; // 玩家回合结束
         var player = OwnerPlayer;
         if (player?.Creature == null) return;
-        if (!UpgradeDataStore.HasSkill(player, "double_block_at_turn_end")) return;
-        int block = player.Creature.Block;
-        if (block > 0)
-            await CreatureCmd.GainBlock(player.Creature, block, default, null, false);
+
+        // 技能（铁甲战士）：回合结束时，格挡翻倍
+        if (UpgradeDataStore.HasSkill(player, "double_block_at_turn_end"))
+        {
+            int block = player.Creature.Block;
+            if (block > 0)
+                await CreatureCmd.GainBlock(player.Creature, block, default, null, false);
+        }
+
+        // 技能（亡灵契约师）：回合结束时，打出消耗牌堆中的所有虚无牌（排除诅咒/状态牌）
+        if (UpgradeDataStore.HasSkill(player, "play_ethereal_from_exhaust"))
+        {
+            var exhaustPile = player.Piles.FirstOrDefault(p => p.Type == PileType.Exhaust);
+            var etherealCards = exhaustPile?.Cards
+                .Where(c => c.Keywords.Contains(CardKeyword.Ethereal) && c.Type != CardType.Curse && c.Type != CardType.Status)
+                .ToList();
+            if (etherealCards != null)
+                foreach (var c in etherealCards)
+                    await CardCmd.AutoPlay(choiceContext, c, null);
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
