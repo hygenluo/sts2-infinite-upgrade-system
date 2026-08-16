@@ -716,3 +716,46 @@
   技能等级读 `UpgradeDataStore`（RitsuLib 每玩家 store，host 权威）→ 满足多人确定性要求。
 - **版本**：未 bump（bugfix）。
 
+---
+
+## update06：多人适配 + 2 BUG 修复 + 12 新技能（2026-08-16）
+
+### 本此反编译确认的 API 变更 / 坑
+
+1. **`CardPileCmd.AddGeneratedCardToCombat` 第三参数已变**：旧反编译源码是 `bool addedByPlayer`，
+   当前公开化程序集是 `Player? creator`。旧源码调用报 `CS1739`（无 addedByPlayer 参数）。
+   正确调用：`AddGeneratedCardToCombat(card, PileType.Hand, player)`。
+   （教训：`_decompiled_sts2` 是 update04 时代的旧源码，签名可能过期，报错时以 `ilspycmd` 现反编译为准。）
+
+2. **`CardModel.ExhaustOnNextPlay`（public set）**：设 `true` 后该牌打出即进消耗堆（`GetResultPileType()`
+   检测 `ExhaustOnNextPlay || Keywords.Contains(Exhaust)`）。用于「回合结束打出消耗堆虚无牌」——否则
+   `CardCmd.AutoPlay` 的虚无牌打出后进弃牌堆（用户反馈）。
+
+3. **`PowerModel.InitInternalData` 在公开化程序集里是 `public`**：`protected override` 报 `CS0507`，
+   须 `public override object InitInternalData()`。
+
+4. **「下一张牌免费」不能用 VoidFormPower / 干瘪之手**：
+   - 干瘪之手 = 随机一张手牌免费（`SetToFreeThisTurn`），不符「下一张」语义；
+   - VoidFormPower = 「本回合前 N 张免费」（`cardsPlayedThisTurn` 计数所有牌），能力牌触发会错位；
+   - 最终方案：`SkillEffectsPower` 内部 `freeCardCharge`（`InitInternalData`）+ 重写 `TryModifyEnergyCostInCombat` /
+     `TryModifyStarCost` 把手牌置 0 费 + `AfterCardPlayed`（能力牌置1/非能力牌置0）+ `AfterPlayerTurnStart` 清空。
+
+5. **负力量**：`StrengthPower.AllowNegative=true`，`PowerCmd.Apply<StrengthPower>(ctx, enemy, -N, ...)` 可减力量。
+   封装 `AbilityOperationHelper.ApplyStrengthLoss`（现有 `ApplyPower` 有 `count<=0` 早退，负值须走独立方法）。
+
+### 新增 Power 映射（`AbilityOperationHelper.ApplyPower` switch）
+- `"vulnerable" => VulnerablePower`（铁甲：消耗→易伤、易伤总和→力量）
+- `"fanOfKnives" => FanOfKnivesPower`（静默：小刀全体攻击——Shiv 检测该 power 即 `TargetType.AllEnemies`，纯被动）
+
+### 新增/复用模型 hook
+- `AfterStarsGained(int amount, Player gainer)`（储君：获辉星→全体敌人失力）
+- `AfterPowerAmountChanged` 新增 `DoomPower` 分支（亡灵：给灾厄→该敌人失力）
+- `BeforeSideTurnEnd` 新增「打出消耗堆虚无牌（ExhaustOnNextPlay）」「消耗手牌状态牌每张+2格挡」
+- `AfterPlayerTurnStart` 新增「x伤害y次(x=力量+1,y=敏捷+1)」「升级过的无色牌」「随机能力牌」
+
+### 官方参考实现
+- 无色牌/随机能力牌：`CardFactory.GetDistinctForCombat(player, pool.GetUnlockedCards(...), 1, player.RunState.Rng.CombatCardGeneration)`
+  + `CardCmd.Upgrade`（升级）/ `CardCmd.AutoPlay`（打出）——参照 WhiteNoise / InfernalBlade。
+- 多人确定性：一律 `player.RunState.Rng.*` 同步流，禁止本地随机。
+
+
