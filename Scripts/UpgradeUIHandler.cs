@@ -708,6 +708,7 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(SkillItem(ClassTabBar.Necrobinder, "回合结束时，打出消耗牌堆中的所有虚无牌", UpgradeLoc.ItemSkillPlayEtherealFromExhaust, "play_ethereal_from_exhaust", 15));
         _allItems.Add(SkillItem(ClassTabBar.Defect, "每打出1张能力牌，抽一张牌", UpgradeLoc.ItemSkillDrawOnPowerPlay, "draw_on_power_play", 10));
         _allItems.Add(SkillItem(ClassTabBar.Defect, "回合结束时，每有一个充能球，对所有敌人造成1点伤害", UpgradeLoc.ItemSkillOrbDmgAtTurnEnd, "orb_dmg_at_turn_end", 10));
+        _allItems.Add(SkillItem(ClassTabBar.Defect, "回合结束时，消耗你手牌中的状态牌，每张获得2格挡", UpgradeLoc.ItemSkillExhaustStatusGainBlockAtTurnEnd, "exhaust_status_gain_block_at_turn_end", 15));
         _allItems.Add(SkillItem(ClassTabBar.Defect, "每当你抽到能力牌时，自动打出", UpgradeLoc.ItemSkillAutoPlayPowerOnDraw, "auto_play_power_on_draw", 20));
         _allItems.Add(SkillItem(ClassTabBar.Defect, "你的回合开始时，随机获取1个充能球", UpgradeLoc.ItemSkillOrbAtTurnStart, "orb_at_turn_start", 8));
 

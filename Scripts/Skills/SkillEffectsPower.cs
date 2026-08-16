@@ -308,6 +308,19 @@ public sealed class SkillEffectsPower : CustomPowerModel
                     await CardCmd.AutoPlay(choiceContext, c, null);
                 }
         }
+
+        // 技能（故障机器人）：回合结束时，消耗手牌中的状态牌，每张获得2格挡
+        if (UpgradeDataStore.HasSkill(player, "exhaust_status_gain_block_at_turn_end"))
+        {
+            var handPile = player.Piles.FirstOrDefault(p => p.Type == PileType.Hand);
+            var statusCards = handPile?.Cards.Where(c => c.Type == CardType.Status).ToList();
+            if (statusCards != null && statusCards.Count > 0)
+            {
+                foreach (var c in statusCards)
+                    await CardCmd.Exhaust(choiceContext, c);
+                await CreatureCmd.GainBlock(player.Creature, 2m * statusCards.Count, default, null, false);
+            }
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════

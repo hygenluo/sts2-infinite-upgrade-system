@@ -95,6 +95,7 @@ public static class UpgradeLoc
     public const string ItemSkillPlayEtherealFromExhaust = "INFINITEUPGRADESYSTEM-ITEM_SKILL_PLAY_ETHEREAL_FROM_EXHAUST";
     public const string ItemSkillDrawOnPowerPlay = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_ON_POWER_PLAY";
     public const string ItemSkillOrbDmgAtTurnEnd = "INFINITEUPGRADESYSTEM-ITEM_SKILL_ORB_DMG_AT_TURN_END";
+    public const string ItemSkillExhaustStatusGainBlockAtTurnEnd = "INFINITEUPGRADESYSTEM-ITEM_SKILL_EXHAUST_STATUS_GAIN_BLOCK_AT_TURN_END";
     public const string ItemSkillAutoPlayPowerOnDraw = "INFINITEUPGRADESYSTEM-ITEM_SKILL_AUTO_PLAY_POWER_ON_DRAW";
     public const string ItemSkillOrbAtTurnStart = "INFINITEUPGRADESYSTEM-ITEM_SKILL_ORB_AT_TURN_START";
     public const string ItemSkillDmgXTimesAtTurnStart = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DMG_X_TIMES_AT_TURN_START";
