@@ -758,4 +758,18 @@
   + `CardCmd.Upgrade`（升级）/ `CardCmd.AutoPlay`（打出）——参照 WhiteNoise / InfernalBlade。
 - 多人确定性：一律 `player.RunState.Rng.*` 同步流，禁止本地随机。
 
+---
+
+## 正式版(stable)兼容：CardPlay.Player 不存在（2026-08-16）
+
+- **现象**：测试版验证通过；正式版加完点打一张牌后，卡牌一直停在页面中间、不进弃牌堆也不消失。
+- **根因**：正式版的 `CardPlay` 类型**移除了 `Player` 属性**（测试版有）。模组按测试版编译，正式版运行时
+  `CardPlay.get_Player()` 抛 `MissingMethodException`（godot.log 可见）→ `SkillEffectsPower.AfterCardPlayed` 中断
+  → 打牌 action 以异常结束，卡牌流程卡死。
+- **修复**：`cardPlay.Player` → `cardPlay.Card.Owner`（`CardPlay.Card` 与 `CardModel.Owner` 在测试版/正式版均存在）。
+  共两处：`AfterCardPlayed` 定位主题玩家、每4张计数 `e.CardPlay?.Player` → `e.CardPlay?.Card?.Owner`。
+- **教训**：测试版(beta)与正式版(stable)的 API 有差异。跨版本 API 一律优先用两端都存在的成员（如 `Card.Owner`），
+  避免只存在于单一分支的便捷属性（如 beta 的 `CardPlay.Player`）。
+
+
 
