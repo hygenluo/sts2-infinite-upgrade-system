@@ -331,6 +331,17 @@ public sealed class SkillEffectsPower : CustomPowerModel
         await AbilityOperationHelper.AddSovereignBladeForgeParry(forger);
     }
 
+    public override async Task AfterStarsGained(int amount, Player gainer)
+    {
+        if (gainer == null || gainer != OwnerPlayer) return;
+        if (amount <= 0) return;
+        if (!UpgradeDataStore.HasSkill(gainer, "enemy_lose_str_on_star")) return;
+        var enemies = gainer.Creature?.CombatState?.Enemies;
+        if (enemies == null) return;
+        foreach (var enemy in enemies)
+            await AbilityOperationHelper.ApplyStrengthLoss(enemy, amount, gainer.Creature);
+    }
+
     public override async Task AfterDeath(PlayerChoiceContext choiceContext, Creature creature, bool wasRemovalPrevented, float deathAnimLength)
     {
         if (creature == null || wasRemovalPrevented) return;

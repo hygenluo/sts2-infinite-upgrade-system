@@ -61,6 +61,7 @@
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_VIGOR_ON_SKILL_PLAY": "Gain 2 Vigor whenever you play a Skill",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_SOVEREIGN_BLADE_BLOCK_ON_FORGE": "Whenever you Forge, your Sovereign Blade permanently gains 1 Block",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_FREE_FIRST_CARD": "At the start of your turn, your first card played is free",
+ "INFINITEUPGRADESYSTEM-ITEM_SKILL_ENEMY_LOSE_STR_ON_STAR": "Whenever you gain 1 Star, ALL enemies lose 1 Strength this turn",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_SUMMON_ON_PLAY": "Summon 1 whenever you play a card",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_DMG_ON_ETHEREAL_PLAY": "Deal 3 damage to ALL enemies whenever you play an Ethereal card",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_OSTY_EXTRA_ATTACK": "Whenever Osty attacks, it attacks twice",

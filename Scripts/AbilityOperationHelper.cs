@@ -176,6 +176,22 @@ public static class AbilityOperationHelper
     }
 
     /// <summary>
+    /// 失去力量（负值，StrengthPower.AllowNegative=true）。用于「辉星→敌人失力」「灾厄→敌人失力」。
+    /// </summary>
+    public static async Task ApplyStrengthLoss(Creature creature, int amount, Creature? applier = null)
+    {
+        if (creature == null || amount <= 0) return;
+        try
+        {
+            await PowerCmd.Apply<StrengthPower>(new BlockingPlayerChoiceContext(), creature, -amount, applier, null);
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[IU] ApplyStrengthLoss {amount}: {ex}");
+        }
+    }
+
+    /// <summary>
     /// 技能「每铸造一次君王之剑永久+1格挡」：铸造时给 forger +1 招架。
     /// 招架数作为持久 boost 写入每玩家 store（方案 B），随 run 存档持久化，
     /// 每场战斗开始由 ApplyInitialBoosts 重新应用 → 跨战斗永久。
