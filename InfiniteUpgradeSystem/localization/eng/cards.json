@@ -52,6 +52,7 @@
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_DOUBLE_BLOCK_AT_TURN_END": "At end of turn, double your Block",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_HEAL_AT_TURN_START": "Heal 3 HP at the start of your turn",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_WEAK_ON_DISCARD": "Apply 1 Weak to ALL enemies whenever you discard a card",
+ "INFINITEUPGRADESYSTEM-ITEM_SKILL_DEXTERITY_ON_DISCARD": "Gain 1 Dexterity whenever you discard a card",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_BLOCK_ON_POISON": "Gain 1 Block whenever you apply Poison",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_POISON_ALL_ON_CARD_PLAY": "Apply 1 Poison to ALL enemies whenever you play a card",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_AT_TURN_START": "Draw 1 extra card at the start of your turn",

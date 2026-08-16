@@ -689,6 +689,7 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(SkillItem(ClassTabBar.Ironclad, "回合结束时，你的格挡翻倍", UpgradeLoc.ItemSkillDoubleBlockAtTurnEnd, "double_block_at_turn_end", 15));
         _allItems.Add(SkillItem(ClassTabBar.Ironclad, "你的回合开始时，回复3点生命值", UpgradeLoc.ItemSkillHealAtTurnStart, "heal_at_turn_start", 8));
         _allItems.Add(SkillItem(ClassTabBar.Silent, "每当丢弃一张牌时，给予所有敌人1层虚弱", UpgradeLoc.ItemSkillWeakOnDiscard, "weak_on_discard", 10));
+        _allItems.Add(SkillItem(ClassTabBar.Silent, "你每丢弃一张牌，获得1敏捷", UpgradeLoc.ItemSkillDexterityOnDiscard, "dexterity_on_discard", 15));
         _allItems.Add(SkillItem(ClassTabBar.Silent, "每当给予敌人中毒时，获得1格挡", UpgradeLoc.ItemSkillBlockOnPoison, "block_on_poison", 10));
         _allItems.Add(SkillItem(ClassTabBar.Silent, "你每打出一张牌都给予所有敌人一层中毒", UpgradeLoc.ItemSkillPoisonAllOnCardPlay, "poison_all_on_card_play", 15));
         _allItems.Add(SkillItem(ClassTabBar.Silent, "你的回合开始时，额外摸1张牌", UpgradeLoc.ItemSkillDrawAtTurnStart, "draw_at_turn_start", 8));

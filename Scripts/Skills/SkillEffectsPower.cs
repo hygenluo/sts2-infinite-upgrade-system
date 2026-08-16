@@ -298,11 +298,20 @@ public sealed class SkillEffectsPower : CustomPowerModel
     {
         var player = card?.Owner;
         if (player == null || player != OwnerPlayer) return;
-        if (!UpgradeDataStore.HasSkill(player, "weak_on_discard")) return;
-        var enemies = player.Creature?.CombatState?.Enemies;
-        if (enemies == null) return;
-        foreach (var enemy in enemies)
-            await AbilityOperationHelper.ApplyPower(enemy, "weak", 1);
+        var creature = player.Creature;
+
+        // 技能（静默猎手）：每丢弃一张牌 +1 敏捷
+        if (creature != null && UpgradeDataStore.HasSkill(player, "dexterity_on_discard"))
+            await AbilityOperationHelper.ApplyPower(creature, "dexterity", 1);
+
+        // 技能（静默猎手）：每丢弃一张牌，全体敌人 +1 虚弱
+        if (UpgradeDataStore.HasSkill(player, "weak_on_discard"))
+        {
+            var enemies = creature?.CombatState?.Enemies;
+            if (enemies != null)
+                foreach (var enemy in enemies)
+                    await AbilityOperationHelper.ApplyPower(enemy, "weak", 1);
+        }
     }
 
     public override async Task AfterPowerAmountChanged(PlayerChoiceContext choiceContext, PowerModel power, decimal amount, Creature? applier, CardModel? cardSource)

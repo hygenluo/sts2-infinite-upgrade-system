@@ -76,6 +76,7 @@ public static class UpgradeLoc
     public const string ItemSkillDoubleBlockAtTurnEnd = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DOUBLE_BLOCK_AT_TURN_END";
     public const string ItemSkillHealAtTurnStart = "INFINITEUPGRADESYSTEM-ITEM_SKILL_HEAL_AT_TURN_START";
     public const string ItemSkillWeakOnDiscard = "INFINITEUPGRADESYSTEM-ITEM_SKILL_WEAK_ON_DISCARD";
+    public const string ItemSkillDexterityOnDiscard = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DEXTERITY_ON_DISCARD";
     public const string ItemSkillBlockOnPoison = "INFINITEUPGRADESYSTEM-ITEM_SKILL_BLOCK_ON_POISON";
     public const string ItemSkillPoisonAllOnCardPlay = "INFINITEUPGRADESYSTEM-ITEM_SKILL_POISON_ALL_ON_CARD_PLAY";
     public const string ItemSkillDrawAtTurnStart = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_AT_TURN_START";
