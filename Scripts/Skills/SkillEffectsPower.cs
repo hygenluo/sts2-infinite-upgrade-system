@@ -54,17 +54,17 @@ public sealed class SkillEffectsPower : CustomPowerModel
 
     public override async Task AfterCardPlayed(PlayerChoiceContext choiceContext, CardPlay cardPlay)
     {
-        var player = cardPlay?.Player;
-        if (player == null || player != OwnerPlayer) return;
-        var card = cardPlay!.Card;
+        var card = cardPlay?.Card;
         if (card == null) return;
+        var player = card.Owner;
+        if (player == null || player != OwnerPlayer) return;
         var creature = player.Creature;
         if (creature == null) return;
 
         SkillRegistry.AddCombatPlay(player); // 更新 UI 打牌计数缓存（store 两端一致）
 
         // 每4张+力量/敏捷（确定性计数：官方 History.CardPlaysStarted；plays<=0 防御 off-by-one）
-        int plays = CombatManager.Instance?.History?.CardPlaysStarted?.Count(e => e.CardPlay?.Player == player) ?? 0;
+        int plays = CombatManager.Instance?.History?.CardPlaysStarted?.Count(e => e.CardPlay?.Card?.Owner == player) ?? 0;
         if (plays > 0 && plays % 4 == 0)
         {
             if (UpgradeDataStore.HasSkill(player, "strength_every_4_plays"))
