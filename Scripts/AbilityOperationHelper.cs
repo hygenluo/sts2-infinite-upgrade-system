@@ -166,6 +166,7 @@ public static class AbilityOperationHelper
                 case "poison": await PowerCmd.Apply<PoisonPower>(context, creature, count, applier, cardSource); break;
                 case "parry": await PowerCmd.Apply<ParryPower>(context, creature, count, applier, cardSource); break;
                 case "freeFirstCard": await PowerCmd.Apply<VoidFormPower>(context, creature, count, applier, cardSource); break;
+                case "fanOfKnives": await PowerCmd.Apply<FanOfKnivesPower>(context, creature, count, applier, cardSource); break;
             }
         }
         catch (Exception ex)

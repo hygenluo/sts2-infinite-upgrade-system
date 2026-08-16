@@ -66,6 +66,9 @@ public static class RunStateHook
                 // 储君「免费打出第一张牌」→ VoidFormPower(1)
                 if (UpgradeDataStore.HasSkill(player, "free_first_card"))
                     await AbilityOperationHelper.ApplyPower(player.Creature, "freeFirstCard", 1);
+                // 静默猎手「小刀攻击所有敌人」→ FanOfKnivesPower（Shiv 检测该 power 即全体攻击）
+                if (UpgradeDataStore.HasSkill(player, "shiv_all_enemies"))
+                    await AbilityOperationHelper.ApplyPower(player.Creature, "fanOfKnives", 1);
                 // 统一技能效果 power（v2.0 官方范式）：隐藏 SkillEffectsPower 承载全部技能/能力效果，
                 // hook 在游戏管线内被 await → 两端确定性。
                 if (HasAnySkillOrBoost(player))
