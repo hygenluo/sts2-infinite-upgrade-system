@@ -36,6 +36,16 @@ public sealed class SkillEffectsPower : CustomPowerModel
 
     private Player? OwnerPlayer => Owner?.Player;
 
+    /// <summary>「下一张牌免费」技能内部状态（照 VoidFormPower 的 per-instance data 范式）。</summary>
+    private sealed class FreeData
+    {
+        public int freeCardCharge;
+    }
+
+    public override object InitInternalData() => new FreeData();
+
+    private FreeData MyData => GetInternalData<FreeData>();
+
     // ═══════════════════════════════════════════════════════════════
     // 打出牌触发
     // ═══════════════════════════════════════════════════════════════
@@ -87,15 +97,13 @@ public sealed class SkillEffectsPower : CustomPowerModel
         if (UpgradeDataStore.HasSkill(player, "draw_on_power_play") && card.Type == CardType.Power)
             await CardPileCmd.Draw(choiceContext, player);
 
-        // 技能（通用）：每打出1张能力牌，手牌中一张耗能量/辉星的牌本回合免费（照搬遗物「干瘪之手」MummifiedHand）
-        if (UpgradeDataStore.HasSkill(player, "free_next_card_on_power") && card.Type == CardType.Power)
+        // 技能（通用）：每打出1张能力牌，下一张牌免费（费用/辉星为0；打出后其余牌恢复原价）
+        if (UpgradeDataStore.HasSkill(player, "free_next_card_on_power"))
         {
-            IReadOnlyList<CardModel> hand = PileType.Hand.GetPile(player).Cards;
-            var rng = player.RunState.Rng.CombatCardSelection;
-            CardModel? target = rng.NextItem(hand.Where(c => c.CostsEnergyOrStars(includeGlobalModifiers: false)));
-            if (target == null)
-                rng.NextItem(hand.Where(c => c.CostsEnergyOrStars(includeGlobalModifiers: true)));
-            target?.SetToFreeThisTurn();
+            if (card.Type == CardType.Power)
+                MyData.freeCardCharge = 1;  // 打出能力牌 → 授予「下一张免费」
+            else if (MyData.freeCardCharge > 0)
+                MyData.freeCardCharge = 0;  // 打出非能力牌 → 消耗免费额度
         }
     }
 
@@ -126,6 +134,35 @@ public sealed class SkillEffectsPower : CustomPowerModel
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // 「下一张牌免费」费用修改（照 VoidFormPower 的 TryModifyXxxCost 范式）
+    // ═══════════════════════════════════════════════════════════════
+
+    public override bool TryModifyEnergyCostInCombat(CardModel card, decimal originalCost, out decimal modifiedCost)
+    {
+        modifiedCost = originalCost;
+        if (!CanFreeThisCard(card)) return false;
+        modifiedCost = 0;
+        return true;
+    }
+
+    public override bool TryModifyStarCost(CardModel card, decimal originalCost, out decimal modifiedCost)
+    {
+        modifiedCost = originalCost;
+        if (!CanFreeThisCard(card)) return false;
+        modifiedCost = 0;
+        return true;
+    }
+
+    /// <summary>有「下一张免费」额度且卡属于本玩家（手牌/打出堆）→ 可免费。</summary>
+    private bool CanFreeThisCard(CardModel card)
+    {
+        if (Owner == null || MyData.freeCardCharge <= 0) return false;
+        if (card?.Owner?.Creature != Owner) return false;
+        if (card.Pile?.Type is not (PileType.Hand or PileType.Play)) return false;
+        return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // 回合开始触发
     // ═══════════════════════════════════════════════════════════════
 
@@ -134,6 +171,8 @@ public sealed class SkillEffectsPower : CustomPowerModel
         if (player == null || player != OwnerPlayer) return;
         var creature = player.Creature;
         if (creature == null) return;
+
+        MyData.freeCardCharge = 0; // 回合开始清空上一回合残留的「下一张免费」额度
 
         // 能力：每回合辉星 +N（update06 BUG修复：由战斗开始一次性改为每回合开始时发放）
         int stars = UpgradeDataStore.GetBoost(player, "stars");

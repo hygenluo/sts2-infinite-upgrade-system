@@ -49,27 +49,17 @@
 
 | id | 效果 | 成本 | 参考实现 | Hook | 关键点 |
 |---|---|---|---|---|---|
-| `free_next_card_on_power` | 每打出1张能力牌，下一张牌免费 | 10 | 遗物「干瘪之手」MummifiedHand | `AfterCardPlayed` | `card.Type==Power` → 手牌中取一张「耗能量/辉星的牌」`SetToFreeThisTurn()`（见下方干瘪之手模式） |
+| `free_next_card_on_power` | 每打出1张能力牌，下一张牌免费 | 10 | `VoidFormPower`（免费N张范式） | `AfterCardPlayed` + `TryModifyEnergyCost/StarCost` | 内部 `freeCardCharge`：打能力牌置1，打非能力牌置0；费用 hook 读该值把手牌置0费 |
 | `dmg_x_times_at_turn_start` | 回合开始对所有敌人造成 x 伤害 y 次（x=力量+1,y=敏捷+1,最低1） | 15 | `CreatureCmd.Damage` 多次 | `AfterPlayerTurnStart` | x=`Math.Max(1, 力量+1)`，y=`Math.Max(1, 敏捷+1)`；y 次循环 `CreatureCmd.Damage(context,enemies,x,default,creature)` |
 
-### 干瘪之手参考模式（`free_next_card_on_power` 直接照搬）
+### 「下一张牌免费」实现（`free_next_card_on_power`）
 
-反编译 `MummifiedHand.cs` 的官方实现如下，**逐行照搬**即可（多人确定性靠 `RunState.Rng.CombatCardSelection` 同步流）：
+照 `VoidFormPower` 的「免费 N 张」范式，但触发改为「打出能力牌」（而非回合开始）：
 
-```csharp
-// 在 SkillEffectsPower.AfterCardPlayed 内：
-if (card.Type == CardType.Power && UpgradeDataStore.HasSkill(player, "free_next_card_on_power"))
-{
-    IReadOnlyList<CardModel> cards = PileType.Hand.GetPile(player).Cards; // 或 player.PlayerCombatState.Hand.Cards
-    Rng rng = player.RunState.Rng.CombatCardSelection;
-    CardModel? target = rng.NextItem(cards.Where(c => c.CostsEnergyOrStars(includeGlobalModifiers: false)));
-    if (target == null)
-        rng.NextItem(cards.Where(c => c.CostsEnergyOrStars(includeGlobalModifiers: true))); // 空选也要耗 RNG，保持两端同步
-    target?.SetToFreeThisTurn();
-}
-```
-
-**关键点**：`SetToFreeThisTurn()` 是本效果唯一机制（非 VoidFormPower）；`if (target==null) 再抽一次` 是为保证两端 RNG 消耗次数一致（MummifiedHand 原文，勿删）。
+- `SkillEffectsPower` 加内部 `freeCardCharge`（per-instance data，`InitInternalData`）；
+- `AfterCardPlayed`：能力牌 → `freeCardCharge=1`；非能力牌 → `freeCardCharge=0`；
+- `TryModifyEnergyCostInCombat` / `TryModifyStarCost`：`freeCardCharge>0` 且卡属于本玩家（手牌/打出堆）→ 置 0 费（手牌全部显示免费，打一张后其余恢复原价）；
+- `AfterPlayerTurnStart` 清空 `freeCardCharge`。
 
 ### 铁甲战士
 
@@ -186,6 +176,6 @@ update06 该节为空，本次不做数值调整。
 
 ## 九、已确认的设计决策（2026-08-16）
 
-1. **步骤 4「下一张牌免费」**：照搬遗物「干瘪之手」MummifiedHand 模式——打出能力牌后 `SetToFreeThisTurn()` 手牌中一张耗能量/辉星的牌（`RunState.Rng.CombatCardSelection` 同步随机），不用 VoidFormPower。
+1. **步骤 4「下一张牌免费」**：改为「下一张牌免费」——内部 `freeCardCharge` 状态 + `TryModifyEnergyCost/StarCost` 置 0 费（照 VoidFormPower 范式），而非干瘪之手的「随机一张免费」。
 2. **步骤 13「状态牌+格挡」**：改为**每消耗一张 +2 格挡**（`2m × 消耗张数`）。
 3. **步骤 12「虚无牌打出」**：过滤掉**诅咒牌（Curse）与状态牌（Status）**，只打出 `Ethereal && Type!=Curse && Type!=Status` 的牌。
