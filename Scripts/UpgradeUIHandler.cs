@@ -699,6 +699,7 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(SkillItem(ClassTabBar.Regent, "每铸造一次，君王之剑永久获取1格挡", UpgradeLoc.ItemSkillSovereignBladeBlockOnForge, "sovereign_blade_block_on_forge", 12));
         _allItems.Add(SkillItem(ClassTabBar.Regent, "你的回合开始时，免费打出第一张牌", UpgradeLoc.ItemSkillFreeFirstCard, "free_first_card", 8));
         _allItems.Add(SkillItem(ClassTabBar.Regent, "每当你获得1点辉星，所有敌人本回合失去1点力量", UpgradeLoc.ItemSkillEnemyLoseStrOnStar, "enemy_lose_str_on_star", 15));
+        _allItems.Add(SkillItem(ClassTabBar.Regent, "每回合开始时，在手牌中添加一张升级过的无色牌，其本回合可以免费打出", UpgradeLoc.ItemSkillAddColorlessCardAtTurnStart, "add_colorless_card_at_turn_start", 10));
         _allItems.Add(SkillItem(ClassTabBar.Necrobinder, "每打出1张牌时，召唤1", UpgradeLoc.ItemSkillSummonOnPlay, "summon_on_play", 10));
         _allItems.Add(SkillItem(ClassTabBar.Necrobinder, "每打出1张虚无牌，对所有敌人造成3点伤害", UpgradeLoc.ItemSkillDmgOnEtherealPlay, "dmg_on_ethereal_play", 7));
         _allItems.Add(SkillItem(ClassTabBar.Necrobinder, "奥斯提会额外攻击一次", UpgradeLoc.ItemSkillOstyExtraAttack, "osty_extra_attack", 15));

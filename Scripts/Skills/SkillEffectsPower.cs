@@ -9,8 +9,10 @@ using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Powers;
+using MegaCrit.Sts2.Core.Factories;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.CardPools;
 using MegaCrit.Sts2.Core.Models.Monsters;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.ValueProps;
@@ -246,6 +248,20 @@ public sealed class SkillEffectsPower : CustomPowerModel
         {
             var orb = OrbModel.GetRandomOrb(player.RunState.Rng.CombatOrbGeneration).ToMutable();
             await OrbCmd.Channel(choiceContext, orb, player);
+        }
+
+        // 技能（储君）：回合开始时，手牌添加一张升级过的无色牌，本回合免费
+        if (UpgradeDataStore.HasSkill(player, "add_colorless_card_at_turn_start"))
+        {
+            var pool = ModelDb.CardPool<ColorlessCardPool>();
+            var cards = pool.GetUnlockedCards(player.UnlockState, player.RunState.CardMultiplayerConstraint);
+            CardModel? generated = CardFactory.GetDistinctForCombat(player, cards, 1, player.RunState.Rng.CombatCardGeneration).FirstOrDefault();
+            if (generated != null)
+            {
+                CardCmd.Upgrade(generated);
+                generated.SetToFreeThisTurn();
+                await CardPileCmd.AddGeneratedCardToCombat(generated, PileType.Hand, player);
+            }
         }
     }
 
