@@ -86,6 +86,17 @@ public sealed class SkillEffectsPower : CustomPowerModel
 
         if (UpgradeDataStore.HasSkill(player, "draw_on_power_play") && card.Type == CardType.Power)
             await CardPileCmd.Draw(choiceContext, player);
+
+        // 技能（通用）：每打出1张能力牌，手牌中一张耗能量/辉星的牌本回合免费（照搬遗物「干瘪之手」MummifiedHand）
+        if (UpgradeDataStore.HasSkill(player, "free_next_card_on_power") && card.Type == CardType.Power)
+        {
+            IReadOnlyList<CardModel> hand = PileType.Hand.GetPile(player).Cards;
+            var rng = player.RunState.Rng.CombatCardSelection;
+            CardModel? target = rng.NextItem(hand.Where(c => c.CostsEnergyOrStars(includeGlobalModifiers: false)));
+            if (target == null)
+                rng.NextItem(hand.Where(c => c.CostsEnergyOrStars(includeGlobalModifiers: true)));
+            target?.SetToFreeThisTurn();
+        }
     }
 
     public override async Task AfterHandEmptied(PlayerChoiceContext choiceContext, Player player)

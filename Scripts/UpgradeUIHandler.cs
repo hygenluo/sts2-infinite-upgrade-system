@@ -681,6 +681,7 @@ public sealed partial class UpgradeUIHandler : Control
                 int y = Math.Max(1, dex + 1);
                 return $"{x}伤 {y}次";
             }));
+        _allItems.Add(SkillItem(ClassTabBar.Generic, "每当你打出1张能力牌，你的下一张牌免费", UpgradeLoc.ItemSkillFreeNextCardOnPower, "free_next_card_on_power", 10));
         _allItems.Add(SkillItem(ClassTabBar.Ironclad, "每当有一张牌被消耗时，抽一张牌", UpgradeLoc.ItemSkillDrawOnExhaust, "draw_on_exhaust", 10));
         _allItems.Add(SkillItem(ClassTabBar.Ironclad, "每当失去生命值时，抽一张牌", UpgradeLoc.ItemSkillDrawOnHpLoss, "draw_on_hp_loss", 10));
         _allItems.Add(SkillItem(ClassTabBar.Ironclad, "回合结束时，你的格挡翻倍", UpgradeLoc.ItemSkillDoubleBlockAtTurnEnd, "double_block_at_turn_end", 15));
