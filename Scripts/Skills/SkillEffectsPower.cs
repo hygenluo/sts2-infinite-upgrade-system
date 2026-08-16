@@ -333,7 +333,21 @@ public sealed class SkillEffectsPower : CustomPowerModel
     public override async Task AfterPowerAmountChanged(PlayerChoiceContext choiceContext, PowerModel power, decimal amount, Creature? applier, CardModel? cardSource)
     {
         if (power == null || applier == null || amount <= 0) return;
-        if (power is not PoisonPower) return; // 只响应中毒
+
+        // 技能（亡灵契约师）：每当你给予敌人灾厄时，该敌人失去1点力量
+        if (power is DoomPower)
+        {
+            var giver = applier.Player;
+            if (giver != null && giver == OwnerPlayer && UpgradeDataStore.HasSkill(giver, "enemy_lose_str_on_doom"))
+            {
+                var enemy = power.Owner;
+                if (enemy != null)
+                    await AbilityOperationHelper.ApplyStrengthLoss(enemy, 1, applier);
+            }
+        }
+
+        // 技能（静默猎手）：每当你给予敌人中毒时，获得3格挡
+        if (power is not PoisonPower) return;
         var player = applier.Player;
         if (player == null || player != OwnerPlayer) return;
         if (!UpgradeDataStore.HasSkill(player, "block_on_poison")) return;
