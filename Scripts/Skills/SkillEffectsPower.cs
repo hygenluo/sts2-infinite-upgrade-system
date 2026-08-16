@@ -263,6 +263,16 @@ public sealed class SkillEffectsPower : CustomPowerModel
                 await CardPileCmd.AddGeneratedCardToCombat(generated, PileType.Hand, player);
             }
         }
+
+        // 技能（故障机器人）：回合开始时，打出一张随机能力牌
+        if (UpgradeDataStore.HasSkill(player, "auto_play_random_power_at_turn_start"))
+        {
+            var powerCards = player.Character.CardPool.GetUnlockedCards(player.UnlockState, player.RunState.CardMultiplayerConstraint)
+                .Where(c => c.Type == CardType.Power);
+            CardModel? generated = CardFactory.GetDistinctForCombat(player, powerCards, 1, player.RunState.Rng.CombatCardGeneration).FirstOrDefault();
+            if (generated != null)
+                await CardCmd.AutoPlay(choiceContext, generated, null);
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════

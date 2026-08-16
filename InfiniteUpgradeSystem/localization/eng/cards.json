@@ -74,6 +74,7 @@
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_EXHAUST_STATUS_GAIN_BLOCK_AT_TURN_END": "At end of turn, Exhaust Status cards in your hand and gain 2 Block for each",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_AUTO_PLAY_POWER_ON_DRAW": "Whenever you draw a Power, automatically play it",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_ORB_AT_TURN_START": "At the start of your turn, Channel 1 random Orb",
+ "INFINITEUPGRADESYSTEM-ITEM_SKILL_AUTO_PLAY_RANDOM_POWER_AT_TURN_START": "At the start of your turn, play a random Power card",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_DMG_X_TIMES_AT_TURN_START": "At the start of your turn, deal x damage y times to ALL enemies",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_FREE_NEXT_CARD_ON_POWER": "Whenever you play a Power, your next card is Free",
  "INFINITEUPGRADESYSTEM-ENCHANT_COMPOSITE": "Multiple Enchantments",
