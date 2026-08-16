@@ -327,7 +327,7 @@ public sealed class SkillEffectsPower : CustomPowerModel
             if (statusCards != null && statusCards.Count > 0)
             {
                 foreach (var c in statusCards)
-                    await CardCmd.Exhaust(choiceContext, c);
+                    await AbilityOperationHelper.ExhaustCard(choiceContext, c);
                 await CreatureCmd.GainBlock(player.Creature, 2m * statusCards.Count, default, null, false);
             }
         }

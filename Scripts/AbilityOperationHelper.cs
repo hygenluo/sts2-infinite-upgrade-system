@@ -191,6 +191,22 @@ public static class AbilityOperationHelper
         }
     }
 
+    private static readonly System.Reflection.MethodInfo? s_exhaustMethod =
+        typeof(CardCmd).GetMethod("Exhaust",
+            new[] { typeof(PlayerChoiceContext), typeof(CardModel), typeof(bool), typeof(bool) });
+
+    /// <summary>
+    /// 反射调用 CardCmd.Exhaust。测试版(beta)返回 Task&lt;CardPileAddResult?&gt;，正式版(stable)返回 Task——
+    /// 返回类型是 CLR 方法签名的一部分，直接 await 会在另一分支抛 MissingMethodException。
+    /// 按参数签名查找，无论返回 Task 还是 Task&lt;T&gt; 都 await 其 Task 基类，兼容两端。
+    /// </summary>
+    public static async Task ExhaustCard(PlayerChoiceContext context, CardModel card)
+    {
+        if (s_exhaustMethod == null) return;
+        var task = (Task?)s_exhaustMethod.Invoke(null, new object[] { context, card, false, false });
+        if (task != null) await task;
+    }
+
     /// <summary>
     /// 技能「每铸造一次君王之剑永久+1格挡」：铸造时给 forger +1 招架。
     /// 招架数作为持久 boost 写入每玩家 store（方案 B），随 run 存档持久化，
