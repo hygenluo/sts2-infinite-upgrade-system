@@ -219,6 +219,20 @@ public sealed class SkillEffectsPower : CustomPowerModel
         if (UpgradeDataStore.HasSkill(player, "str_at_turn_start"))
             await AbilityOperationHelper.ApplyPower(creature, "strength", 2);
 
+        // 技能（铁甲战士）：回合开始时，获取全体敌人易伤总和点力量
+        if (UpgradeDataStore.HasSkill(player, "str_from_vulnerable_at_turn_start"))
+        {
+            var enemies = creature.CombatState?.Enemies;
+            if (enemies != null)
+            {
+                int sum = 0;
+                foreach (var enemy in enemies)
+                    sum += enemy.GetPower<VulnerablePower>()?.Amount ?? 0;
+                if (sum > 0)
+                    await AbilityOperationHelper.ApplyPower(creature, "strength", sum);
+            }
+        }
+
         if (UpgradeDataStore.HasSkill(player, "heal_at_turn_start"))
             await CreatureCmd.Heal(creature, 3);
 
