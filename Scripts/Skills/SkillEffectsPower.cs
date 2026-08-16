@@ -118,8 +118,18 @@ public sealed class SkillEffectsPower : CustomPowerModel
     {
         var player = card?.Owner;
         if (player == null || player != OwnerPlayer) return;
-        if (!UpgradeDataStore.HasSkill(player, "draw_on_exhaust")) return;
-        await CardPileCmd.Draw(choiceContext, player);
+
+        if (UpgradeDataStore.HasSkill(player, "draw_on_exhaust"))
+            await CardPileCmd.Draw(choiceContext, player);
+
+        // 技能（铁甲战士）：每消耗1张牌，全体敌人 +2 易伤
+        if (UpgradeDataStore.HasSkill(player, "vulnerable_on_exhaust"))
+        {
+            var enemies = player.Creature?.CombatState?.Enemies;
+            if (enemies != null)
+                foreach (var enemy in enemies)
+                    await AbilityOperationHelper.ApplyPower(enemy, "vulnerable", 2);
+        }
     }
 
     public override int ModifyAttackHitCount(AttackCommand attack, int hitCount)

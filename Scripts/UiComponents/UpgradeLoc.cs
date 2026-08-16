@@ -70,6 +70,7 @@ public static class UpgradeLoc
     public const string ItemSkillBlockAtTurnStart = "INFINITEUPGRADESYSTEM-ITEM_SKILL_BLOCK_AT_TURN_START";
     public const string ItemSkillStrAtTurnStart = "INFINITEUPGRADESYSTEM-ITEM_SKILL_STR_AT_TURN_START";
     public const string ItemSkillDrawOnExhaust = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_ON_EXHAUST";
+    public const string ItemSkillVulnerableOnExhaust = "INFINITEUPGRADESYSTEM-ITEM_SKILL_VULNERABLE_ON_EXHAUST";
     public const string ItemSkillDrawOnHpLoss = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DRAW_ON_HP_LOSS";
     public const string ItemSkillDoubleBlockAtTurnEnd = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DOUBLE_BLOCK_AT_TURN_END";
     public const string ItemSkillHealAtTurnStart = "INFINITEUPGRADESYSTEM-ITEM_SKILL_HEAL_AT_TURN_START";

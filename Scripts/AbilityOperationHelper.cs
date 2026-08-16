@@ -162,6 +162,7 @@ public static class AbilityOperationHelper
                 case "blockKeep": await PowerCmd.Apply<BarricadePower>(context, creature, count, applier, cardSource); break;
                 case "vigor": await PowerCmd.Apply<VigorPower>(context, creature, count, applier, cardSource); break;
                 case "weak": await PowerCmd.Apply<WeakPower>(context, creature, count, applier, cardSource); break;
+                case "vulnerable": await PowerCmd.Apply<VulnerablePower>(context, creature, count, applier, cardSource); break;
                 case "poison": await PowerCmd.Apply<PoisonPower>(context, creature, count, applier, cardSource); break;
                 case "parry": await PowerCmd.Apply<ParryPower>(context, creature, count, applier, cardSource); break;
                 case "freeFirstCard": await PowerCmd.Apply<VoidFormPower>(context, creature, count, applier, cardSource); break;
