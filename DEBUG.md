@@ -770,6 +770,10 @@
   共两处：`AfterCardPlayed` 定位主题玩家、每4张计数 `e.CardPlay?.Player` → `e.CardPlay?.Card?.Owner`。
 - **教训**：测试版(beta)与正式版(stable)的 API 有差异。跨版本 API 一律优先用两端都存在的成员（如 `Card.Owner`），
   避免只存在于单一分支的便捷属性（如 beta 的 `CardPlay.Player`）。
+- **另一处差异**：`CardCmd.Exhaust` 返回类型——测试版 `Task<CardPileAddResult?>`，正式版 `Task`。返回类型也是 CLR 方法签名
+  的一部分，直接 `await CardCmd.Exhaust(...)` 按当前分支的返回类型生成 IL 引用，在另一分支抛 `MissingMethodException`
+  （表现为"无法结束回合"）。修复：`AbilityOperationHelper.ExhaustCard` 用反射按**参数签名**查找 `Exhaust`，
+  无论返回 `Task` 还是 `Task<T>` 都 await 其 `Task` 基类，两端兼容。
 
 
 
