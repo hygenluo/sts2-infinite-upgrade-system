@@ -303,7 +303,10 @@ public sealed class SkillEffectsPower : CustomPowerModel
                 .ToList();
             if (etherealCards != null)
                 foreach (var c in etherealCards)
+                {
+                    c.ExhaustOnNextPlay = true; // 打出后回到消耗牌堆（而非弃牌/抽牌堆）
                     await CardCmd.AutoPlay(choiceContext, c, null);
+                }
         }
     }
 
