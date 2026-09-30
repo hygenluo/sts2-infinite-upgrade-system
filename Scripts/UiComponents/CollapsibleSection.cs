@@ -21,7 +21,7 @@ namespace InfiniteUpgradeSystem.UiComponents;
 public sealed partial class CollapsibleSection : VBoxContainer
 {
     private readonly Button _header;
-    private readonly UiIcons.Chevron _chevron;
+    private readonly ChevronIcon _chevron;
     private readonly MegaLabel _titleLabel;
     private readonly MegaLabel _summaryLabel;
     private readonly VBoxContainer _content;
@@ -64,7 +64,7 @@ public sealed partial class CollapsibleSection : VBoxContainer
         var headerRow = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
         headerRow.AddThemeConstantOverride("separation", 8);
 
-        _chevron = new UiIcons.Chevron
+        _chevron = new ChevronIcon
         {
             Expanded = !collapsed,
             IconColor = weakStyle ? UpgradeTheme.TextSecondary : UpgradeTheme.Gold,

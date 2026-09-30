@@ -110,7 +110,8 @@ UI 等待 action.CompletionTask → 成功则刷新点数标签 + 飘字
   原因：`MegaLabel._Ready` 会断言 `font` 主题覆盖存在，**必须**在加入场景树前设好。
 - 字体：`UpgradeTheme.FontRegular/FontBold/FontItalic` —— 语言替换字体 → 游戏 Kreon → Godot 兜底。
 - 非 Label 控件（Button/LineEdit）用 `UpgradeTheme.ApplyGameFont(control)` 套游戏字体 + 语言替换。
-- 图标：`UiIcons.Chevron / DragGrip / Diamond / Close / ArrowRight`（`_Draw` 矢量，无字形依赖）。
+- 图标：`ChevronIcon / DragGripIcon / DiamondIcon / CloseIcon / ArrowRightIcon`
+  （`UiIcons.cs`，`_Draw` 矢量绘制、无字形依赖；必须是**顶级类**，嵌套的 GodotObject 子类有注册不上的风险）。
 - 本地化：`UpgradeLoc.Get/Format/ResolveDisplayName`，key 常量集中在 `UpgradeLoc`，
   文本在 `InfiniteUpgradeSystem/localization/{zhs,eng}/cards.json`
   （无 pck → 由 `UpgradeLoc` 自己读 DLL 同目录 JSON；游戏 `LocString` 路径由

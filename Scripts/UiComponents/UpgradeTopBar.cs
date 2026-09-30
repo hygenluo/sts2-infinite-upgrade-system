@@ -54,7 +54,7 @@ public sealed partial class UpgradeTopBar : PanelContainer
         AddChild(bar);
 
         // 拖拽手柄
-        var grip = new UiIcons.DragGrip { SizeFlagsVertical = SizeFlags.ShrinkCenter };
+        var grip = new DragGripIcon { SizeFlagsVertical = SizeFlags.ShrinkCenter };
         bar.AddChild(grip);
 
         // 标题（自适应字号：中英/长短标题都自动贴合）
@@ -106,7 +106,7 @@ public sealed partial class UpgradeTopBar : PanelContainer
         chip.AddThemeStyleboxOverride("panel", chipStyle);
         var chipRow = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
         chipRow.AddThemeConstantOverride("separation", 6);
-        chipRow.AddChild(new UiIcons.Diamond { IconColor = UpgradeTheme.Gold, SizeFlagsVertical = SizeFlags.ShrinkCenter });
+        chipRow.AddChild(new DiamondIcon { IconColor = UpgradeTheme.Gold, SizeFlagsVertical = SizeFlags.ShrinkCenter });
         _pointsLabel = UpgradeTheme.Label("0", 16, UpgradeTheme.Gold, bold: true);
         _pointsLabel.MouseFilter = MouseFilterEnum.Ignore;
         chipRow.AddChild(_pointsLabel);
@@ -129,7 +129,7 @@ public sealed partial class UpgradeTopBar : PanelContainer
         closeButton.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
         UpgradeTheme.ApplyGameFont(closeButton);
         closeButton.Pressed += onClose;
-        var closeIcon = new UiIcons.Close();
+        var closeIcon = new CloseIcon();
         closeButton.AddChild(closeIcon);
         closeIcon.SetAnchorsPreset(LayoutPreset.FullRect);
         bar.AddChild(closeButton);

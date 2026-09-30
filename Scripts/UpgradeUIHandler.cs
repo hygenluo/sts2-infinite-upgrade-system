@@ -536,7 +536,7 @@ public sealed partial class UpgradeUIHandler : Control
         var rowBox = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
         rowBox.AddThemeConstantOverride("separation", 8);
 
-        var chevron = new UiIcons.Chevron { IconColor = UpgradeTheme.Gold, SizeFlagsVertical = SizeFlags.ShrinkCenter };
+        var chevron = new ChevronIcon { IconColor = UpgradeTheme.Gold, SizeFlagsVertical = SizeFlags.ShrinkCenter };
         rowBox.AddChild(chevron);
 
         var name = UpgradeTheme.Label(UpgradeLoc.SectionTitle("牌组"), 15, UpgradeTheme.Gold, bold: true);
@@ -547,7 +547,7 @@ public sealed partial class UpgradeUIHandler : Control
             align: HorizontalAlignment.Right);
         rowBox.AddChild(_deckCountLabel);
 
-        rowBox.AddChild(new UiIcons.ArrowRight
+        rowBox.AddChild(new ArrowRightIcon
         {
             IconColor = UpgradeTheme.Gold,
             SizeFlagsVertical = SizeFlags.ShrinkCenter,
