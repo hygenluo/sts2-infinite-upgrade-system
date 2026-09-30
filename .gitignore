@@ -22,3 +22,6 @@ Thumbs.db
 *.nupkg
 logs/
 mod-uploader.log
+
+## 已弃用的自备字体（UI v3 起改用游戏自带字体，见 UpgradeTheme.cs）
+resources/fonts/
