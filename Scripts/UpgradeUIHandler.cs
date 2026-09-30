@@ -195,7 +195,8 @@ public sealed partial class UpgradeUIHandler : Control
         if (_mainPanel == null) return false;
         var mousePos = GetGlobalMousePosition();
         var panelPos = _mainPanel.GlobalPosition;
-        var barHeight = _topBar?.Size.Y ?? TopBarFallbackHeight;
+        // 顶栏高度取实际布局值；布局尚未完成（Size=0）时用兜底值，保证拖拽可用
+        var barHeight = Mathf.Max(_topBar?.Size.Y ?? TopBarFallbackHeight, TopBarFallbackHeight);
         var inBar = mousePos.X >= panelPos.X && mousePos.X <= panelPos.X + PanelWidth
             && mousePos.Y >= panelPos.Y && mousePos.Y <= panelPos.Y + barHeight;
         if (!inBar) return false;

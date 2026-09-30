@@ -77,6 +77,9 @@ public sealed partial class UpgradeItemRow : PanelContainer
         // ── 名称（支持 BBCode 高亮；Label 不支持 BBCode，故用游戏自带 MegaRichTextLabel）──
         _nameLabel = UpgradeTheme.RichLabel(14, UpgradeTheme.TextMain);
         _nameLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        // FitContent 的高度 = 文本高度；用 ShrinkCenter 让它垂直居中（否则文字贴行顶，
+        // 与垂直居中的值/成本/加号错位）
+        _nameLabel.SizeFlagsVertical = SizeFlags.ShrinkCenter;
         _nameLabel.Text = def.DisplayName;
         row.AddChild(_nameLabel);
 
