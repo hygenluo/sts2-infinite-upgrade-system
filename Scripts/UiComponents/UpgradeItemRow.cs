@@ -34,6 +34,17 @@ public sealed partial class UpgradeItemRow : PanelContainer
     private readonly MegaLabel _plusLabel;
     private readonly PanelContainer _maxBadge;
 
+    // 回退（v2.3）
+    private readonly Button? _refundButton;
+    private readonly MinusIcon? _refundIcon;
+    private readonly MegaLabel? _refundAmountLabel;
+    private readonly StyleBoxFlat? _refundIdle;
+    private readonly StyleBoxFlat? _refundHover;
+    private readonly StyleBoxFlat? _refundArmed;
+    private bool _refundArmedState;
+    private Tween? _refundArmTween;
+    private bool _levelPositive;
+
     private readonly StyleBoxFlat _baseStyle;
     private readonly StyleBoxFlat _hoverStyle;
     private readonly StyleBoxFlat _chipOk;
@@ -50,7 +61,10 @@ public sealed partial class UpgradeItemRow : PanelContainer
     /// <summary>购买成功事件（+1 飘字与点数跳动）。</summary>
     public event Action? Purchased;
 
-    /// <summary>只读模式（局内查看）：隐藏加号，屏蔽购买交互。</summary>
+    /// <summary>回退成功事件（返还点数飘字）。参数 = 返还点数。</summary>
+    public event Action<int>? Refunded;
+
+    /// <summary>只读模式（局内查看）：隐藏加号与回退按钮，屏蔽交互。</summary>
     public bool ReadOnly { get; set; }
 
     public UpgradeItemRow(UpgradeItemDef def, bool zebra = false)
@@ -132,6 +146,58 @@ public sealed partial class UpgradeItemRow : PanelContainer
         _plusLabel.SetAnchorsPreset(LayoutPreset.FullRect);
         row.AddChild(_plusButton);
 
+        // ── 回退按钮（v2.3：仅可回退项且等级 > 0 时显示，位于成本徽标左侧）──
+        if (def.CanRefund)
+        {
+            _refundIdle = UpgradeTheme.PlusStylebox(false, true);
+            _refundIdle.BgColor = new Color(0f, 0f, 0f, 0f);
+            _refundIdle.BorderColor = new Color(UpgradeTheme.CostColor.R, UpgradeTheme.CostColor.G,
+                UpgradeTheme.CostColor.B, 0.45f);
+            _refundHover = UpgradeTheme.PlusStylebox(false, true);
+            _refundHover.BgColor = new Color(UpgradeTheme.CostColor.R, UpgradeTheme.CostColor.G,
+                UpgradeTheme.CostColor.B, 0.16f);
+            _refundHover.BorderColor = UpgradeTheme.HoverGlow;
+            _refundArmed = UpgradeTheme.PlusStylebox(false, false);
+            _refundArmed.BgColor = new Color(UpgradeTheme.Danger.R, UpgradeTheme.Danger.G,
+                UpgradeTheme.Danger.B, 0.22f);
+            _refundArmed.BorderColor = UpgradeTheme.Danger;
+
+            _refundButton = new Button
+            {
+                Flat = true,
+                FocusMode = FocusModeEnum.None,
+                CustomMinimumSize = new Vector2(26, 26),
+                SizeFlagsVertical = SizeFlags.ShrinkCenter,
+                MouseDefaultCursorShape = CursorShape.PointingHand,
+                Visible = false,
+                TooltipText = RefundTooltip(),
+            };
+            _refundButton.AddThemeStyleboxOverride("normal", _refundIdle);
+            _refundButton.AddThemeStyleboxOverride("hover", _refundHover);
+            _refundButton.AddThemeStyleboxOverride("pressed", _refundArmed);
+            _refundButton.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
+            UpgradeTheme.ApplyGameFont(_refundButton);
+            _refundButton.Pressed += OnRefundPressed;
+
+            _refundIcon = new MinusIcon { IconColor = UpgradeTheme.CostColor };
+            _refundButton.AddChild(_refundIcon);
+            _refundIcon.SetAnchorsPreset(LayoutPreset.FullRect);
+
+            // 返还点数小字（挂在按钮右侧的独立标签，避免挤在按钮里）
+            _refundAmountLabel = UpgradeTheme.Label(
+                $"+{UpgradeRefundService.RefundOf(def.Cost)}", 11, UpgradeTheme.CostColor,
+                align: HorizontalAlignment.Right)
+            ;
+            _refundAmountLabel.CustomMinimumSize = new Vector2(22, 0);
+            _refundAmountLabel.MouseFilter = MouseFilterEnum.Ignore;
+            _refundAmountLabel.Visible = false;
+            row.AddChild(_refundAmountLabel);
+            row.AddChild(_refundButton);
+            // 排版：[名称][值][−][+返还][成本][+][MAX] —— 减号与返还额紧邻，读作「回退一级返还 N」
+            row.MoveChild(_refundButton, _costChip.GetIndex());
+            row.MoveChild(_refundAmountLabel, _refundButton.GetIndex() + 1);
+        }
+
         // ── MAX 徽标（满级时替换加号）──
         _maxBadge = new PanelContainer
         {
@@ -200,11 +266,13 @@ public sealed partial class UpgradeItemRow : PanelContainer
         _valueLabel.AddThemeColorOverride(FontColorKey,
             _def.Kind == UpgradeItemKind.Action ? UpgradeTheme.TextSecondary : UpgradeTheme.Gold);
 
-        // 只读模式（局内查看）：隐藏加号与成本，仅显示当前值 / MAX
+        // 只读模式（局内查看）：隐藏加号与回退，仅显示当前值 / MAX
         if (ReadOnly)
         {
             _plusButton.Visible = false;
             _costChip.Visible = false;
+            if (_refundButton != null) _refundButton.Visible = false;
+            if (_refundAmountLabel != null) _refundAmountLabel.Visible = false;
             return;
         }
 
@@ -214,6 +282,23 @@ public sealed partial class UpgradeItemRow : PanelContainer
         _costChip.AddThemeStyleboxOverride("panel", affordable ? _chipOk : _chipBad);
         _costLabel.AddThemeColorOverride(FontColorKey,
             affordable ? UpgradeTheme.CostColor : UpgradeTheme.Danger);
+
+        // 回退（等级 > 0 才可用；MAX 徽标与回退并存 —— 满级项同样可以退回）
+        _levelPositive = level > 0;
+        if (_refundButton != null)
+        {
+            _refundButton.Visible = _levelPositive;
+            if (!_levelPositive) DisarmRefund();
+        }
+        if (_refundAmountLabel != null)
+        {
+            _refundAmountLabel.Visible = _levelPositive;
+            _refundAmountLabel.Text = $"+{UpgradeRefundService.RefundOf(_def.Cost)}";
+            _refundAmountLabel.AddThemeColorOverride(FontColorKey,
+                UpgradeRefundService.RefundOf(_def.Cost) > 0
+                    ? UpgradeTheme.CostColor
+                    : UpgradeTheme.TextSecondary);
+        }
 
         // 点数不足：加号灰化（保持可点击 → 点击抖动反馈）
         var plusStyle = affordable ? (_hovered ? _plusHover : _plusOk) : _plusDisabled;
@@ -226,6 +311,74 @@ public sealed partial class UpgradeItemRow : PanelContainer
 
     /// <summary>MegaLabel 的文本颜色主题项名。</summary>
     private static readonly StringName FontColorKey = "font_color";
+
+    // ═══════════════════════════════════════════════════════════════
+    // 回退（v2.3）
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>返还点数提示文本（0 点时会说明原因）。</summary>
+    private string RefundTooltip()
+    {
+        int refund = UpgradeRefundService.RefundOf(_def.Cost);
+        return refund > 0
+            ? UpgradeLoc.Format(UpgradeLoc.UiRefundTooltip, "回退 1 级 · 返还 {0} 点（{1} 的 80%）", refund, _def.Cost)
+            : UpgradeLoc.Format(UpgradeLoc.UiRefundTooltipZero, "回退 1 级 · 返还 0 点（{0} 点 × 80% 下取整）", _def.Cost);
+    }
+
+    /// <summary>
+    /// 回退按钮：返还 &gt; 0 时需要**二次点击确认**（首次点击进入确认态，2.5 秒后自动取消），
+    /// 避免误触造成 20% 点数损失。
+    /// </summary>
+    private async void OnRefundPressed()
+    {
+        if (_def.RefundKind == null || _def.RefundTarget == null) return;
+
+        if (UpgradeRefundService.RefundOf(_def.Cost) > 0 && !_refundArmedState)
+        {
+            ArmRefund();
+            return;
+        }
+        DisarmRefund();
+
+        var entry = new RefundEntry
+        {
+            Kind = _def.RefundKind.Value,
+            Target = _def.RefundTarget,
+            PaidCost = _def.Cost,
+            DisplayName = _def.DisplayName,
+            Refundable = true,
+        };
+        var ok = await UpgradeRefundService.Enqueue(entry);
+        if (ok) Refunded?.Invoke(entry.Refund);
+        else Shake();
+    }
+
+    /// <summary>进入确认态：减号变红，提示改为「再次点击确认」。</summary>
+    private void ArmRefund()
+    {
+        if (_refundButton == null) return;
+        _refundArmedState = true;
+        _refundButton.AddThemeStyleboxOverride("normal", _refundArmed);
+        if (_refundIcon != null) _refundIcon.IconColor = UpgradeTheme.Danger;
+        _refundButton.TooltipText =
+            UpgradeLoc.Get(UpgradeLoc.UiRefundConfirm, "再次点击确认回退");
+
+        _refundArmTween?.Kill();
+        _refundArmTween = CreateTween();
+        _refundArmTween.TweenInterval(2.5f);
+        _refundArmTween.TweenCallback(Callable.From(DisarmRefund));
+    }
+
+    private void DisarmRefund()
+    {
+        _refundArmTween?.Kill();
+        _refundArmTween = null;
+        _refundArmedState = false;
+        if (_refundButton == null) return;
+        _refundButton.AddThemeStyleboxOverride("normal", _refundIdle);
+        if (_refundIcon != null) _refundIcon.IconColor = UpgradeTheme.CostColor;
+        _refundButton.TooltipText = RefundTooltip();
+    }
 
     /// <summary>操作失败 / 点数不足的抖动提示（水平 ±4px 三次）。</summary>
     public void Shake()

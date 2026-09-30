@@ -19,6 +19,7 @@ public enum UpgradeDataOp
     CardMod,
     ApplyEvery4, // v1.4.9：每4张+力量/敏捷，走 action 避免 fire-and-forget 与 checksum 时序竞争
     AddCard,     // UI v3：向牌组添加一张牌（Key = ModelId 字符串，两端添加同一张牌）
+    Refund,      // v2.3：回退加点并返还 floor(0.8×已付) 点数
 }
 
 /// <summary>
@@ -140,6 +141,13 @@ public sealed class UpgradeDataAction : GameAction
                 // （本地随机/选池结果只作为参数传输，不参与确定性模拟）。
                 Succeeded = await CardOperationHelper.TryApplyAddCard(_player, _key);
                 break;
+            case UpgradeDataOp.Refund:
+                // 回退：Key = 目标（boost key / skill id / 卡牌身份），Cost = 当初支付点数，
+                // ModType = 卡牌修改类型，Flag1 = 技能，Flag2 = 卡牌操作。
+                // 两端各自按本地已一致的 store/记录做同样的校验与撤销 → 结论一致。
+                Succeeded = await UpgradeRefundService.Execute(
+                    _player, _key, _cost, _modType, _flag1, _flag2);
+                break;
             case UpgradeDataOp.ApplyEvery4:
                 // 每4张+力量/敏捷：走 action 由 ActionExecutor 等待完成（checksum 在其后），避免
                 // fire-and-forget async 施加与 checksum 的时序竞争导致两端落地时机不同。
@@ -200,6 +208,13 @@ public static class UpgradePurchaseFlow
     /// </summary>
     public static Task<bool> EnqueueAddCard(string modelIdString)
         => EnqueueLocal(UpgradeDataOp.AddCard, modelIdString, 0, 0, false, false, "", 0);
+
+    /// <summary>
+    /// 回退加点并返还点数（跨端同步）。
+    /// target = boost key / skill id / 卡牌身份；paidCost = 当初支付的点数（返还 = floor(0.8×paidCost)）。
+    /// </summary>
+    public static Task<bool> EnqueueRefund(string target, int paidCost, int modType, bool isSkill, bool isCardMod)
+        => EnqueueLocal(UpgradeDataOp.Refund, target, paidCost, 0, isSkill, isCardMod, "", modType);
 
     private static Task<bool> EnqueueLocal(UpgradeDataOp op, string key, int cost, int amount,
         bool flag1, bool flag2, string cardIdentity, int modType)

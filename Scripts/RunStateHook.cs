@@ -21,7 +21,7 @@ namespace InfiniteUpgradeSystem;
 /// 检查点策略：
 /// - 战斗开始 (CombatSetUp)  → 保存检查点
 /// - 战斗胜利 (CombatWon)    → 保存检查点（含奖励点数）
-/// - 新局 (RunStarted + 无文件) → 初始 5 点
+/// - 新局 (RunStarted + 无文件) → 初始 3 点（PointsPersistence.StartingPoints）
 /// - 读档 (RunStarted + 有文件) → 恢复到最近检查点
 ///
 /// 修改只存在于内存中，仅在检查点时写盘。
@@ -120,9 +120,9 @@ public static class RunStateHook
             {
                 points = room!.RoomType switch
                 {
-                    RoomType.Monster => Roll(player, 1, 3),
-                    RoomType.Elite => Roll(player, 5, 7),
-                    RoomType.Boss => Roll(player, 25, 30),
+                    RoomType.Monster => Roll(player, 1, 2),
+                    RoomType.Elite => Roll(player, 5, 6),
+                    RoomType.Boss => Roll(player, 25, 27),
                     _ => 0
                 };
             }
@@ -205,9 +205,9 @@ public static class RoomEntryPointsPatch
 
         var (min, max) = room!.RoomType switch
         {
-            RoomType.Event => (1, 5),
-            RoomType.Shop => (1, 5),
-            RoomType.RestSite => (2, 6),
+            RoomType.Event => (1, 3),
+            RoomType.Shop => (1, 3),
+            RoomType.RestSite => (2, 4),
             _ => (0, 0)
         };
 

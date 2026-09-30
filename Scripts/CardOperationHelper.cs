@@ -36,7 +36,8 @@ namespace InfiniteUpgradeSystem;
 /// </summary>
 public static class CardOperationHelper
 {
-    public const int UpgradeCost = 5;
+    /// <summary>升级卡牌成本（唯一定义在 CardModCosts，购买/回退共用）。</summary>
+    public const int UpgradeCost = CardModCosts.Upgrade;
 
     public static Player? GetLocalPlayer()
     {
@@ -240,7 +241,152 @@ public static class CardOperationHelper
             return false;
         }
         card = EnsureMutableInDeck(player, card);
-        await ApplyCardMod(player, card, modType, arg, add);
+        await ApplyCardMod(player, card, modType, arg, add, cost);
+        return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 回退（v2.3）：撤销该卡**最近一次**修改并返还点数
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>该修改类型能否安全逆操作。</summary>
+    public static bool IsRevertible(CardUpgradeTracker.ModType modType) => modType switch
+    {
+        // 游戏 DowngradeInternal() 会把整张卡重置为原型（DynamicVars/Keywords/EnergyCost 全部
+        // 从 canonical 重新克隆，反编译确认）——它无法只撤销「一次无限升级」，
+        // 会连带清空同一张卡上其它所有修改，因此升级卡牌不参与回退。
+        CardUpgradeTracker.ModType.Upgrade => false,
+        // 牌已经从牌组移除，记录也已被 OnCardRemoved 丢弃。
+        CardUpgradeTracker.ModType.DeckRemove => false,
+        _ => true,
+    };
+
+    /// <summary>
+    /// 回退该卡最近一次修改（由 Refund action 两端调用）：
+    /// 逆操作改卡 → 删除记录 → 返还点数。任一步失败则整体不生效（不改点数）。
+    /// </summary>
+    public static bool TryRefundCardMod(Player player, string identity,
+        CardUpgradeTracker.ModType modType, int refund)
+    {
+        if (player == null || string.IsNullOrEmpty(identity)) return false;
+        if (!IsRevertible(modType)) return false;
+
+        var entry = CardUpgradeTracker.NewestEntry(player, identity);
+        if (entry == null)
+        {
+            Log.Warn($"[IU] Refund: no record for {identity} (player={player.NetId})");
+            return false;
+        }
+        if (!Enum.TryParse<CardUpgradeTracker.ModType>(entry.Value.Type, out var newest) || newest != modType)
+        {
+            Log.Warn($"[IU] Refund: newest record type mismatch for {identity} — " +
+                     $"expected {modType}, newest {entry.Value.Type}");
+            return false;
+        }
+
+        var card = FindCardByIdentity(player, identity);
+        if (card == null)
+        {
+            Log.Warn($"[IU] Refund: card not found for {identity} (player={player.NetId})");
+            return false;
+        }
+        card = EnsureMutableInDeck(player, card);
+        if (!RevertCardMod(card, modType, entry.Value.Keyword))
+        {
+            Log.Warn($"[IU] Refund: revert {modType} failed on {card.Id.Entry} (arg={entry.Value.Keyword})");
+            return false;
+        }
+
+        var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
+        if (CardUpgradeTracker.RemoveNewestEntry(player, identity, modType, seed) == null)
+        {
+            // 记录在改卡之后消失（理论上不会发生）→ 不回滚卡片，但绝不能给点数
+            Log.Error($"[IU] Refund: record vanished for {identity}; card reverted but no points refunded.");
+            RefreshAllVisuals(player);
+            return false;
+        }
+
+        if (refund > 0) UpgradePointManager.AddPoints(player, refund);
+        RefreshAllVisuals(player);
+        Log.Info($"[IU] Refund: {modType} on {card.Id.Entry} ({identity}) → +{refund} pts " +
+                 $"(player={player.NetId}, pts={UpgradeDataStore.GetPoints(player)})");
+        return true;
+    }
+
+    /// <summary>逆操作改卡（与 ApplyCardMod 一一对应，数值/词条/附魔全为精确逆）。</summary>
+    private static bool RevertCardMod(CardModel card, CardUpgradeTracker.ModType modType, string? arg)
+    {
+        if (card == null) return false;
+        switch (modType)
+        {
+            case CardUpgradeTracker.ModType.DamagePlus:
+                if (card.DynamicVars.Damage == null) return false;
+                card.DynamicVars.Damage.BaseValue -= 1m;
+                return true;
+            case CardUpgradeTracker.ModType.BlockPlus:
+                if (card.DynamicVars.Block == null) return false;
+                card.DynamicVars.Block.BaseValue -= 1m;
+                return true;
+            case CardUpgradeTracker.ModType.DrawPlus:
+                if (card.DynamicVars.Cards == null) return false;
+                card.DynamicVars.Cards.BaseValue -= 1m;
+                return true;
+            case CardUpgradeTracker.ModType.ReplayPlus:
+                if (card.BaseReplayCount <= 0) return false;
+                card.BaseReplayCount -= 1;
+                return true;
+            case CardUpgradeTracker.ModType.EnergyReduce:
+                card.EnergyCost.SetCustomBaseCost(card.EnergyCost.Canonical + 1);
+                return true;
+            case CardUpgradeTracker.ModType.KeywordAdd:
+                if (!Enum.TryParse<CardKeyword>(arg, out var ka)) return false;
+                card.RemoveKeyword(ka);
+                return true;
+            case CardUpgradeTracker.ModType.KeywordRemove:
+                if (!Enum.TryParse<CardKeyword>(arg, out var kr)) return false;
+                card.AddKeyword(kr);
+                return true;
+            case CardUpgradeTracker.ModType.Enchant:
+                return TryRevertEnchant(card, arg);
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// 撤销一层附魔：同种叠层时扣掉原版数值，扣到 0 则移除该子附魔。
+    /// 注意：附魔的一次性 OnEnchant 副作用（如减费）不回滚 —— 与 CompositeEnchantment
+    /// 既有的「替换时不回滚」行为一致。
+    /// </summary>
+    private static bool TryRevertEnchant(CardModel card, string? typeName)
+    {
+        if (string.IsNullOrEmpty(typeName)) return false;
+        if (card.Enchantment is not CompositeEnchantment composite)
+        {
+            Log.Warn($"[IU] Refund enchant: {card.Id.Entry} has no composite enchantment.");
+            return false;
+        }
+        var sub = composite.Subs.FirstOrDefault(s => s.GetType().Name == typeName);
+        if (sub == null)
+        {
+            Log.Warn($"[IU] Refund enchant: {typeName} not present on {card.Id.Entry} " +
+                     "(可能已被「替换最早附魔」顶掉，无法回退)。");
+            return false;
+        }
+
+        int original = GetOriginalAmount(typeName);
+        if (sub.Amount > original)
+        {
+            sub.Amount -= original;
+            sub.RecalculateValues();
+        }
+        else
+        {
+            composite.RemoveSub(typeName);
+        }
+        card.DynamicVars.RecalculateForUpgradeOrEnchant();
+        composite.RefreshPrimaryDisplay();
+        if (card.Owner != null) RefreshAllVisuals(card.Owner);
         return true;
     }
 
@@ -312,43 +458,44 @@ public static class CardOperationHelper
         }
     }
 
-    /// <summary>应用卡牌修改（action 两端执行）。</summary>
-    private static async Task ApplyCardMod(Player player, CardModel card, CardUpgradeTracker.ModType modType, string arg, bool add)
+    /// <summary>应用卡牌修改（action 两端执行）。cost = 本次实际支付点数（记入记录，回退返还用）。</summary>
+    private static async Task ApplyCardMod(Player player, CardModel card, CardUpgradeTracker.ModType modType,
+        string arg, bool add, int cost)
     {
         var seed = RunManager.Instance?.State?.Rng?.StringSeed ?? "unknown";
         switch (modType)
         {
             case CardUpgradeTracker.ModType.Upgrade:
                 UpgradeWithoutTracking(card);
-                CardUpgradeTracker.RecordModification(player, card, seed, modType);
+                CardUpgradeTracker.RecordModification(player, card, seed, modType, cost: cost);
                 break;
             case CardUpgradeTracker.ModType.DamagePlus:
                 card.DynamicVars.Damage.BaseValue += 1m;
-                CardUpgradeTracker.RecordModification(player, card, seed, modType);
+                CardUpgradeTracker.RecordModification(player, card, seed, modType, cost: cost);
                 break;
             case CardUpgradeTracker.ModType.BlockPlus:
                 card.DynamicVars.Block.BaseValue += 1m;
-                CardUpgradeTracker.RecordModification(player, card, seed, modType);
+                CardUpgradeTracker.RecordModification(player, card, seed, modType, cost: cost);
                 break;
             case CardUpgradeTracker.ModType.DrawPlus:
                 card.DynamicVars.Cards.BaseValue += 1m;
-                CardUpgradeTracker.RecordModification(player, card, seed, modType);
+                CardUpgradeTracker.RecordModification(player, card, seed, modType, cost: cost);
                 break;
             case CardUpgradeTracker.ModType.ReplayPlus:
                 card.BaseReplayCount += 1;
-                CardUpgradeTracker.RecordModification(player, card, seed, modType);
+                CardUpgradeTracker.RecordModification(player, card, seed, modType, cost: cost);
                 break;
             case CardUpgradeTracker.ModType.KeywordAdd:
                 if (Enum.TryParse<CardKeyword>(arg, out var ka))
-                { card.AddKeyword(ka); CardUpgradeTracker.RecordModification(player, card, seed, modType, arg); }
+                { card.AddKeyword(ka); CardUpgradeTracker.RecordModification(player, card, seed, modType, arg, cost); }
                 break;
             case CardUpgradeTracker.ModType.KeywordRemove:
                 if (Enum.TryParse<CardKeyword>(arg, out var kr))
-                { card.RemoveKeyword(kr); CardUpgradeTracker.RecordModification(player, card, seed, modType, arg); }
+                { card.RemoveKeyword(kr); CardUpgradeTracker.RecordModification(player, card, seed, modType, arg, cost); }
                 break;
             case CardUpgradeTracker.ModType.EnergyReduce:
                 var cur = card.EnergyCost.Canonical;
-                if (cur > 0) { card.EnergyCost.SetCustomBaseCost(cur - 1); CardUpgradeTracker.RecordModification(player, card, seed, modType); }
+                if (cur > 0) { card.EnergyCost.SetCustomBaseCost(cur - 1); CardUpgradeTracker.RecordModification(player, card, seed, modType, cost: cost); }
                 break;
             case CardUpgradeTracker.ModType.Enchant:
                 // 替换逻辑在 action 内重算（两端附魔列表一致 → replacedType 一致）
@@ -361,7 +508,7 @@ public static class CardOperationHelper
                     composite.RemoveSub(replacedType);
                 if (replacedType != null)
                     CardUpgradeTracker.RemoveEnchantmentEntries(player, card, seed, replacedType);
-                CardUpgradeTracker.RecordModification(player, card, seed, CardUpgradeTracker.ModType.Enchant, arg);
+                CardUpgradeTracker.RecordModification(player, card, seed, CardUpgradeTracker.ModType.Enchant, arg, cost);
                 break;
             case CardUpgradeTracker.ModType.DeckRemove:
                 int idx = FindCardIndexInDeck(player, card);

@@ -134,6 +134,27 @@ public sealed partial class CloseIcon : Control
     }
 }
 
+/// <summary>减号（回退一级）。矢量绘制，避免 ↩/－ 等字形在拉丁字体下缺失。</summary>
+public sealed partial class MinusIcon : Control
+{
+    public Color IconColor { get; set; } = UpgradeTheme.CostColor;
+
+    public MinusIcon()
+    {
+        CustomMinimumSize = new Vector2(12, 12);
+        MouseFilter = MouseFilterEnum.Ignore;
+    }
+
+    public override void _Draw()
+    {
+        var s = Size;
+        if (s.X <= 0 || s.Y <= 0) return;
+        float w = Mathf.Max(1.5f, Mathf.Min(s.X, s.Y) * 0.14f);
+        DrawLine(new Vector2(s.X * 0.20f, s.Y * 0.5f), new Vector2(s.X * 0.80f, s.Y * 0.5f),
+            IconColor, w, true);
+    }
+}
+
 /// <summary>右向箭头（进入子面板）。</summary>
 public sealed partial class ArrowRightIcon : Control
 {

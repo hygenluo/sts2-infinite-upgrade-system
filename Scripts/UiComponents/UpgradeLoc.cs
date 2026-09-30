@@ -140,6 +140,23 @@ public static class UpgradeLoc
     public const string UiOwned = "INFINITEUPGRADESYSTEM-UI_OWNED";
     public const string UiNotOwned = "INFINITEUPGRADESYSTEM-UI_NOT_OWNED";
 
+    // ── 回退系统（v2.3）──
+    public const string UiSectionRefund = "INFINITEUPGRADESYSTEM-UI_SECTION_REFUND";
+    public const string UiRefundSectionSummary = "INFINITEUPGRADESYSTEM-UI_REFUND_SUMMARY";
+    public const string UiRefundEmpty = "INFINITEUPGRADESYSTEM-UI_REFUND_EMPTY";
+    public const string UiRefundTooltip = "INFINITEUPGRADESYSTEM-UI_REFUND_TOOLTIP";
+    public const string UiRefundTooltipZero = "INFINITEUPGRADESYSTEM-UI_REFUND_TOOLTIP_ZERO";
+    public const string UiRefundConfirm = "INFINITEUPGRADESYSTEM-UI_REFUND_CONFIRM";
+    public const string UiRefundPaid = "INFINITEUPGRADESYSTEM-UI_REFUND_PAID";
+    public const string UiRefundPaidShort = "INFINITEUPGRADESYSTEM-UI_REFUND_PAID_SHORT";
+    public const string UiRefundLocked = "INFINITEUPGRADESYSTEM-UI_REFUND_LOCKED";
+    public const string UiRefundHint = "INFINITEUPGRADESYSTEM-UI_REFUND_HINT";
+    public const string UiRefundOlderMods = "INFINITEUPGRADESYSTEM-UI_REFUND_OLDER_MODS";
+    public const string UiRefundNoteUpgrade = "INFINITEUPGRADESYSTEM-UI_REFUND_NOTE_UPGRADE";
+    public const string UiRefundNoteGone = "INFINITEUPGRADESYSTEM-UI_REFUND_NOTE_GONE";
+    public const string UiRefundToast = "INFINITEUPGRADESYSTEM-UI_REFUND_TOAST";
+    public const string UiRefundLevel = "INFINITEUPGRADESYSTEM-UI_REFUND_LEVEL";
+
     public const string PromptCardUpgrade = "INFINITEUPGRADESYSTEM-PROMPT_CARD_UPGRADE";
     public const string PromptAttackPlus = "INFINITEUPGRADESYSTEM-PROMPT_ATTACK_PLUS";
     public const string PromptBlockPlus = "INFINITEUPGRADESYSTEM-PROMPT_BLOCK_PLUS";
@@ -241,6 +258,7 @@ public static class UpgradeLoc
         "技能" => Get(UiSectionSkill, "技能"),
         "牌组" => Get(UiSectionDeck, "牌组"),
         "测试操作" => Get(UiSectionTest, "测试"),
+        "回退" => Get(UiSectionRefund, "回退"),
         _ => category,
     };
 

@@ -7,6 +7,7 @@ using InfiniteUpgradeSystem.Multiplayer;
 using InfiniteUpgradeSystem.UiComponents;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Powers;
@@ -53,6 +54,11 @@ public sealed partial class UpgradeUIHandler : Control
     private MegaLabel? _cardOpsEmptyLabel;
     private ClassTabBar? _skillTabBar;
     private MegaLabel? _hintLabel;
+    private CollapsibleSection? _refundSection;
+    private VBoxContainer? _refundContent;
+    private MegaLabel? _refundEmptyLabel;
+    private readonly List<(RefundEntry Entry, RefundItemRow Row)> _refundRows = new();
+    private string _refundSignature = "";
     private readonly Dictionary<string, VBoxContainer> _skillClassBoxes = new();
     private readonly Dictionary<UpgradeItemDef, CollapsibleSection> _sectionOf = new();
     private readonly Dictionary<CollapsibleSection, string> _sectionCategory = new();
@@ -60,6 +66,7 @@ public sealed partial class UpgradeUIHandler : Control
     private Tween? _panelTween;
     private bool _isOpen;
     private bool _built;
+    private bool _readOnly;
     private int _localeWaitFrames;
 
     /// <summary>面板位置记忆（运行期间跨打开/关闭保持；NaN = 尚未拖拽，使用居中）。</summary>
@@ -339,14 +346,209 @@ public sealed partial class UpgradeUIHandler : Control
     }
 
     /// <summary>搜索空态标签（未找到相关项目）。</summary>
-    private static MegaLabel BuildEmptyLabel()
+    private static MegaLabel BuildEmptyLabel(string? text = null)
     {
         var label = UpgradeTheme.Label(
-            UpgradeLoc.Get(UpgradeLoc.UiEmpty, "未找到相关项目"), 13, UpgradeTheme.TextSecondary,
+            text ?? UpgradeLoc.Get(UpgradeLoc.UiEmpty, "未找到相关项目"), 13, UpgradeTheme.TextSecondary,
             align: HorizontalAlignment.Center);
         label.Visible = false;
         label.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         return label;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 回退分区（v2.3）
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// 回退分区：列出可回退的加点（基础属性/能力/技能每项一行、卡牌操作每张卡最近一次一行）
+    /// 与不可回退项的说明。右侧摘要「可回退 N 项 · 可返还 M 点」。
+    /// </summary>
+    private void BuildRefundSection()
+    {
+        _refundSection = new CollapsibleSection(UpgradeLoc.SectionTitle("回退"), collapsed: true);
+        _scrollContent!.AddChild(_refundSection);
+        _refundContent = _refundSection.Content;
+
+        var hint = UpgradeTheme.Label(
+            UpgradeLoc.Get(UpgradeLoc.UiRefundHint, "回退返还已付点数的 80%（下取整）；卡牌修改按后进先出回退"),
+            11, UpgradeTheme.TextSecondary);
+        hint.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _refundContent.AddChild(hint);
+
+        _refundEmptyLabel = BuildEmptyLabel(UpgradeLoc.Get(UpgradeLoc.UiRefundEmpty, "暂无可回退的项目"));
+        _refundContent.AddChild(_refundEmptyLabel);
+    }
+
+    /// <summary>刷新回退流水（按签名判断是否需要重建行）。</summary>
+    private void RefreshRefundSection()
+    {
+        if (_refundSection == null || _refundContent == null) return;
+
+        var entries = BuildRefundLedger();
+        var signature = string.Join("|", entries.Select(e =>
+            $"{e.Kind}:{e.Target}:{e.PaidCost}:{e.Refundable}:{e.Detail}"));
+        if (signature != _refundSignature)
+        {
+            _refundSignature = signature;
+            foreach (var (_, old) in _refundRows)
+            {
+                if (!GodotObject.IsInstanceValid(old)) continue;
+                // 先从容器摘掉再释放：否则旧行会在本帧继续占位（重建时列表跳动一下）
+                _refundContent.RemoveChild(old);
+                old.QueueFree();
+            }
+            _refundRows.Clear();
+
+            var zebra = false;
+            foreach (var entry in entries)
+            {
+                var row = new RefundItemRow(entry, zebra);
+                zebra = !zebra;
+                row.Refunded += OnRefundSucceeded;
+                _refundContent.AddChild(row);
+                _refundRows.Add((entry, row));
+            }
+        }
+
+        foreach (var (_, row) in _refundRows)
+        {
+            row.ReadOnly = _readOnly;
+            row.RefreshReadOnly();
+        }
+
+        if (_refundEmptyLabel != null) _refundEmptyLabel.Visible = entries.Count == 0;
+        int count = entries.Count(e => e.Refundable);
+        int total = entries.Where(e => e.Refundable).Sum(e => e.Refund);
+        _refundSection.SetSummary(entries.Count == 0
+            ? ""
+            : UpgradeLoc.Format(UpgradeLoc.UiRefundSectionSummary,
+                "可回退 {0} 项 · 可返还 {1} 点", count, total));
+    }
+
+    /// <summary>
+    /// 构建回退流水：
+    /// 1. 基础属性 / 能力 / 技能：按当前等级 &gt; 0 的条目各一行（每次点击回退 1 级）；
+    /// 2. 卡牌操作：每张卡只列**最近一次**修改（后进先出，保证与读档重放结果一致），
+    ///    更早的修改次数在备注里提示；升级卡牌不可回退但仍列出并说明原因。
+    /// </summary>
+    private List<RefundEntry> BuildRefundLedger()
+    {
+        var list = new List<RefundEntry>();
+        var player = CardOperationHelper.GetLocalPlayer();
+        if (player == null) return list;
+
+        foreach (var item in _allItems)
+        {
+            if (!item.CanRefund) continue;
+            int level = item.LevelProvider?.Invoke() ?? 0;
+            if (level <= 0) continue;
+            list.Add(new RefundEntry
+            {
+                Kind = item.RefundKind!.Value,
+                Target = item.RefundTarget!,
+                PaidCost = item.Cost,
+                DisplayName = item.DisplayName,
+                Detail = level > 1
+                    ? UpgradeLoc.Format(UpgradeLoc.UiRefundLevel, "当前 {0} 级", level)
+                    : "",
+                SearchText = item.SearchText,
+            });
+        }
+
+        foreach (var kv in CardUpgradeTracker.Snapshot(player))
+        {
+            var entries = kv.Value;
+            if (entries.Count == 0) continue;
+            var newest = entries[^1];
+            if (!Enum.TryParse<CardUpgradeTracker.ModType>(newest.Type, out var modType)) continue;
+
+            int paid = newest.Cost > 0 ? newest.Cost : CardModCosts.For(modType, newest.Keyword);
+            bool revertible = CardOperationHelper.IsRevertible(modType);
+            string cardName = ResolveCardName(player, kv.Key);
+            string older = entries.Count > 1
+                ? " · " + UpgradeLoc.Format(UpgradeLoc.UiRefundOlderMods, "还有 {0} 次更早修改", entries.Count - 1)
+                : "";
+
+            list.Add(new RefundEntry
+            {
+                Kind = RefundKind.CardMod,
+                Target = kv.Key,
+                PaidCost = paid,
+                ModType = (int)modType,
+                DisplayName = CardModDisplayName(modType, newest.Keyword),
+                Detail = cardName + older,
+                Refundable = revertible,
+                Note = revertible
+                    ? null
+                    : UpgradeLoc.Get(UpgradeLoc.UiRefundNoteUpgrade,
+                        "「升级卡牌」不支持回退：游戏的降级接口会把整张卡重置为原型，无法只撤销一次升级"),
+                OlderMods = entries.Count - 1,
+                SearchText = $"{cardName} {CardModDisplayName(modType, newest.Keyword)} {newest.Keyword}".ToLower(),
+            });
+        }
+
+        return list;
+    }
+
+    /// <summary>卡牌名（本地化标题）；找不到卡时回退为模板 id。</summary>
+    private static string ResolveCardName(Player player, string identity)
+    {
+        var card = CardOperationHelper.FindCardByIdentity(player, identity);
+        if (card != null)
+        {
+            try { return card.TitleLocString.GetFormattedText(); }
+            catch { /* 本地化缺失 → 用模板 id */ }
+            return card.Id.Entry;
+        }
+        int sep = identity.IndexOf("__", StringComparison.Ordinal);
+        string template = sep > 0 ? identity[..sep] : identity;
+        return template + UpgradeLoc.Get(UpgradeLoc.UiRefundNoteGone, "（已不在牌组）");
+    }
+
+    /// <summary>卡牌修改的显示名（复用卡牌操作条目的本地化 key）。</summary>
+    private static string CardModDisplayName(CardUpgradeTracker.ModType type, string? keyword)
+    {
+        string key = type switch
+        {
+            CardUpgradeTracker.ModType.Upgrade => UpgradeLoc.ItemCardUpgrade,
+            CardUpgradeTracker.ModType.DamagePlus => UpgradeLoc.ItemAttackPlus,
+            CardUpgradeTracker.ModType.BlockPlus => UpgradeLoc.ItemBlockPlus,
+            CardUpgradeTracker.ModType.DrawPlus => UpgradeLoc.ItemDrawPlus,
+            CardUpgradeTracker.ModType.ReplayPlus => UpgradeLoc.ItemReplayPlus,
+            CardUpgradeTracker.ModType.EnergyReduce => UpgradeLoc.ItemCostMinus,
+            CardUpgradeTracker.ModType.Enchant => UpgradeLoc.ItemEnchant,
+            CardUpgradeTracker.ModType.DeckRemove => UpgradeLoc.ItemDeckRemove,
+            CardUpgradeTracker.ModType.KeywordAdd => KeywordLocKey(true, keyword),
+            CardUpgradeTracker.ModType.KeywordRemove => KeywordLocKey(false, keyword),
+            _ => "",
+        };
+        return string.IsNullOrEmpty(key)
+            ? $"{type} {keyword}".Trim()
+            : UpgradeLoc.ResolveDisplayName(key, $"{type} {keyword}".Trim());
+    }
+
+    private static string KeywordLocKey(bool add, string? keyword) => (add, keyword) switch
+    {
+        (true, "Exhaust") => UpgradeLoc.ItemAddExhaust,
+        (false, "Exhaust") => UpgradeLoc.ItemRemoveExhaust,
+        (true, "Sly") => UpgradeLoc.ItemAddSly,
+        (true, "Retain") => UpgradeLoc.ItemAddRetain,
+        (false, "Retain") => UpgradeLoc.ItemRemoveRetain,
+        (true, "Innate") => UpgradeLoc.ItemAddInnate,
+        (false, "Innate") => UpgradeLoc.ItemRemoveInnate,
+        (true, "Ethereal") => UpgradeLoc.ItemAddEthereal,
+        (false, "Ethereal") => UpgradeLoc.ItemRemoveEthereal,
+        (true, "Eternal") => UpgradeLoc.ItemAddEternal,
+        (false, "Eternal") => UpgradeLoc.ItemRemoveEternal,
+        _ => "",
+    };
+
+    /// <summary>回退成功：刷新点数/等级/流水 + 返还飘字。</summary>
+    private void OnRefundSucceeded(int refund)
+    {
+        RefreshPointsLabel();
+        if (refund > 0) SpawnPointVfx($"+{refund}", UpgradeTheme.CostColor);
     }
 
     /// <summary>
@@ -396,14 +598,16 @@ public sealed partial class UpgradeUIHandler : Control
         RefreshAllRows();
     }
 
-    /// <summary>只读模式（局内查看）：行隐藏加号、牌组入口禁用、顶栏显示只读徽标。</summary>
+    /// <summary>只读模式（局内查看）：行隐藏加号与回退、牌组入口禁用、顶栏显示只读徽标。</summary>
     private void SetReadOnlyMode(bool readOnly)
     {
+        _readOnly = readOnly;
         foreach (var row in _itemControls.Values)
             row.ReadOnly = readOnly;
         if (_deckEntryRow != null)
             _deckEntryRow.Disabled = readOnly;
         _topBar?.SetReadOnly(readOnly);
+        RefreshRefundSection();
         if (_hintLabel != null)
             _hintLabel.Text = readOnly
                 ? UpgradeLoc.Get(UpgradeLoc.UiHintReadOnly, "战斗中 · 只读模式    [Esc] 关闭")
@@ -418,8 +622,11 @@ public sealed partial class UpgradeUIHandler : Control
             row.Visible = true;
             row.SetSearchHighlight(null);
         }
+        foreach (var (_, row) in _refundRows)
+            if (GodotObject.IsInstanceValid(row)) row.Visible = true;
         if (_emptyLabel != null) _emptyLabel.Visible = false;
         if (_cardOpsEmptyLabel != null) _cardOpsEmptyLabel.Visible = false;
+        if (_refundEmptyLabel != null) _refundEmptyLabel.Visible = _refundRows.Count == 0;
     }
 
     /// <summary>
@@ -436,6 +643,8 @@ public sealed partial class UpgradeUIHandler : Control
         {
             foreach (var (item, row) in _itemControls)
                 if (!_cardOpsRows.ContainsKey(item)) row.Visible = true;
+            foreach (var (_, row) in _refundRows)
+                if (GodotObject.IsInstanceValid(row)) row.Visible = true;
         }
     }
 
@@ -479,6 +688,9 @@ public sealed partial class UpgradeUIHandler : Control
         // 牌组：入口行（点击进入子面板）
         BuildDeckEntryRow();
 
+        // 回退：购买流水（可回退项 + 不可回退项的说明）
+        BuildRefundSection();
+
         // 测试：弱化样式
         var testSection = AddSection("测试操作", weakStyle: true);
         foreach (var item in _allItems.Where(i => i.Category == "测试操作"))
@@ -508,6 +720,7 @@ public sealed partial class UpgradeUIHandler : Control
     {
         var row = new UpgradeItemRow(item, zebra);
         row.Purchased += OnPurchaseSucceeded;
+        row.Refunded += OnRefundSucceeded;
         _itemControls[item] = row;
         _sectionOf[item] = section;
         return row;
@@ -594,6 +807,21 @@ public sealed partial class UpgradeUIHandler : Control
             foreach (var section in matchesInSection)
                 if (section.Collapsed) section.SetCollapsed(false);
         }
+
+        // 回退流水同样参与搜索过滤（并让回退分区自动展开）
+        Control? firstRefundMatch = null;
+        foreach (var (entry, row) in _refundRows)
+        {
+            if (!GodotObject.IsInstanceValid(row)) continue;
+            var match = string.IsNullOrEmpty(filter) || entry.SearchText.Contains(filter);
+            row.Visible = match;
+            if (match && !string.IsNullOrEmpty(filter))
+            {
+                firstRefundMatch ??= row;
+                if (_refundSection != null && _refundSection.Collapsed)
+                    _refundSection.SetCollapsed(false);
+            }
+        }
         // 技能分区：搜索时显示含命中的职业容器（无搜索词时跟随选中标签）
         if (_skillClassBoxes.Count > 0)
         {
@@ -605,9 +833,10 @@ public sealed partial class UpgradeUIHandler : Control
                     : anyVisible;
             }
         }
-        var totalVisible = _itemControls.Count(kv => !_cardOpsRows.ContainsKey(kv.Key) && kv.Value.Visible);
+        var totalVisible = _itemControls.Count(kv => !_cardOpsRows.ContainsKey(kv.Key) && kv.Value.Visible)
+                           + _refundRows.Count(r => r.Row.Visible);
         _emptyLabel!.Visible = !string.IsNullOrEmpty(filter) && totalVisible == 0;
-        ScrollToFirstMatch(firstMatch, _scrollContainer);
+        ScrollToFirstMatch(firstMatch ?? firstRefundMatch, _scrollContainer);
     }
 
     /// <summary>统一的行过滤/高亮/空态/滚动定位（子面板用）。</summary>
@@ -634,13 +863,13 @@ public sealed partial class UpgradeUIHandler : Control
     }
 
     /// <summary>滚动定位到首个命中行（延迟一帧，等分区展开动画开始后定位）。</summary>
-    private void ScrollToFirstMatch(UpgradeItemRow? firstMatch, ScrollContainer? scroll)
+    private void ScrollToFirstMatch(Control? firstMatch, ScrollContainer? scroll)
     {
         if (firstMatch == null || scroll == null) return;
         CallDeferred(nameof(DeferredScrollTo), firstMatch, scroll);
     }
 
-    private void DeferredScrollTo(UpgradeItemRow row, ScrollContainer scroll)
+    private void DeferredScrollTo(Control row, ScrollContainer scroll)
     {
         if (GodotObject.IsInstanceValid(row) && GodotObject.IsInstanceValid(scroll))
             scroll.EnsureControlVisible(row);
@@ -655,35 +884,35 @@ public sealed partial class UpgradeUIHandler : Control
     {
         // === 基础属性 (8)：开局生效的数值属性 ===
         _allItems.Add(StatItem("基础属性", "初始力量+1", UpgradeLoc.ItemBaseStrength, 10,
-            () => AbilityOperationHelper.GetBoost("strength"), Purchase("strength", 10)));
+            () => AbilityOperationHelper.GetBoost("strength"), Purchase("strength", 10), refundTarget: "strength"));
         _allItems.Add(StatItem("基础属性", "初始敏捷+1", UpgradeLoc.ItemBaseDexterity, 10,
-            () => AbilityOperationHelper.GetBoost("dexterity"), Purchase("dexterity", 10)));
+            () => AbilityOperationHelper.GetBoost("dexterity"), Purchase("dexterity", 10), refundTarget: "dexterity"));
         _allItems.Add(StatItem("基础属性", "初始集中+1", UpgradeLoc.ItemBaseFocus, 15,
-            () => AbilityOperationHelper.GetBoost("focus"), Purchase("focus", 15)));
+            () => AbilityOperationHelper.GetBoost("focus"), Purchase("focus", 15), refundTarget: "focus"));
         _allItems.Add(StatItem("基础属性", "初始覆甲+1", UpgradeLoc.ItemBasePlating, 8,
-            () => AbilityOperationHelper.GetBoost("plating"), Purchase("plating", 8)));
+            () => AbilityOperationHelper.GetBoost("plating"), Purchase("plating", 8), refundTarget: "plating"));
         _allItems.Add(StatItem("基础属性", "初始荆棘+1", UpgradeLoc.ItemBaseThorns, 10,
-            () => AbilityOperationHelper.GetBoost("thorns"), Purchase("thorns", 10)));
+            () => AbilityOperationHelper.GetBoost("thorns"), Purchase("thorns", 10), refundTarget: "thorns"));
         _allItems.Add(StatItem("基础属性", "初始人工制品+1", UpgradeLoc.ItemBaseArtifact, 20,
-            () => AbilityOperationHelper.GetBoost("artifact"), Purchase("artifact", 20)));
+            () => AbilityOperationHelper.GetBoost("artifact"), Purchase("artifact", 20), refundTarget: "artifact"));
         _allItems.Add(StatItem("基础属性", "生命上限+1", UpgradeLoc.ItemHp, 5,
-            () => AbilityOperationHelper.GetBoost("hp"), PurchaseImmediate("hp", 5)));
+            () => AbilityOperationHelper.GetBoost("hp"), PurchaseImmediate("hp", 5), refundTarget: "hp"));
         _allItems.Add(StatItem("基础属性", "充能球栏位+1", UpgradeLoc.ItemOrbSlot, 10,
-            () => AbilityOperationHelper.GetBoost("orbSlot"), PurchaseImmediate("orbSlot", 10)));
+            () => AbilityOperationHelper.GetBoost("orbSlot"), PurchaseImmediate("orbSlot", 10), refundTarget: "orbSlot"));
 
         // === 能力 (6)：行为类被动 ===
         _allItems.Add(StatItem("能力", "每回合能量+1", UpgradeLoc.ItemEnergyPerTurn, 30,
-            () => AbilityOperationHelper.GetBoost("energy"), PurchaseImmediate("energy", 30)));
+            () => AbilityOperationHelper.GetBoost("energy"), PurchaseImmediate("energy", 30), refundTarget: "energy"));
         _allItems.Add(StatItem("能力", "每回合辉星+1", UpgradeLoc.ItemStarsPerTurn, 15,
-            () => AbilityOperationHelper.GetBoost("stars"), Purchase("stars", 15)));
+            () => AbilityOperationHelper.GetBoost("stars"), Purchase("stars", 15), refundTarget: "stars"));
         _allItems.Add(StatItem("能力", "每回合铸造+5", UpgradeLoc.ItemForgePerTurn, 15,
-            () => AbilityOperationHelper.GetBoost("forge"), Purchase("forge", 15)));
+            () => AbilityOperationHelper.GetBoost("forge"), Purchase("forge", 15), refundTarget: "forge"));
         _allItems.Add(StatItem("能力", "格挡跨回合不消失", UpgradeLoc.ItemBlockKeep, 25,
-            () => AbilityOperationHelper.GetBoost("blockKeep"), Purchase("blockKeep", 25), maxLevel: 1));
+            () => AbilityOperationHelper.GetBoost("blockKeep"), Purchase("blockKeep", 25), refundTarget: "blockKeep", maxLevel: 1));
         _allItems.Add(StatItem("能力", "能量跨回合不消失", UpgradeLoc.ItemEnergyKeep, 25,
-            () => AbilityOperationHelper.GetBoost("energyKeep"), Purchase("energyKeep", 25), maxLevel: 1));
+            () => AbilityOperationHelper.GetBoost("energyKeep"), Purchase("energyKeep", 25), refundTarget: "energyKeep", maxLevel: 1));
         _allItems.Add(StatItem("能力", "每当你击败一名敌人时，获取20金币", UpgradeLoc.ItemGoldOnKill, 7,
-            () => AbilityOperationHelper.GetBoost("gold_on_kill"), Purchase("gold_on_kill", 7), maxLevel: 1));
+            () => AbilityOperationHelper.GetBoost("gold_on_kill"), Purchase("gold_on_kill", 7), refundTarget: "gold_on_kill", maxLevel: 1));
 
         // === 卡牌操作：牌组子面板 ===
         _allItems.Add(ActionItem("卡牌操作", "升级卡牌", UpgradeLoc.ItemCardUpgrade, CardOperationHelper.UpgradeCost,
@@ -786,9 +1015,10 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(TestItem("点数+10", UpgradeLoc.ItemTestP10, 10));
     }
 
-    /// <summary>数值型条目构建（含本地化显示名、等级取数、搜索语料）。</summary>
+    /// <summary>数值型条目构建（含本地化显示名、等级取数、搜索语料、回退目标）。</summary>
     private UpgradeItemDef StatItem(string category, string fallbackName, string locKey, int cost,
-        Func<int> levelProvider, Func<Task<bool>> onClick, int maxLevel = 0) => new()
+        Func<int> levelProvider, Func<Task<bool>> onClick, int maxLevel = 0,
+        string? refundTarget = null) => new()
     {
         Category = category,
         DisplayName = UpgradeLoc.ResolveDisplayName(locKey, fallbackName),
@@ -799,6 +1029,8 @@ public sealed partial class UpgradeUIHandler : Control
         LevelProvider = levelProvider,
         ValueText = () => levelProvider().ToString(),
         OnClick = onClick,
+        RefundKind = refundTarget == null ? null : InfiniteUpgradeSystem.RefundKind.Boost,
+        RefundTarget = refundTarget,
         SearchText = BuildSearchText(category, locKey, fallbackName),
     };
 
@@ -837,6 +1069,8 @@ public sealed partial class UpgradeUIHandler : Control
             if (ok) RefreshPointsLabel();
             return ok;
         },
+        RefundKind = InfiniteUpgradeSystem.RefundKind.Skill,
+        RefundTarget = skillId,
         SearchText = BuildSearchText("技能", locKey, fallbackName),
     };
 
@@ -977,15 +1211,15 @@ public sealed partial class UpgradeUIHandler : Control
         RefreshAllRows();
     }
 
-    private void OnPurchaseSucceeded() => SpawnPurchaseVfx();
+    private void OnPurchaseSucceeded() => SpawnPointVfx("+1", UpgradeTheme.HoverGlow);
 
-    /// <summary>购买成功反馈：+1 飘字（点数旁上浮淡出）+ 点数计数器跳动。</summary>
-    private void SpawnPurchaseVfx()
+    /// <summary>点数变化飘字（购买 +1 / 回退 +N）+ 点数计数器跳动。</summary>
+    private void SpawnPointVfx(string text, Color color)
     {
         if (_topBar == null) return;
         var pointsLabel = _topBar.PointsLabel;
 
-        var floatLabel = UpgradeTheme.Label("+1", 16, UpgradeTheme.HoverGlow, bold: true);
+        var floatLabel = UpgradeTheme.Label(text, 16, color, bold: true);
         floatLabel.ZIndex = 100;
         floatLabel.Position = pointsLabel.GlobalPosition + new Vector2(-4, -20);
         AddChild(floatLabel);
@@ -999,7 +1233,7 @@ public sealed partial class UpgradeUIHandler : Control
         pulse.TweenProperty(pointsLabel, "scale", Vector2.One, 0.08f);
     }
 
-    /// <summary>按当前点数刷新所有条目行状态 + 分区摘要 + 牌组入口 + 职业标签计数。</summary>
+    /// <summary>按当前点数刷新所有条目行状态 + 分区摘要 + 牌组入口 + 职业标签计数 + 回退流水。</summary>
     private void RefreshAllRows()
     {
         var points = UpgradePointManager.CurrentPoints;
@@ -1008,6 +1242,7 @@ public sealed partial class UpgradeUIHandler : Control
         RefreshDeckRow();
         UpdateSectionSummaries();
         UpdateClassTabCounts();
+        RefreshRefundSection();
     }
 
     /// <summary>刷新牌组入口行的卡牌数。</summary>

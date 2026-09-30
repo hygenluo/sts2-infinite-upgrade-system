@@ -48,6 +48,17 @@ public sealed class UpgradeItemDef
     /// <summary>仅 Action：选牌提示本地化 key（PROMPT_*）。</summary>
     public string? PromptKey { get; init; }
 
+    /// <summary>
+    /// 回退目标类型（v2.3）：Boost（基础属性/能力）或 Skill；null = 该项不支持回退。
+    /// </summary>
+    public RefundKind? RefundKind { get; init; }
+
+    /// <summary>回退目标：Boost 的 key / Skill 的 id（对应 store 字典的键）。</summary>
+    public string? RefundTarget { get; init; }
+
+    /// <summary>是否支持回退（等级 &gt; 0 时才显示回退按钮）。</summary>
+    public bool CanRefund => RefundKind != null && RefundTarget != null;
+
     /// <summary>点击处理；返回 false = 取消/失败（内部负责退款与界面恢复）。</summary>
     public required Func<Task<bool>> OnClick { get; init; }
 

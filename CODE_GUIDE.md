@@ -12,9 +12,11 @@ Scripts/
 ├── PointsPersistence.cs          # 点数 JSON 镜像（points_<seed>.json）
 ├── UpgradeDataStore.cs           # ★ 每玩家数据权威层（RitsuLib PlayerRunSavedData，按 NetId 分槽）
 ├── UpgradeUIHandler.cs           # ★ UI 主控制器：视图状态机/分区/搜索/拖拽/动效/条目注册表
-├── CardOperationHelper.cs        # ★ 卡牌操作引擎（选牌 + CardMod/AddCard action 执行）
-├── CardUpgradeTracker.cs         # ★ 卡牌修改追踪（按 NetId 分桶 + 读档重放）
-├── AbilityOperationHelper.cs     # 能力操作引擎（Power 应用/初始 boost/即时生效）
+├── CardOperationHelper.cs        # ★ 卡牌操作引擎（选牌 + CardMod/AddCard action 执行 + 逆操作回退）
+├── CardUpgradeTracker.cs         # ★ 卡牌修改追踪（按 NetId 分桶 + 读档重放 + 回退记录读写）
+├── CardModCosts.cs               # 卡牌操作成本表（购买与回退的唯一来源）
+├── UpgradeRefundService.cs       # ★ 回退服务（返还 floor(0.8×已付) / 流水项 / 同步执行）
+├── AbilityOperationHelper.cs     # 能力操作引擎（Power 应用/初始 boost/即时生效与回退）
 ├── RunStateHook.cs               # 游戏生命周期订阅 + 检查点持久化 + 房间/战斗点数发放
 ├── CompositeEnchantment.cs       # 合成附魔（多附魔共存）+ 2 个克隆/文本补丁
 ├── SavePaths.cs                  # 存档路径（user://mod_data/...）+ 旧档迁移
@@ -31,9 +33,10 @@ Scripts/
 │   └── DivergenceDiagnostics.cs  # checksum 分歧时的状态转储
 └── UiComponents/
     ├── UpgradeTheme.cs           # ★ UI v3 主题：游戏色板 + MegaLabel/样式框工厂 + 游戏字体解析
-    ├── UiIcons.cs                # 矢量图标（三角/拖拽点/菱形/叉号/箭头）
-    ├── UpgradeItemData.cs        # UpgradeItemDef 数据模型（Kind/MaxLevel/LevelProvider/PromptKey）
-    ├── UpgradeItemRow.cs         # 条目行（名称/值/成本徽标/加号/MAX/悬停/抖动）
+    ├── UiIcons.cs                # 矢量图标（三角/拖拽点/菱形/叉号/箭头/减号）
+    ├── UpgradeItemData.cs        # UpgradeItemDef 数据模型（Kind/MaxLevel/LevelProvider/RefundTarget）
+    ├── UpgradeItemRow.cs         # 条目行（名称/值/成本徽标/加号/回退按钮/MAX/悬停/抖动）
+    ├── RefundItemRow.cs          # 回退流水行（已付/返还/不可回退徽标/二次确认）
     ├── CollapsibleSection.cs     # 折叠分区（可见性切换 + 淡入 + 三角方向）
     ├── ClassTabBar.cs            # 技能 6 职业标签页（含 已拥有/总数）
     ├── UpgradeTopBar.cs          # 顶栏（拖拽柄/标题/点数徽标/只读徽标/关闭）
@@ -50,7 +53,9 @@ Scripts/
 | `CardOperationHelper.cs` | `SelectCardFromDeck()`, `TryApplyCardMod()`, `TryApplyAddCard()`, `EnsureMutableInDeck()`, `ApplyEnchantmentToCard()` | 选牌（含取消链路）与 action 执行体 |
 | `CardUpgradeTracker.cs` | `RecordModification()`, `ReapplyAllPlayers()`, `ReapplyAll()`, `OnCardRemoved()`, `GetCardIdentity()` | 卡牌修改的持久化与重放（按 NetId 分桶） |
 | `UpgradeDataStore.cs` | `Register()`, `For()`, `Mutate()`, `SyncOnRunStarted()` | 每玩家数据的唯一权威入口 |
-| `UpgradePurchaseAction.cs` | `UpgradePurchaseFlow.Enqueue*()`, `UpgradeDataAction.ExecuteAction()` | 所有跨端操作的统一入口 |
+| `UpgradePurchaseAction.cs` | `UpgradePurchaseFlow.Enqueue*()`, `UpgradeDataAction.ExecuteAction()` | 所有跨端操作的统一入口（购买/加点/卡牌修改/加牌/**回退**） |
+| `UpgradeRefundService.cs` | `RefundOf()`, `Enqueue()`, `Execute()`, `RemoveOneLevel()` | 回退规则与执行（80% 下取整；boost/skill/card 三类） |
+| `CardModCosts.cs` | `For(type, arg)`, `KeywordAdd/KeywordRemove()` | 卡牌操作成本表（购买 + 旧记录回退反查的唯一来源） |
 | `RunStateHook.cs` | `Subscribe()`, `OnCombatSetUp`, `OnCombatWon`, `OnRunStarted`, `Roll()`, `RoomEntryPointsPatch` | 生命周期 + 点数发放 + 检查点 |
 | `UpgradeTheme.cs` | `Label()`, `AutoLabel()`, `RichLabel()`, `TextButton()`, `StyleButton()`, `*Stylebox()` | 所有 UI 文本/样式的唯一工厂 |
 
@@ -83,9 +88,20 @@ UI 点击 [+]
  │     → CardOperationHelper.TryApplyCardMod（两端按身份找卡 → 扣点 → 改卡 → 记录）
  ├─ 加牌：本地选 ModelId → EnqueueAddCard(modelId)
  │     → CardOperationHelper.TryApplyAddCard（两端 RunState.CreateCard + CardPileCmd.Add）
+ ├─ 回退：UI 点 [−] / 回退分区的 [−] → UpgradeRefundService.Enqueue(entry)
+ │     → EnqueueRefund(target, paidCost, modType, isSkill, isCardMod)
+ │        → UpgradeRefundService.Execute（两端）
+ │           ├─ Boost/Skill：store 计数 -1（归零移除）+ 返点 + 即时效果逆操作
+ │           └─ CardMod：TryRefundCardMod → 逆操作改卡 → 删记录 → 返点
  └─ 测试加点：EnqueueAddPoints(amount)
 UI 等待 action.CompletionTask → 成功则刷新点数标签 + 飘字
 ```
+
+### 点数与回退规则（改数值时只看这两处）
+- **初始点数**：`PointsPersistence.StartingPoints`（其余位置全部引用该常量）。
+- **获取区间**：`RunStateHook.OnCombatWon` 的 `Roll(player, min, max)` + `RoomEntryPointsPatch` 的三元组。
+- **返还比例**：`UpgradeRefundService.RefundRatio = 0.8f`，`RefundOf(cost) = floor(cost × 0.8)`。
+- **成本表**：卡牌操作 → `CardModCosts`；属性/能力/技能 → `UpgradeItemDef.Cost`（`PopulateItems`）。
 
 ### 卡牌修改持久化与重放
 - 游戏存档只保存 `Id / CurrentUpgradeLevel / Enchantment / Props / FloorAddedToDeck`
@@ -152,15 +168,19 @@ UI 等待 action.CompletionTask → 成功则刷新点数标签 + 飘字
 ### 新增一个加点项（属性/能力）
 1. `UpgradeUIHandler.PopulateItems()` 加一行 `StatItem(...)`（或 `SkillItem(...)`）；
 2. 效果侧：能力 → `AbilityOperationHelper.ApplyPower` 加 key 映射；即时生效 → `ApplyImmediate`；
-3. 本地化：`UpgradeLoc` 加 key 常量 + `localization/{zhs,eng}/cards.json` 各加一条；
-4. **UI 组件代码零改动**（分区/标签页/MAX/禁用状态由数据驱动）。
+   **若新增即时生效类** → 同时在 `ApplyImmediateRefund` 加逆操作（否则回退后效果残留）；
+3. **若要支持回退**：`StatItem(..., refundTarget: "<store key>")` 或 `SkillItem(...)` 自动带上；
+4. 本地化：`UpgradeLoc` 加 key 常量 + `localization/{zhs,eng}/cards.json` 各加一条；
+5. **UI 组件代码零改动**（分区/标签页/MAX/禁用/回退按钮状态由数据驱动）。
 
 ### 新增一项卡牌操作
 1. `CardOperationHelper` 加方法：选牌 → `CanApplyCardMod` 校验 → `EnqueueCardMod(...)`；
    `CardUpgradeTracker.ModType` 加枚举 + `ApplyModification` 加应用分支
    （**注意：读档重放也要能复原这个修改**，否则读档后丢失）；
-2. `PopulateItems()` 加 `ActionItem(..., promptKey, ...)`；
-3. 本地化：ITEM_ 名称 key + PROMPT_ 提示 key（中英各一份）。
+2. **若要支持回退**：在 `RevertCardMod` 加对应的精确逆操作 + `IsRevertible` 放行 +
+   `CardModCosts.For` 补上成本（旧记录回退反查用）；
+3. `PopulateItems()` 加 `ActionItem(..., promptKey, ...)`；
+4. 本地化：ITEM_ 名称 key + PROMPT_ 提示 key（中英各一份）。
 
 ### 新增一个技能
 见 [UI设计.md](UI设计.md) §六；要点：`SkillItem(...)` 一行 + `SkillEffectsPower` 里接线效果，

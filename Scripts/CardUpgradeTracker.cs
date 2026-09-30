@@ -55,6 +55,12 @@ public static class CardUpgradeTracker
     {
         public string Type { get; set; }
         public string? Keyword { get; set; }
+
+        /// <summary>
+        /// 本次修改**实际支付的点数**（回退返还 = floor(0.8 × Cost)）。
+        /// v2.3 新增字段：旧存档里为 0 → 回退时用 <see cref="CardModCosts.For"/> 反查。
+        /// </summary>
+        public int Cost { get; set; }
     }
 
     private struct CardModRecord
@@ -91,7 +97,8 @@ public static class CardUpgradeTracker
     }
 
     /// <summary>记录修改（按被修改卡的 owner 玩家分桶；两端 action 内一致调用）。</summary>
-    public static void RecordModification(Player player, CardModel card, string seed, ModType type, string? keyword = null)
+    public static void RecordModification(Player player, CardModel card, string seed, ModType type,
+        string? keyword = null, int cost = 0)
     {
         if (player == null || card == null) return;
 
@@ -107,11 +114,66 @@ public static class CardUpgradeTracker
             };
         }
 
-        var entry = new CardModEntry { Type = type.ToString() };
+        var entry = new CardModEntry { Type = type.ToString(), Cost = cost };
         if (keyword != null) entry.Keyword = keyword;
         record.Entries.Add(entry);
         bucket[identity] = record;
         SaveToDisk(seed);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 回退（v2.3）：只允许回退**该卡最近一次**修改（后进先出）
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// 该玩家某张卡**最近一次**修改（回退对象）。返回 null = 没有记录。
+    /// 只回退最近一次是为了保证「回退后的状态」与「读档重放剩余记录后的状态」永远一致：
+    /// 例如记录 [添加永恒, 移除永恒]，先回退「添加」在数学上会得到与重放不一致的结果，
+    /// 而后进先出则天然自洽。
+    /// </summary>
+    public static CardModEntry? NewestEntry(Player player, string identity)
+    {
+        if (player == null) return null;
+        var bucket = Bucket(player);
+        if (!bucket.TryGetValue(identity, out var record) || record.Entries.Count == 0) return null;
+        return record.Entries[^1];
+    }
+
+    /// <summary>某张卡的修改次数（UI 提示「还有 N 次更早的修改」）。</summary>
+    public static int EntryCount(Player player, string identity)
+    {
+        if (player == null) return 0;
+        var bucket = Bucket(player);
+        return bucket.TryGetValue(identity, out var record) ? record.Entries.Count : 0;
+    }
+
+    /// <summary>该玩家全部卡牌修改记录（UI 构建回退流水；identity → 记录）。</summary>
+    public static IReadOnlyDictionary<string, List<CardModEntry>> Snapshot(Player player)
+    {
+        var result = new Dictionary<string, List<CardModEntry>>();
+        if (player == null) return result;
+        foreach (var kv in Bucket(player))
+            result[kv.Key] = kv.Value.Entries;
+        return result;
+    }
+
+    /// <summary>
+    /// 删除某张卡最近一次修改记录（回退动作的一部分；改卡效果由调用方负责撤销）。
+    /// 返回被删除的记录；null = 无记录或类型不匹配（两端结论一致）。
+    /// </summary>
+    public static CardModEntry? RemoveNewestEntry(Player player, string identity, ModType expected, string seed)
+    {
+        if (player == null) return null;
+        var bucket = Bucket(player);
+        if (!bucket.TryGetValue(identity, out var record) || record.Entries.Count == 0) return null;
+
+        var entry = record.Entries[^1];
+        if (!Enum.TryParse<ModType>(entry.Type, out var actual) || actual != expected) return null;
+
+        record.Entries.RemoveAt(record.Entries.Count - 1);
+        if (record.Entries.Count == 0) bucket.Remove(identity);
+        SaveToDisk(seed);
+        return entry;
     }
 
     /// <summary>

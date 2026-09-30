@@ -7,12 +7,15 @@ namespace InfiniteUpgradeSystem;
 
 /// <summary>
 /// 点数持久化 — 每个 Run 独立一个文件，通过 RunState.Rng.StringSeed 区分。
-/// 新局 = 新 seed = 新文件（不存在） → 7 点起步
+/// 新局 = 新 seed = 新文件（不存在） → 3 点起步
 /// 读档 = 同 seed = 同文件（存在）  → 恢复保存的点数
 /// 无需检测新局/读档，完全消除误判。
 /// </summary>
 public static class PointsPersistence
 {
+    /// <summary>新局初始点数（策划规则）：3 点。</summary>
+    public const int StartingPoints = 3;
+
     private static readonly JsonSerializerOptions s_jsonOptions = new() { WriteIndented = false };
 
     private static string GetFilePath(string seed) => SavePaths.GetFilePath("points", seed);
@@ -40,8 +43,8 @@ public static class PointsPersistence
             var path = GetFilePath(seed);
             if (!File.Exists(path))
             {
-                Log.Info($"InfiniteUpgrade: no file for seed={seed}, defaulting to 7.");
-                return 7;
+                Log.Info($"InfiniteUpgrade: no file for seed={seed}, defaulting to {StartingPoints}.");
+                return StartingPoints;
             }
 
             var data = JsonSerializer.Deserialize<PointsData>(File.ReadAllText(path), s_jsonOptions);
@@ -56,11 +59,11 @@ public static class PointsPersistence
             Log.Error($"InfiniteUpgrade: FAILED to load points: {ex.GetType().Name} — {ex.Message}");
         }
 
-        return 7;
+        return StartingPoints;
     }
 
     private class PointsData
     {
-        public int Points { get; set; } = 7;
+        public int Points { get; set; } = StartingPoints;
     }
 }

@@ -176,8 +176,36 @@ public static class AbilityOperationHelper
     }
 
     /// <summary>
-    /// 失去力量（负值，StrengthPower.AllowNegative=true）。用于「辉星→敌人失力」「灾厄→敌人失力」。
+    /// 回退即时生效能力（hp/energy/orbSlot）—— `ApplyImmediate` 的逆操作，
+    /// 由 Refund action 两端执行（回退只可能在非战斗中进行：战斗内面板是只读的）。
     /// </summary>
+    public static async Task ApplyImmediateRefund(Player player, string key)
+    {
+        if (player?.Creature == null) return;
+        try
+        {
+            switch (key)
+            {
+                case "hp":
+                    // 保留至少 1 点最大生命（LoseMaxHp 会把当前 HP 压到新上限，MaxHp<=1 时不减）
+                    if (player.Creature.MaxHp > 1)
+                        await CreatureCmd.LoseMaxHp(new BlockingPlayerChoiceContext(), player.Creature, 1m, false);
+                    break;
+                case "energy":
+                    if (player.MaxEnergy > 0) player.MaxEnergy -= 1;
+                    break;
+                case "orbSlot":
+                    if (player.BaseOrbSlotCount > 0) player.BaseOrbSlotCount -= 1;
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[IU] ApplyImmediateRefund {key}: {ex}");
+        }
+    }
+
+    /// <summary>失去力量（负值，StrengthPower.AllowNegative=true）。用于「辉星→敌人失力」「灾厄→敌人失力」。</summary>
     public static async Task ApplyStrengthLoss(Creature creature, int amount, Creature? applier = null)
     {
         if (creature == null || amount <= 0) return;
