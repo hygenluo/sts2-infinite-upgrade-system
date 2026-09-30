@@ -158,11 +158,15 @@ public static class RunStateHook
         SkillRegistry.Load(seed);
         AbilityOperationHelper.ResetForNewRun();
         UpgradeDataStore.SyncOnRunStarted(runState); // store 权威优先；空则旧 JSON 迁移
-        var player = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault();
-        if (player != null)
+
+        // 卡牌修改重放：给**所有玩家**重放（v3 多人修复）。旧版只重放本地玩家 →
+        // 两端各恢复自己那份 → 读档后两端牌组不一致（checksum 分歧）。
+        // 重放结果只取决于「该玩家牌组顺序 + 该玩家自己的记录」，两端确定性一致。
+        CardUpgradeTracker.ReapplyAllPlayers(runState);
+        foreach (var p in runState.Players)
         {
-            CardUpgradeTracker.ReapplyAll(player);
-            CardOperationHelper.RefreshAllVisuals(player);
+            if (p?.Deck?.Cards == null) continue;
+            CardOperationHelper.RefreshAllVisuals(p);
         }
     }
 

@@ -4,6 +4,7 @@ using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.GameActions;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
+using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 using MegaCrit.Sts2.Core.Runs;
 
@@ -17,6 +18,7 @@ public enum UpgradeDataOp
     SpendPoints,
     CardMod,
     ApplyEvery4, // v1.4.9：每4张+力量/敏捷，走 action 避免 fire-and-forget 与 checksum 时序竞争
+    AddCard,     // UI v3：向牌组添加一张牌（Key = ModelId 字符串，两端添加同一张牌）
 }
 
 /// <summary>
@@ -128,6 +130,15 @@ public sealed class UpgradeDataAction : GameAction
                 break;
             case UpgradeDataOp.CardMod:
                 Succeeded = await CardOperationHelper.TryApplyCardMod(_player, _cardIdentity, _cost, (CardUpgradeTracker.ModType)_modType, _key, _flag2);
+                if (!Succeeded)
+                    Log.Warn($"IU CardMod FAILED on this peer — op={_modType} id={_cardIdentity} cost={_cost} " +
+                             $"pts={UpgradeDataStore.GetPoints(_player)} arg={_key}. " +
+                             "两端此处结果必须一致，否则会 checksum 分歧（请核对两端日志）。");
+                break;
+            case UpgradeDataOp.AddCard:
+                // 加牌：选牌端把选中的 ModelId 传过来，两端添加**同一张**牌
+                // （本地随机/选池结果只作为参数传输，不参与确定性模拟）。
+                Succeeded = await CardOperationHelper.TryApplyAddCard(_player, _key);
                 break;
             case UpgradeDataOp.ApplyEvery4:
                 // 每4张+力量/敏捷：走 action 由 ActionExecutor 等待完成（checksum 在其后），避免
@@ -182,6 +193,13 @@ public static class UpgradePurchaseFlow
     /// <summary>每4张+力量/敏捷（由 host 检测到 %4 时入队，owner=打牌玩家，跨端同步执行）。</summary>
     public static Task<bool> EnqueueApplyEvery4(Player owner)
         => EnqueueFor(owner, UpgradeDataOp.ApplyEvery4, "", 0, 0, false, false, "", 0);
+
+    /// <summary>
+    /// 向牌组添加一张牌（跨端同步）：调用端先选好牌，把 ModelId 字符串（"cards.STRIKE"）传过来，
+    /// 两端各自用 `RunState.CreateCard` 创建并加入牌组 —— 结果一致。
+    /// </summary>
+    public static Task<bool> EnqueueAddCard(string modelIdString)
+        => EnqueueLocal(UpgradeDataOp.AddCard, modelIdString, 0, 0, false, false, "", 0);
 
     private static Task<bool> EnqueueLocal(UpgradeDataOp op, string key, int cost, int amount,
         bool flag1, bool flag2, string cardIdentity, int modType)

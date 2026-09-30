@@ -222,18 +222,57 @@ public static class CardOperationHelper
         var card = FindCardByIdentity(player, cardIdentity);
         if (card == null)
         {
-            GD.Print($"[IU] CardMod: card not found ({cardIdentity})");
+            // 两端牌组不一致 / 身份偏移时只有一端找得到卡 → 会 checksum 分歧，日志留证
+            Log.Warn($"[IU] CardMod: card not found (player={player.NetId}, id={cardIdentity}, " +
+                     $"deck={player.Deck?.Cards?.Count ?? -1})");
             return false;
         }
         if (!CanApplyCardMod(card, modType, arg, add))
         {
-            GD.Print($"[IU] CardMod: cannot apply {modType} to {card.Id.Entry}");
+            Log.Warn($"[IU] CardMod: cannot apply {modType} to {card.Id.Entry} (arg={arg}, add={add})");
             return false;
         }
-        if (!UpgradePointManager.TrySpendPoints(player, cost)) return false;
+        if (!UpgradePointManager.TrySpendPoints(player, cost))
+        {
+            // 点数两端一致时不会走到这里；走到了即说明 store 已分歧（购买校验结果不同步）
+            Log.Warn($"[IU] CardMod: insufficient points (player={player.NetId}, cost={cost}, " +
+                     $"pts={UpgradeDataStore.GetPoints(player)}) — peers may have diverged");
+            return false;
+        }
         card = EnsureMutableInDeck(player, card);
         await ApplyCardMod(player, card, modType, arg, add);
         return true;
+    }
+
+    /// <summary>
+    /// 向牌组添加一张牌（AddCard action 执行，两端一致）：
+    /// 调用端把选中的 **ModelId 字符串**（"cards.STRIKE"）作为参数传过来，
+    /// 两端各自用 `RunState.CreateCard` 从同一 canonical 模型创建新实例并加入牌组。
+    /// 这样"随机选牌池"只在调用端发生一次，结果作为参数传输 —— 不再各端各摇一次（旧实现用
+    /// `new System.Random()`，两端会加到不同的牌，直接导致牌组分歧）。
+    /// </summary>
+    public static async Task<bool> TryApplyAddCard(Player player, string modelIdString)
+    {
+        if (player == null || string.IsNullOrEmpty(modelIdString)) return false;
+        try
+        {
+            var id = ModelId.Deserialize(modelIdString);
+            var canonical = ModelDb.GetById<CardModel>(id);
+            if (canonical == null)
+            {
+                Log.Warn($"[IU] AddCard: unknown model id {modelIdString}");
+                return false;
+            }
+            var card = player.RunState.CreateCard(canonical, player);
+            await CardPileCmd.Add(card, PileType.Deck);
+            Log.Info($"[IU] AddCard: {id.Entry} → player {player.NetId} deck ({player.Deck.Cards.Count} cards)");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"[IU] AddCard failed ({modelIdString}): {ex.Message}");
+            return false;
+        }
     }
 
     /// <summary>按卡牌身份（TemplateId__实例序号）在玩家牌组找卡。</summary>
@@ -416,12 +455,16 @@ public static class CardOperationHelper
     public static async Task<bool> RemoveCardFromDeck(int cost, string promptKey = "")
         => await PickAndModifyCard(cost, "删牌", CardUpgradeTracker.ModType.DeckRemove, promptKey: promptKey);
 
-    /// <summary>从指定卡牌池随机添加一张牌到牌组（免费）。</summary>
+    /// <summary>
+    /// 从指定卡牌池随机添加一张牌到牌组。
+    ///
+    /// **多人安全**：本地随机选择（`System.Random`）只在调用端发生一次，选中的 ModelId
+    /// 经 `EnqueueAddCard` 同步 action 传给对端 → 两端添加同一张牌。
+    /// 旧实现直接在本地创建并加牌（各端各摇一次）→ 两端牌组不一致（checksum 分歧），已废弃。
+    /// </summary>
     public static async Task<bool> AddCardFromPool(string poolKey)
     {
-        GD.Print($"[IU] AddCardFromPool START: key={poolKey}");
         var player = GetLocalPlayer();
-        GD.Print($"[IU] AddCardFromPool player={player != null}");
         if (player == null) return false;
         try
         {
@@ -441,23 +484,19 @@ public static class CardOperationHelper
             Type? poolType = null;
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             { poolType = asm.GetType(poolTypeName); if (poolType != null) break; }
-            if (poolType == null) { GD.PrintErr($"Pool type not found: {poolTypeName}"); return false; }
+            if (poolType == null) { Log.Error($"[IU] AddCard: pool type not found: {poolTypeName}"); return false; }
 
-            var modelDb = typeof(MegaCrit.Sts2.Core.Models.ModelDb);
+            var modelDb = typeof(ModelDb);
             var poolGetter = modelDb.GetMethod("CardPool", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null)!;
-            var pool = poolGetter.MakeGenericMethod(poolType).Invoke(null, null) as MegaCrit.Sts2.Core.Models.CardPoolModel;
-            if (pool == null) { GD.PrintErr($"Pool null for {poolKey}"); return false; }
+            var pool = poolGetter.MakeGenericMethod(poolType).Invoke(null, null) as CardPoolModel;
+            if (pool == null) { Log.Error($"[IU] AddCard: pool null for {poolKey}"); return false; }
 
             var candidates = pool.GetUnlockedCards(player.UnlockState, player.RunState.CardMultiplayerConstraint).ToList();
-            if (candidates.Count == 0) { GD.Print($"没有{poolKey}卡牌。"); return false; }
+            if (candidates.Count == 0) { Log.Info($"[IU] AddCard: no candidate in pool {poolKey}"); return false; }
 
-            var pick = candidates[new System.Random().Next(candidates.Count)];
-            var card = pick.ToMutable();
-            card.Owner = player;  // 必须设置 Owner，否则 CardPileCmd.Add 抛异常
-            card.FloorAddedToDeck = player.RunState.TotalFloor;
-            await MegaCrit.Sts2.Core.Commands.CardPileCmd.Add(card, MegaCrit.Sts2.Core.Entities.Cards.PileType.Deck);
-            GD.Print($"已添加{poolKey}牌: {card.Id.Entry}");
-            return true;
+            // 本地选牌（结果作为 action 参数传输，因此本地随机不影响两端一致性）
+            var pick = candidates[new Random().Next(candidates.Count)];
+            return await UpgradePurchaseFlow.EnqueueAddCard(pick.Id.ToString());
         }
         catch (Exception ex) { Log.Error($"AddCard: {ex.Message}"); return false; }
     }

@@ -1,5 +1,84 @@
 # DEBUG 记录 (InfiniteUpgradeSystem)
 
+## UI v3：字体切换为游戏自带 MegaLabel + 配色/排版重做（2026-10-01）
+
+- **需求**：界面字体由 Godot `Label` 换成游戏自带 `MegaCrit.Sts2.addons.mega_text.MegaLabel`，
+  并重新设计配色与排版。
+- **调研结论（反编译 `_decompiled_sts2` + 直接扫描 `SlayTheSpire2.pck`）**：
+  1. `MegaLabel._Ready()` 会执行 `MegaLabelHelper.AssertThemeFontOverride(this, "font")`
+     —— **没有 `font` 主题覆盖就直接抛异常**。因此所有文本节点必须在**加入场景树之前**用工厂设好覆盖。
+  2. `MegaLabel.RefreshFont()` → `ApplyLocaleFontSubstitution(FontType.Regular, "font")`：
+     语言需要替换时（zhs/jpn/kor/rus/pol/tha）用 `FontManager.GetSubstituteFont()` 换字体。
+     zhs Regular = `noto_sans_mono_cjksc_regular_shared.tres`（游戏中文正文），
+     Bold = `source_han_serif_sc_bold_shared.tres`（思源宋体粗）。
+  3. **游戏没有设置项目默认 Theme**：扫描 pck 中 `project.binary` 未找到 `gui/theme/custom`
+     → `GetThemeDefaultFont()` / `GetThemeFont("font","Label")` 拿到的是 **Godot 内置字体**，
+     不是游戏字体。要"游戏原生字体"必须自己按路径加载：
+     主 UI 字体 = `res://themes/kreon_regular_shared.tres`（pck 内引用数 62，最多），
+     Bold = `res://themes/kreon_bold_shared.tres`，Italic = `bitter_medium_italic_glyph_space_one.tres`。
+  4. **`ThemeConstants` 成员名在不同游戏版本不一致**：反编译（beta）里是 camelCase
+     （`ThemeConstants.Label.font`），但实际编译引用的 stable `sts2.dll` 里找不到该成员
+     （CS0117，XML 里只文档化了 `RichTextLabel.AllFontSizes`）→ 代码改为直接写 Godot 标准主题项字符串
+     （`"font"` / `"font_size"` / `"font_color"` / `"normal_font"` / `"default_color"`），版本无关。
+  5. **字体语言替换依赖 `LocManager`，而它的初始化时机在模组加载之后**：
+     `OneTimeInitialization.ExecuteEssential()` 的顺序是
+     `ModManager.Initialize(...)`（→ 调用模组 `Entry.Init()`）→ **然后才** `LocManager.Initialize()`。
+     模组初始化瞬间 `LocManager.Instance == null`。
+- **实现**：
+  - `UpgradeTheme` 重写：色板（`StsColors` 金 `#EFC851` / 米白 `#FFF6E2` / 冷灰蓝面板 `#20242B` /
+    控件底 `#363D4A`，来自 pck 中 StyleBoxFlat 实测值）+ `MegaLabel`/`MegaRichTextLabel`/按钮工厂
+    + 样式框工厂。字体解析：语言替换字体 → 游戏 Kreon → `ThemeDB.FallbackFont`。
+  - 新增 `UiIcons`：折叠三角 / 拖拽点 / 菱形 / 叉号 / 右箭头改为 `_Draw` 矢量绘制。
+  - 全部组件（条目行 / 折叠分区 / 顶栏 / 职业标签页 / 附魔弹窗 / 主面板）改用工厂创建文本。
+  - 27 条新 UI 本地化 key（中英双语），分区名/职业名/按钮文字不再硬编码中文。
+  - `csproj` 不再复制部署自备字体（模组 49MB → 380KB）。
+- **踩坑与对策**：
+  1. **几何符号字形缺失**：英文语言用 Kreon（纯拉丁字体），`▸ ▾ ◆ ✕ ⋮⋮ →` 全部缺字形 →
+     渲染成缺字方框；中文语言替换成 Noto Sans Mono CJK 又有这些字形 →
+     "中英表现不一致"。**对策：装饰符号一律 `_Draw` 矢量绘制**（`UiIcons`）。
+  2. **字体缓存不能缓存"本地化未就绪"的结果**：`UpgradeTheme.Pick` 在 `LocManager` 未就绪时
+     返回 Kreon 但**不写缓存**，下次调用重试；否则中文界面会把无 CJK 字形的 Kreon 当最终字体。
+  3. **UI 建树时机**：`UpgradeUIHandler._Ready` 检测 `UpgradeTheme.LocaleReady`，
+     未就绪时 `CallDeferred` 下一帧重试（上限 600 帧 ≈10s），避免中文界面出现缺字方框。
+  4. **`MegaRichTextLabel` 与 `FitContent` 互斥**：`AutoSizeEnabled=true` 且 `FitContent=true` 时
+     引擎会告警并强制关闭 AutoSize —— 构造时直接 `AutoSizeEnabled=false` + 显式字号覆盖。
+  5. **`RichTextLabel` 需要 5 个字号主题项**（normal/bold/italics/bold_italics/mono），
+     只设 `normal_font_size` 时 `[b]` 等内容会落到默认字号。
+- **验证**：`dotnet build -c Debug` 0 warning 0 error；游戏内需人工确认
+  （字体/配色/排版/只读/搜索/加号/MAX 徽标/附魔弹窗）。
+
+---
+
+## 多人联机：卡牌修改按玩家分桶 + 全玩家重放（v3 修复，2026-10-01）
+
+- **背景**：`card_upgrades_<seed>.json` 记录本模组对卡牌做过的修改（游戏存档本身**不保存**
+  "+1 攻击/词缀/合成附魔子项"这些派生修改，靠本模组重放恢复）。旧实现有两个多人缺陷。
+- **缺陷 1：记录不区分玩家**。旧 `s_records` 是 `Dictionary<卡牌身份, 记录>` 的**单个扁平字典**，
+  身份 = `{TemplateId}__{同类序号}`（如 `STRIKE__0`）。
+  → 玩家 A 与玩家 B 的"第一张打击"身份完全相同，记录互相合并/串味
+  （A 的加伤会出现在 B 的同名卡上）。
+- **缺陷 2（严重）：只给本地玩家重放**。旧 `RunStateHook.OnRunStarted`：
+  `var player = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault(); ReapplyAll(player);`
+  → 读档时 **host 端只恢复 host 的卡牌修改、client 端只恢复 client 的** →
+  两端牌组状态不一致 → checksum 分歧；且对端的卡牌修改在该端**永久丢失**
+  （影响伤害/格挡计算，不只是显示问题）。
+- **修复**：
+  1. `CardUpgradeTracker` 记录改为 **NetId → 卡牌身份 → 记录** 两级字典；存档格式升到 v3
+     （每条记录带 `P` = NetId），保留 v2/v1 读取兼容（旧扁平档在 RunStarted 时迁移给本地玩家）。
+  2. 新增 `CardUpgradeTracker.ReapplyAllPlayers(RunState)`：**两端都为所有玩家**重放。
+     重放只依赖「该玩家牌组顺序 + 该玩家自己的记录」，两端确定性一致。
+  3. `GetUpgradeCount(card)` 改用 `card.Owner`（不再用本地玩家）。
+  4. 所有 `RecordModification / OnCardRemoved / RemoveEnchantmentEntries` 按被修改卡的 owner 分桶。
+- **顺带修复：加牌两端不一致**。旧 `CardOperationHelper.AddCardFromPool` 用
+  `new System.Random()` 在**本地**选牌并直接建牌入组 → 两端各摇一次 → 加到不同的牌。
+  现改为：调用端本地选牌（`System.Random` 结果仅作参数，不影响确定性模拟）→
+  `UpgradePurchaseFlow.EnqueueAddCard(modelId)` → 两端用 `RunState.CreateCard` 从同一 canonical
+  模型创建并 `CardPileCmd.Add(..., PileType.Deck)`（新 op `UpgradeDataOp.AddCard`）。
+- **诊断增强**：CardMod action 失败（找不到卡 / 不能应用 / 点数不足）都会
+  `Log.Warn("IU CardMod ...")` 打印 NetId、身份、点数 —— 两端日志可直接比对定位分歧。
+
+---
+
 ## 技能系统实施记录（Phase S1-S4，2026-08-04）
 
 - **S1** SkillRegistry（等级化 Dictionary<string,int>，MaxLevel=1）+ skills_<seed>.json 检查点持久化 + 技能分区标签页 UI
