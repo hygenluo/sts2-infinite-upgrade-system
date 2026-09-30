@@ -107,8 +107,10 @@
   <ItemGroup>
     <None Include="mod_manifest.json" />
     <None Include="InfiniteUpgradeSystem\**\*" Exclude="InfiniteUpgradeSystem\**\*.cs" />
-    <!-- 打包字体：随构建复制到输出目录，随部署进入 mod 目录（DLL 同路径加载） -->
-    <None Include="resources\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <!-- NOTE (UI v3)：不再打包 resources/fonts 下的 49MB 思源宋体。
+         面板字体已切换为游戏自带字体资源（res://themes/kreon_*），
+         中文等语言由游戏的 FontManager 自动替换（见 UpgradeTheme.cs）。
+         旧字体文件仍保留在仓库中未删除，需要时可自行删除 resources/fonts/ 释放空间。 -->
   </ItemGroup>
 
   <!-- Resolve BaseLib path (runs after restore, before Build) -->
@@ -138,12 +140,8 @@
     <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="$(ModsPath)InfiniteUpgradeSystem\" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
     <Copy SourceFiles="mod_manifest.json" DestinationFolder="$(ModsPath)InfiniteUpgradeSystem\" />
 
-    <!-- Copy bundled fonts (fonts are loaded relative to the DLL location) -->
-    <ItemGroup>
-      <FontFiles Include="$(TargetDir)resources\fonts\*.otf" />
-      <FontFiles Include="$(TargetDir)resources\fonts\LICENSE-OFL.txt" />
-    </ItemGroup>
-    <Copy SourceFiles="@(FontFiles)" DestinationFolder="$(ModsPath)InfiniteUpgradeSystem\resources\fonts\" />
+    <!-- NOTE (UI v3): 不再部署打包字体 —— 面板用游戏自带字体资源（res://themes/kreon_*），
+         中文等语言由游戏 FontManager 自动替换。见 UpgradeTheme.cs。 -->
 
     <!-- Copy localization JSONs (self-contained locale loading via UpgradeLoc) -->
     <ItemGroup>

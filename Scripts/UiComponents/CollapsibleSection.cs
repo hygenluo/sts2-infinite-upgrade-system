@@ -1,23 +1,29 @@
 using System;
 using Godot;
+using MegaCrit.Sts2.addons.mega_text;
 
 namespace InfiniteUpgradeSystem.UiComponents;
 
 /// <summary>
-/// 可折叠分区（UI设计.md 契约：分区默认收起）。
+/// 折叠分区（UI v3 排版）。
 ///
-/// 结构 = 分区头按钮 + 内容 VBox（直接子节点，无裁剪容器）。
-/// 展开/收起 = 内容可见性切换（容器自动重排），附透明度淡入动画。
+/// 结构 = 分区头（Flat 按钮 + 子 HBox：三角指示器 + 标题 + 右侧摘要）+ 内容 VBox。
+/// 展开/收起 = 内容可见性切换（容器自动重排，渲染绝对可靠，无需裁剪容器/min-size Tween）
+/// + 淡入动画 + 指示器方向切换。
 ///
-/// 历史教训（Phase 2 调试记录）：曾用「裁剪容器 + custom_minimum_size Tween +
-/// 锚定内容」方案，日志证明逻辑层全部正确（行数/目标高度/节点在树）但视觉层
-/// 无任何变化 —— min-size/Tween/锚点组合在模组运行环境下渲染不可靠，弃用。
-/// 可见性切换 + modulate 淡入不依赖布局机制，绝对可靠。
+/// 三角指示器为程序化 `_Draw` 绘制的实心三角（不依赖字体是否有 ▸/▾ 字形——
+/// 英文语言用游戏 Kreon 字体，几何符号字形不保证存在，用文字符号会渲染成缺字方框）。
+///
+/// 历史教训（DEBUG.md）：
+/// - Button 无文本时最小尺寸只按样式框算（≈12px）→ 必须显式给高度，否则点击命中不到。
+/// - 旋转默认绕左上角 → 已改为直接切换三角方向，不依赖 PivotOffset。
 /// </summary>
 public sealed partial class CollapsibleSection : VBoxContainer
 {
-    private readonly Label _arrowLabel;
-    private readonly Label _summaryLabel;
+    private readonly Button _header;
+    private readonly UiIcons.Chevron _chevron;
+    private readonly MegaLabel _titleLabel;
+    private readonly MegaLabel _summaryLabel;
     private readonly VBoxContainer _content;
     private bool _collapsed;
     private Tween? _tween;
@@ -28,74 +34,70 @@ public sealed partial class CollapsibleSection : VBoxContainer
     /// <summary>当前是否收起。</summary>
     public bool Collapsed => _collapsed;
 
+    /// <summary>标题控件（供外部调整，如测试分区弱化色）。</summary>
+    public MegaLabel TitleLabel => _titleLabel;
+
     /// <summary>收起状态变化事件（true=收起）。</summary>
     public event Action<bool>? Toggled;
 
     public CollapsibleSection(string title, bool collapsed = true, bool weakStyle = false)
     {
         _collapsed = collapsed;
+        AddThemeConstantOverride("separation", 4);
 
-        // ── 分区头（扁平按钮，子节点提供视觉）──
-        // 注意：Button 无文本时最小尺寸只按样式框计算（≈12px），子节点不参与。
-        // 必须显式给高度，否则标题文字溢出按钮矩形、点击落在按钮外 → Pressed 不触发。
-        var header = new Button
+        // ── 分区头 ──
+        _header = new Button
         {
             Flat = true,
             MouseFilter = MouseFilterEnum.Stop,
             FocusMode = FocusModeEnum.None,
             CustomMinimumSize = new Vector2(0, 34),
+            MouseDefaultCursorShape = CursorShape.PointingHand,
         };
-        header.AddThemeStyleboxOverride("hover", new StyleBoxEmpty());
-        header.AddThemeStyleboxOverride("pressed", new StyleBoxEmpty());
-        header.Pressed += Toggle;
+        _header.AddThemeStyleboxOverride("normal", UpgradeTheme.ButtonStylebox(flat: true));
+        _header.AddThemeStyleboxOverride("hover", UpgradeTheme.RowStylebox(false, true));
+        _header.AddThemeStyleboxOverride("pressed", UpgradeTheme.RowStylebox(false, true));
+        _header.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
+        UpgradeTheme.ApplyGameFont(_header);
+        _header.Pressed += Toggle;
 
         var headerRow = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
-        headerRow.AddThemeConstantOverride("separation", 6);
+        headerRow.AddThemeConstantOverride("separation", 8);
 
-        // 箭头固定 ▸ 字形，展开/收起用旋转 Tween（0° = 收起，90° = 展开）。
-        // 注意：默认绕左上角旋转，90° 后字形被甩出可视区域（实测箭头消失）——
-        // 必须把旋转轴心设为标签中心（尺寸确定后设置）。
-        _arrowLabel = new Label { Text = "▸", VerticalAlignment = VerticalAlignment.Center };
-        _arrowLabel.AddThemeFontOverride("font", UpgradeTheme.Regular);
-        _arrowLabel.AddThemeFontSizeOverride("font_size", 14);
-        _arrowLabel.AddThemeColorOverride("font_color", UpgradeTheme.PanelBorder);
-        _arrowLabel.Resized += () => _arrowLabel.PivotOffset = _arrowLabel.Size * 0.5f;
-        if (collapsed) _arrowLabel.RotationDegrees = 0;
-        headerRow.AddChild(_arrowLabel);
-
-        var titleLabel = new Label
+        _chevron = new UiIcons.Chevron
         {
-            Text = title,
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            VerticalAlignment = VerticalAlignment.Center,
+            Expanded = !collapsed,
+            IconColor = weakStyle ? UpgradeTheme.TextSecondary : UpgradeTheme.Gold,
         };
-        titleLabel.AddThemeFontOverride("font", UpgradeTheme.SemiBold);
-        titleLabel.AddThemeFontSizeOverride("font_size", weakStyle ? 14 : 17);
-        titleLabel.AddThemeColorOverride("font_color", weakStyle ? UpgradeTheme.TextSecondary : UpgradeTheme.TitleGold);
-        headerRow.AddChild(titleLabel);
+        headerRow.AddChild(_chevron);
 
-        _summaryLabel = new Label { VerticalAlignment = VerticalAlignment.Center };
-        _summaryLabel.AddThemeFontOverride("font", UpgradeTheme.Regular);
-        _summaryLabel.AddThemeFontSizeOverride("font_size", 13);
-        _summaryLabel.AddThemeColorOverride("font_color", UpgradeTheme.TextSecondary);
+        _titleLabel = UpgradeTheme.Label(title, weakStyle ? 14 : 15,
+            weakStyle ? UpgradeTheme.TextSecondary : UpgradeTheme.Gold, bold: true);
+        _titleLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _titleLabel.MouseFilter = MouseFilterEnum.Ignore;
+        headerRow.AddChild(_titleLabel);
+
+        _summaryLabel = UpgradeTheme.Label("", 12, UpgradeTheme.TextSecondary,
+            align: HorizontalAlignment.Right);
+        _summaryLabel.MouseFilter = MouseFilterEnum.Ignore;
         headerRow.AddChild(_summaryLabel);
 
-        header.AddChild(headerRow);
-        headerRow.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        AddChild(header);
+        _header.AddChild(headerRow);
+        headerRow.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(_header);
 
-        // ── 内容区（直接子节点，可见性切换驱动容器重排）──
+        // ── 内容区（直接子节点；可见性切换驱动容器重排）──
         _content = new VBoxContainer();
-        _content.AddThemeConstantOverride("separation", 4);
+        _content.AddThemeConstantOverride("separation", 3);
         AddChild(_content);
 
         if (collapsed) _content.Visible = false;
     }
 
-    /// <summary>设置右侧摘要文本（如分类说明）。</summary>
+    /// <summary>设置右侧摘要文本（如「8 项 · 已投入 24 点」）。</summary>
     public void SetSummary(string text) => _summaryLabel.Text = text;
 
-    /// <summary>展开/收起：内容可见性切换 + 透明度淡入（收起为瞬时）。</summary>
+    /// <summary>展开/收起：内容可见性切换 + 透明度淡入 + 三角方向切换。</summary>
     public void SetCollapsed(bool collapsed)
     {
         if (_collapsed == collapsed) return;
@@ -103,9 +105,7 @@ public sealed partial class CollapsibleSection : VBoxContainer
         Toggled?.Invoke(collapsed);
         _tween?.Kill();
         _tween = null;
-        // 箭头旋转动画（▸ 顺时针 90° = ▾）——独立 tween，避免与内容淡入互相覆盖
-        var arrowTween = CreateTween();
-        arrowTween.TweenProperty(_arrowLabel, "rotation_degrees", collapsed ? 0f : 90f, 0.15f);
+        _chevron.Expanded = !collapsed;
 
         if (collapsed)
         {

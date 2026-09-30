@@ -3,16 +3,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Godot;
-using InfiniteUpgradeSystem.UiComponents;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Models;
 
 namespace InfiniteUpgradeSystem.UiComponents;
 
 /// <summary>
-/// 附魔选择弹窗（update05 卡牌附魔）：选卡后列出该卡兼容的附魔（类型门禁 + 上限），
-/// 点击选中；Esc / 取消按钮返回 null。
-/// 复用 UpgradeTheme 主题与模组 CanvasLayer 层级。
+/// 附魔选择弹窗（UI v3）：选卡后列出该卡兼容的附魔（类型门禁 + 上限），点击选中；
+/// Esc / 取消按钮返回 null。
+/// 全部文本使用游戏自带 MegaLabel（UpgradeTheme 工厂），配色与主面板一致。
 /// </summary>
 public sealed partial class EnchantSelectPanel : Control
 {
@@ -37,57 +36,63 @@ public sealed partial class EnchantSelectPanel : Control
         SetAnchorsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Stop; // 拦截背景点击
 
-        var center = new CenterContainer { MouseFilter = MouseFilterEnum.Stop };
+        // 遮罩（与主面板一致）
+        var backdrop = new ColorRect { Color = UpgradeTheme.Backdrop, MouseFilter = MouseFilterEnum.Stop };
+        backdrop.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(backdrop);
+
+        var center = new CenterContainer { MouseFilter = MouseFilterEnum.Ignore };
+        center.SetAnchorsPreset(LayoutPreset.FullRect);
         AddChild(center);
 
-        var panel = new PanelContainer { CustomMinimumSize = new Vector2(480, 520) };
-        panel.AddThemeStyleboxOverride("panel", UpgradeTheme.BuildPanelStylebox());
+        var panel = new PanelContainer { CustomMinimumSize = new Vector2(500, 520) };
+        panel.AddThemeStyleboxOverride("panel", UpgradeTheme.PanelStylebox());
         center.AddChild(panel);
 
+        var margin = new MarginContainer();
+        margin.AddThemeConstantOverride("margin_left", 16);
+        margin.AddThemeConstantOverride("margin_right", 16);
+        margin.AddThemeConstantOverride("margin_top", 14);
+        margin.AddThemeConstantOverride("margin_bottom", 14);
+        panel.AddChild(margin);
+
         var root = new VBoxContainer();
-        panel.AddChild(root);
+        root.AddThemeConstantOverride("separation", 8);
+        margin.AddChild(root);
 
         var current = CardOperationHelper.GetCardEnchantments(card);
         var limit = CardOperationHelper.GetEnchantLimit(card);
-        var title = new Label
-        {
-            Text = $"{card.Id.Entry} · 附魔 {current.Count}/{limit}",
-            Modulate = UpgradeTheme.TitleGold,
-            AutowrapMode = TextServer.AutowrapMode.WordSmart
-        };
-        title.AddThemeFontOverride("font", UpgradeTheme.SemiBold);
-        title.AddThemeFontSizeOverride("font_size", 18);
-        root.AddChild(title);
+
+        root.AddChild(UpgradeTheme.Label(
+            UpgradeLoc.Format(UpgradeLoc.UiEnchantTitle, "附魔 {0}/{1}", current.Count, limit),
+            17, UpgradeTheme.Gold, bold: true));
+
+        root.AddChild(UpgradeTheme.Label(card.Id.Entry, 12, UpgradeTheme.TextSecondary));
 
         if (current.Count > 0)
         {
-            var curLabel = new Label
-            {
-                Text = "当前：" + string.Join("、", current.Select(e => $"{e.Type}×{e.Amount}")),
-                Modulate = UpgradeTheme.TextSecondary,
-                AutowrapMode = TextServer.AutowrapMode.WordSmart
-            };
-            curLabel.AddThemeFontOverride("font", UpgradeTheme.Regular);
-            curLabel.AddThemeFontSizeOverride("font_size", 13);
+            var curLabel = UpgradeTheme.Label(
+                UpgradeLoc.Format(UpgradeLoc.UiEnchantCurrent, "当前：{0}",
+                    string.Join("、", current.Select(e => $"{e.Type}×{e.Amount}"))),
+                12, UpgradeTheme.TextSecondary);
+            curLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
             root.AddChild(curLabel);
         }
         if (current.Count >= limit)
         {
-            var fullLabel = new Label
-            {
-                Text = "已达上限，选新附魔将替换最早的那个",
-                Modulate = UpgradeTheme.Danger
-            };
-            fullLabel.AddThemeFontOverride("font", UpgradeTheme.Regular);
-            fullLabel.AddThemeFontSizeOverride("font_size", 13);
+            var fullLabel = UpgradeTheme.Label(
+                UpgradeLoc.Get(UpgradeLoc.UiEnchantFull, "已达上限，选新附魔将替换最早的那个"),
+                12, UpgradeTheme.Danger);
+            fullLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
             root.AddChild(fullLabel);
         }
 
-        root.AddChild(new HSeparator());
+        root.AddChild(UpgradeTheme.Divider());
 
         var scroll = new ScrollContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
         root.AddChild(scroll);
         var list = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        list.AddThemeConstantOverride("separation", 4);
         scroll.AddChild(list);
 
         foreach (var typeName in GetEnchantTypes())
@@ -97,32 +102,38 @@ public sealed partial class EnchantSelectPanel : Control
             if (canonical == null) continue;
             string name = canonical.Title.GetFormattedText();
             bool already = current.Any(e => e.Type == typeName);
-            var btn = new Button
+            var captured = typeName;
+
+            var btn = UpgradeTheme.TextButton(
+                already
+                    ? UpgradeLoc.Format(UpgradeLoc.UiEnchantOwned, "{0}（已有，+1层）", name)
+                    : name,
+                14, UpgradeTheme.TextMain, () => Resolve(captured),
+                minHeight: 32);
+            btn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            btn.TooltipText = FormatEnchantTooltip(canonical);
+            UpgradeTheme.StyleButton(btn);
+            var label = UpgradeTheme.ButtonLabel(btn);
+            if (label != null)
             {
-                Text = already ? $"{name}（已有，+1层）" : name,
-                Alignment = HorizontalAlignment.Left,
-                TooltipText = FormatEnchantTooltip(canonical)
-            };
-            btn.AddThemeFontOverride("font", UpgradeTheme.Regular);
-            btn.AddThemeFontSizeOverride("font_size", 14);
-            btn.Pressed += () => Resolve(typeName);
+                label.HorizontalAlignment = HorizontalAlignment.Left;
+                label.MinFontSize = 10;
+            }
             list.AddChild(btn);
         }
 
         if (list.GetChildCount() == 0)
         {
-            var empty = new Label { Text = "没有可用附魔", Modulate = UpgradeTheme.TextSecondary };
-            empty.AddThemeFontOverride("font", UpgradeTheme.Regular);
-            empty.AddThemeFontSizeOverride("font_size", 14);
-            list.AddChild(empty);
+            list.AddChild(UpgradeTheme.Label(
+                UpgradeLoc.Get(UpgradeLoc.UiEnchantNone, "没有可用附魔"), 13, UpgradeTheme.TextSecondary));
         }
 
-        root.AddChild(new HSeparator());
+        root.AddChild(UpgradeTheme.Divider());
 
-        var cancel = new Button { Text = "取消" };
-        cancel.AddThemeFontOverride("font", UpgradeTheme.Regular);
-        cancel.AddThemeFontSizeOverride("font_size", 14);
-        cancel.Pressed += () => Resolve(null);
+        var cancel = UpgradeTheme.TextButton(
+            UpgradeLoc.Get(UpgradeLoc.UiCancel, "取消"), 14, UpgradeTheme.TextMain,
+            () => Resolve(null), minHeight: 32);
+        UpgradeTheme.StyleButton(cancel);
         root.AddChild(cancel);
     }
 

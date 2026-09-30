@@ -102,6 +102,44 @@ public static class UpgradeLoc
     public const string ItemSkillDmgXTimesAtTurnStart = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DMG_X_TIMES_AT_TURN_START";
     public const string ItemSkillFreeNextCardOnPower = "INFINITEUPGRADESYSTEM-ITEM_SKILL_FREE_NEXT_CARD_ON_POWER";
 
+    // ═══════════════════════════════════════════════════════════════
+    // UI 文字（UI v3：面板标题/分区名/占位符/提示，全部本地化，不再硬编码中文）
+    // 格式串用 {0} {1} 占位，配合 Format(key, fallback, args)。
+    // ═══════════════════════════════════════════════════════════════
+
+    public const string UiTitle = "INFINITEUPGRADESYSTEM-UI_TITLE";
+    public const string UiSearchPlaceholder = "INFINITEUPGRADESYSTEM-UI_SEARCH_PLACEHOLDER";
+    public const string UiEmpty = "INFINITEUPGRADESYSTEM-UI_EMPTY";
+    public const string UiCostTooltip = "INFINITEUPGRADESYSTEM-UI_COST_TOOLTIP";
+    public const string UiBack = "INFINITEUPGRADESYSTEM-UI_BACK";
+    public const string UiDeck = "INFINITEUPGRADESYSTEM-UI_DECK";
+    public const string UiDeckCount = "INFINITEUPGRADESYSTEM-UI_DECK_COUNT";
+    public const string UiHint = "INFINITEUPGRADESYSTEM-UI_HINT";
+    public const string UiHintReadOnly = "INFINITEUPGRADESYSTEM-UI_HINT_READONLY";
+    public const string UiReadOnlyBadge = "INFINITEUPGRADESYSTEM-UI_READONLY_BADGE";
+    public const string UiPoints = "INFINITEUPGRADESYSTEM-UI_POINTS";
+    public const string UiSectionBase = "INFINITEUPGRADESYSTEM-UI_SECTION_BASE";
+    public const string UiSectionAbility = "INFINITEUPGRADESYSTEM-UI_SECTION_ABILITY";
+    public const string UiSectionSkill = "INFINITEUPGRADESYSTEM-UI_SECTION_SKILL";
+    public const string UiSectionDeck = "INFINITEUPGRADESYSTEM-UI_SECTION_DECK";
+    public const string UiSectionTest = "INFINITEUPGRADESYSTEM-UI_SECTION_TEST";
+    public const string UiSectionCount = "INFINITEUPGRADESYSTEM-UI_SECTION_COUNT";
+    public const string UiSectionSpent = "INFINITEUPGRADESYSTEM-UI_SECTION_SPENT";
+    public const string UiClassGeneric = "INFINITEUPGRADESYSTEM-UI_CLASS_GENERIC";
+    public const string UiClassIronclad = "INFINITEUPGRADESYSTEM-UI_CLASS_IRONCLAD";
+    public const string UiClassSilent = "INFINITEUPGRADESYSTEM-UI_CLASS_SILENT";
+    public const string UiClassRegent = "INFINITEUPGRADESYSTEM-UI_CLASS_REGENT";
+    public const string UiClassNecrobinder = "INFINITEUPGRADESYSTEM-UI_CLASS_NECROBINDER";
+    public const string UiClassDefect = "INFINITEUPGRADESYSTEM-UI_CLASS_DEFECT";
+    public const string UiEnchantTitle = "INFINITEUPGRADESYSTEM-UI_ENCHANT_TITLE";
+    public const string UiEnchantCurrent = "INFINITEUPGRADESYSTEM-UI_ENCHANT_CURRENT";
+    public const string UiEnchantFull = "INFINITEUPGRADESYSTEM-UI_ENCHANT_FULL";
+    public const string UiEnchantNone = "INFINITEUPGRADESYSTEM-UI_ENCHANT_NONE";
+    public const string UiEnchantOwned = "INFINITEUPGRADESYSTEM-UI_ENCHANT_OWNED";
+    public const string UiCancel = "INFINITEUPGRADESYSTEM-UI_CANCEL";
+    public const string UiOwned = "INFINITEUPGRADESYSTEM-UI_OWNED";
+    public const string UiNotOwned = "INFINITEUPGRADESYSTEM-UI_NOT_OWNED";
+
     public const string PromptCardUpgrade = "INFINITEUPGRADESYSTEM-PROMPT_CARD_UPGRADE";
     public const string PromptAttackPlus = "INFINITEUPGRADESYSTEM-PROMPT_ATTACK_PLUS";
     public const string PromptBlockPlus = "INFINITEUPGRADESYSTEM-PROMPT_BLOCK_PLUS";
@@ -171,6 +209,57 @@ public static class UpgradeLoc
 
     public static string? GetZhs(string key) { LoadOnce(); return s_zhs?.TryGetValue(key, out var z) == true ? z : null; }
     public static string? GetEng(string key) { LoadOnce(); return s_eng?.TryGetValue(key, out var e) == true ? e : null; }
+
+    /// <summary>本地化文本 + 格式化（{0}/{1} 占位）。缺失 key 时用 fallback 文本格式化。</summary>
+    public static string Format(string key, string fallback, params object[] args)
+    {
+        var template = Get(key, fallback);
+        if (args.Length == 0) return template;
+        try
+        {
+            return string.Format(template, args);
+        }
+        catch (FormatException)
+        {
+            // 本地化文本里的 { } 与占位符冲突（如描述含花括号）→ 退回英文模板
+            try { return string.Format(fallback, args); }
+            catch (FormatException) { return template; }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 内部逻辑 key → 本地化显示名映射
+    // 分区/职业在代码里用中文常量作分组 key（UpgradeItemDef.Category / SubCategory），
+    // 显示时统一经此映射，保证 UI 文本可跟随语言切换。
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>分区标题显示名。</summary>
+    public static string SectionTitle(string category) => category switch
+    {
+        "基础属性" => Get(UiSectionBase, "基础属性"),
+        "能力" => Get(UiSectionAbility, "能力"),
+        "技能" => Get(UiSectionSkill, "技能"),
+        "牌组" => Get(UiSectionDeck, "牌组"),
+        "测试操作" => Get(UiSectionTest, "测试"),
+        _ => category,
+    };
+
+    /// <summary>职业标签页显示名。</summary>
+    public static string ClassTitle(string className) => className switch
+    {
+        "通用" => Get(UiClassGeneric, "通用"),
+        "铁甲战士" => Get(UiClassIronclad, "铁甲战士"),
+        "静默猎手" => Get(UiClassSilent, "静默猎手"),
+        "储君" => Get(UiClassRegent, "储君"),
+        "亡灵契约师" => Get(UiClassNecrobinder, "亡灵契约师"),
+        "故障机器人" => Get(UiClassDefect, "故障机器人"),
+        _ => className,
+    };
+
+    /// <summary>牌组操作的分类显示名（子面板中与卡牌操作同列）。</summary>
+    public static string DeckOperationTitle(string category) => category == "牌组操作"
+        ? Get(UiSectionDeck, "牌组")
+        : category;
 
     private static bool? s_gameLocAvailable;
 
