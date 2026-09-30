@@ -17,7 +17,7 @@ namespace InfiniteUpgradeSystem.UiComponents;
 /// 2. **文本控件统一走游戏自带的 `MegaLabel` / `MegaRichTextLabel`**（`MegaCrit.Sts2.addons.mega_text`）：
 ///    - 自动语言字体替换（`RefreshFont` → `ApplyLocaleFontSubstitution`）
 ///    - 自动字号适配（`AutoSizeEnabled` + `Min/MaxFontSize`，游戏原生排版行为）
-///    - 文本色统一走 `"font_color"` = "font_color"
+///    - 文本色统一走 `font_color` 主题项
 ///    **注意**：MegaLabel._Ready 会断言 `font` 主题覆盖存在（否则抛异常），
 ///    因此所有文本节点必须在**加入场景树之前**通过本类工厂创建/设置字体覆盖。
 /// 3. **配色取自游戏自身**：`StsColors`（gold #EFC851 / cream #FFF6E2 / red #FF5555 …）
