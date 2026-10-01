@@ -114,3 +114,4 @@ dotnet build -c Debug
 | [UI设计.md](UI设计.md) | UI 设计契约与实现计划（含 v3 说明与回退 UI 设计） |
 | [CODE_GUIDE.md](CODE_GUIDE.md) | 代码阅读指南（文件导航 + 核心流程） |
 | [DEBUG.md](DEBUG.md) | 排错记录（每个坑的原因与修复） |
+| [发布.md](发布.md) | 构建 → 创意工坊上传 → git tag 的完整发布流程 |
