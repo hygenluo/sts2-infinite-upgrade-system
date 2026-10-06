@@ -35,6 +35,6 @@ public static class Entry
         // 可拖拽悬浮窗（HUD 常驻入口，点击唤出加点面板；可由模组配置关闭）
         InfiniteUpgradeSystem.UiComponents.UpgradeFloatingButton.CreateInstance();
 
-        Log.Info("InfiniteUpgradeSystem mod initialized. BUILD=v57-20261002-modsettings");
+        Log.Info("InfiniteUpgradeSystem mod initialized. BUILD=v57-20261007-modsettings");
     }
 }
