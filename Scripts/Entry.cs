@@ -28,6 +28,9 @@ public static class Entry
         // Create the UI overlay and attach it to the scene tree
         UpgradeUIHandler.CreateInstance();
 
-        Log.Info("InfiniteUpgradeSystem mod initialized. BUILD=v55-20261001-refund");
+        // 可拖拽悬浮窗（HUD 常驻入口，点击唤出加点面板）
+        InfiniteUpgradeSystem.UiComponents.UpgradeFloatingButton.CreateInstance();
+
+        Log.Info("InfiniteUpgradeSystem mod initialized. BUILD=v56-20261002-floatingbutton");
     }
 }

@@ -1151,6 +1151,20 @@ public sealed partial class UpgradeUIHandler : Control
         else ShowUI();
     }
 
+    /// <summary>面板是否处于打开状态（含「选牌进行中临时隐藏」）。</summary>
+    public bool IsOpen => _isOpen;
+
+    /// <summary>
+    /// 悬浮窗点击入口：已打开则收起，否则打开。
+    /// 选牌进行中（面板隐藏但 <c>_isOpen</c> 保持）直接忽略 —— 此时收起会清掉 <c>_isOpen</c>，
+    /// 让选牌取消链路失效（见 DEBUG.md 陷阱 1）。
+    /// </summary>
+    public void ToggleFromFloatingButton()
+    {
+        if (IsSelectionInProgress) return;
+        ToggleUI();
+    }
+
     private void ShowUI()
     {
         if (RunManager.Instance?.DebugOnlyGetState() == null) return;

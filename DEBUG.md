@@ -1,5 +1,58 @@
 # DEBUG 记录 (InfiniteUpgradeSystem)
 
+## v2.4：可移动悬浮窗（2026-10-02）
+
+### 需求
+屏幕上一个**可移动的小悬浮窗**，点击它唤出系统界面；并加一个模组配置项控制「是否显示悬浮窗」。
+
+### 关键决策与坑
+
+#### D1 悬浮窗用独立 CanvasLayer(127)，不进主面板的节点树
+- 主面板是 `CanvasLayer(128)`，且 `SetUIVisible(false)` 会把**整个层**降到 `-1`。
+  悬浮窗必须独立存在，否则面板一关它就跟着消失、也没法用来「点开面板」。
+- 副产物：面板打开时遮罩（`ColorRect` + `MouseFilter.Stop`）在 128 层，会盖住 127 层的悬浮窗。
+  由于我们是在 `_Input` 里**手动命中测试**并 `SetInputAsHandled()`，`_Input` 早于 GUI 处理，
+  所以面板打开时点悬浮窗仍然有效（用来收起面板）。
+
+#### D2 不可见时必须把 `MouseFilter` 切回 `Ignore`（踩坑）
+- 第一版只在 `_Draw` 里 `if (!_active) return;`，但 `MouseFilter = Stop` 依然生效 ——
+  等于在主菜单/读档界面留了一块**看不见但吃得掉鼠标事件**的 56×84 矩形。
+- 修复：`Active` 属性的 setter 里同步切换 `MouseFilter`（`Stop` ↔ `Ignore`），
+  并把 `TooltipText` 清空。
+
+#### D3 不用 `Visible` 开关，用 `_active` 标志
+- 依赖「节点 `Visible = false` 时 `_Process` 还会不会跑」是不确定的（不同引擎版本/节点类型
+  行为不一致），一旦停跑就再也回不到可见状态。
+- 做法：节点常驻 + `_active` 每帧由 `_Process` 重算；`_active == false` 时 `_Draw` 空绘制。
+
+#### D4 拖拽 vs 点击的阈值判定
+- 只在「按下」和「松手」都成立时才算点击会误判：按住微小抖动也会被当成拖拽，玩家点不开面板。
+- 做法：记录按下点，位移超过 **5px** 才置 `_draggedOverThreshold`；
+  松手时按该标志二选一（拖拽 → 记忆位置；点击 → 开关面板）。
+
+#### D5 悬浮窗文字不用 `MegaLabel`，直接 `DrawString`
+- `MegaLabel._Ready()` 断言 `font` 主题覆盖存在（见 UI v3 记录），所有**文本节点**必须经
+  `UpgradeTheme` 工厂创建。
+- 悬浮窗只需要画一串数字 + 一个矢量菱形：直接 `DrawString(UpgradeTheme.FontBold, ...)` +
+  `DrawColoredPolygon/DrawPolyline`，既绕开断言又不引入节点开销，且照样跟随语言字体替换。
+
+#### D6 选牌进行中点悬浮窗要忽略
+- 选牌时面板是「隐藏但 `_isOpen` 保持」的状态（`IsSelectionInProgress`）。
+  此时若走 `ToggleUI()` → `HideUI()` 会把 `_isOpen` 清掉，选牌取消链路失效（同 UI 陷阱 1）。
+- 做法：新增 `UpgradeUIHandler.ToggleFromFloatingButton()`，内部先判 `IsSelectionInProgress` 直接返回。
+
+### 涉及文件
+- 新增：`Scripts/UiComponents/UpgradeFloatingButton.cs`
+- 修改：`Scripts/Entry.cs`（创建实例 + 版本号 v56）、`Scripts/UpgradeUIHandler.cs`
+  （`ToggleFromFloatingButton()` / `IsOpen`）、`Scripts/UiComponents/UpgradeLoc.cs`
+  （`UiFloatingTooltip`）、`localization/{zhs,eng}/cards.json`
+
+### 验证
+- `dotnet build -c Debug`：0 警告 0 错误，自动部署到 `mods/InfiniteUpgradeSystem/`
+- 游戏内：待用户验证（进局出现 / 可拖拽 / 点击唤出 / 回主菜单消失）
+
+---
+
 ## v2.3：点数数值调整 + 回退系统（2026-10-01）
 
 ### C1 点数数值下调

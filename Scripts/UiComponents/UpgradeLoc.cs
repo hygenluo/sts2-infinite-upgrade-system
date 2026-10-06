@@ -140,6 +140,9 @@ public static class UpgradeLoc
     public const string UiOwned = "INFINITEUPGRADESYSTEM-UI_OWNED";
     public const string UiNotOwned = "INFINITEUPGRADESYSTEM-UI_NOT_OWNED";
 
+    // ── 悬浮窗（v2.4）──
+    public const string UiFloatingTooltip = "INFINITEUPGRADESYSTEM-UI_FLOATING_TOOLTIP";
+
     // ── 回退系统（v2.3）──
     public const string UiSectionRefund = "INFINITEUPGRADESYSTEM-UI_SECTION_REFUND";
     public const string UiRefundSectionSummary = "INFINITEUPGRADESYSTEM-UI_REFUND_SUMMARY";

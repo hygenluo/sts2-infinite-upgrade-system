@@ -34,6 +34,7 @@ Scripts/
 └── UiComponents/
     ├── UpgradeTheme.cs           # ★ UI v3 主题：游戏色板 + MegaLabel/样式框工厂 + 游戏字体解析
     ├── UiIcons.cs                # 矢量图标（三角/拖拽点/菱形/叉号/箭头/减号）
+    ├── UpgradeFloatingButton.cs   # ★ 可拖拽悬浮窗（HUD 常驻入口：点击唤出面板 / 显示点数）
     ├── UpgradeItemData.cs        # UpgradeItemDef 数据模型（Kind/MaxLevel/LevelProvider/RefundTarget）
     ├── UpgradeItemRow.cs         # 条目行（名称/值/成本徽标/加号/回退按钮/MAX/悬停/抖动）
     ├── RefundItemRow.cs          # 回退流水行（已付/返还/不可回退徽标/二次确认）
@@ -49,7 +50,8 @@ Scripts/
 | 文件 | 关键方法 | 说明 |
 |---|---|---|
 | `Entry.cs` | `Init()` | `Harmony.PatchAll` + `ScriptManagerBridge.LookupScriptsInAssembly` + `UpgradeDataStore.Register()` + `RunStateHook.Subscribe()` + `UpgradeUIHandler.CreateInstance()` |
-| `UpgradeUIHandler.cs` | `_Ready`, `PopulateItems()`, `BuildUI()`, `ShowUI()/HideUI()`, `SwitchView()`, `RefreshAllRows()` | 面板生命周期与全部条目注册；`_sectionCategory` 驱动分区摘要 |
+| `UpgradeUIHandler.cs` | `_Ready`, `PopulateItems()`, `BuildUI()`, `ShowUI()/HideUI()`, `SwitchView()`, `RefreshAllRows()`, `ToggleFromFloatingButton()` | 面板生命周期与全部条目注册；`_sectionCategory` 驱动分区摘要；悬浮窗点它来开关面板 |
+| `UpgradeFloatingButton.cs` | `CreateInstance()`, `_Process`, `_Input`, `_Draw`, `Active`, `ApplyPosition()` | 可拖拽悬浮窗（CanvasLayer 127）；手动命中测试 + 拖拽/点击阈值判定；自绘胶囊 |
 | `CardOperationHelper.cs` | `SelectCardFromDeck()`, `TryApplyCardMod()`, `TryApplyAddCard()`, `EnsureMutableInDeck()`, `ApplyEnchantmentToCard()` | 选牌（含取消链路）与 action 执行体 |
 | `CardUpgradeTracker.cs` | `RecordModification()`, `ReapplyAllPlayers()`, `ReapplyAll()`, `OnCardRemoved()`, `GetCardIdentity()` | 卡牌修改的持久化与重放（按 NetId 分桶） |
 | `UpgradeDataStore.cs` | `Register()`, `For()`, `Mutate()`, `SyncOnRunStarted()` | 每玩家数据的唯一权威入口 |
@@ -68,8 +70,28 @@ Scripts/
 3. `UpgradeUIHandler.CreateInstance()`：建 `CanvasLayer(128)` + 面板 Control，`CallDeferred` 挂到根
 4. 面板 `_Ready` → 等 `UpgradeTheme.LocaleReady` → `PopulateItems()`（注册全部条目）→ `BuildUI()`
 
-### 新局 / 读档流程
-1. `RunStarted` → `seed = runState.Rng.StringSeed`
+### 悬浮窗流程（v2.4）
+```
+Entry.Init → UpgradeFloatingButton.CreateInstance()
+   └─ CanvasLayer(127)  +  56×84 的胶囊 Control（常驻，不进/出场景树）
+_Process（每帧）
+   ├─ Active = (RunManager.DebugOnlyGetState() != null)   ← 只在局内出现
+   │     Active 同时切换 MouseFilter（Stop ↔ Ignore）：不可见时绝不吃鼠标事件
+   ├─ 视口尺寸变化 → ApplyPosition()（记忆位置；无记忆 → 右侧边缘垂直居中）
+   └─ 点数变化 → QueueRedraw()
+_Input（手动命中测试，不用 _GuiInput）
+   ├─ 左键按下在胶囊内 → 记下按下点 + 偏移，吃掉事件
+   ├─ 拖动超过 5px → 判定为拖拽 → 跟随鼠标并 Clamp 在视口内；松手后记忆位置
+   └─ 未超过阈值就松手 → 判定为点击 → UpgradeUIHandler.ToggleFromFloatingButton()
+_Draw → 胶囊（StyleBoxFlat 圆角=半高）+ 金环菱形（DrawPolyline/DrawColoredPolygon）
+        + 点数（DrawString + UpgradeTheme.FontBold）
+```
+- **为什么不建文本节点**：`MegaLabel._Ready` 会断言 `font` 主题覆盖存在，所有文本必须经
+  `UpgradeTheme` 工厂创建；这里画的是纯数字，直接用同一套游戏字体 `DrawString` 更省节点。
+- **为什么常驻而不是 Visible 开关**：不依赖「隐藏节点的 `_Process` 是否继续执行」这一
+  不确定行为，`_active` 由 `_Process` 每帧重算，保证从主菜单进局内一定能出现。
+
+### 新局 / 读档流程1. `RunStarted` → `seed = runState.Rng.StringSeed`
 2. `PointsPersistence.LoadPoints(seed)`（无文件 → 7）+ `CardUpgradeTracker.Load` +
    `AbilityOperationHelper.Load` + `SkillRegistry.Load`（本机 JSON 镜像）
 3. `UpgradeDataStore.SyncOnRunStarted(runState)`：**store 权威优先**；空则从旧 JSON 迁移，
