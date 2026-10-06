@@ -143,6 +143,11 @@ public static class UpgradeLoc
     // ── 悬浮窗（v2.4）──
     public const string UiFloatingTooltip = "INFINITEUPGRADESYSTEM-UI_FLOATING_TOOLTIP";
 
+    // ── 模组设置页（v2.4）──
+    public const string SettingsSectionGeneral = "INFINITEUPGRADESYSTEM-SETTINGS_SECTION_GENERAL";
+    public const string SettingsShowFloating = "INFINITEUPGRADESYSTEM-SETTINGS_SHOW_FLOATING";
+    public const string SettingsShowFloatingDesc = "INFINITEUPGRADESYSTEM-SETTINGS_SHOW_FLOATING_DESC";
+
     // ── 回退系统（v2.3）──
     public const string UiSectionRefund = "INFINITEUPGRADESYSTEM-UI_SECTION_REFUND";
     public const string UiRefundSectionSummary = "INFINITEUPGRADESYSTEM-UI_REFUND_SUMMARY";

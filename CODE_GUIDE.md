@@ -8,6 +8,7 @@
 ```
 Scripts/
 ├── Entry.cs                      # 模组入口 (ModInitializer + Harmony + UI 创建)
+├── ModSettings.cs                # ★ 模组配置（RitsuLib 设置页 + ModDataStore，按存档独立）
 ├── UpgradePointManager.cs        # 点数：本地缓存 + 扣点/加点（写 store）
 ├── PointsPersistence.cs          # 点数 JSON 镜像（points_<seed>.json）
 ├── UpgradeDataStore.cs           # ★ 每玩家数据权威层（RitsuLib PlayerRunSavedData，按 NetId 分槽）
@@ -49,7 +50,8 @@ Scripts/
 
 | 文件 | 关键方法 | 说明 |
 |---|---|---|
-| `Entry.cs` | `Init()` | `Harmony.PatchAll` + `ScriptManagerBridge.LookupScriptsInAssembly` + `UpgradeDataStore.Register()` + `RunStateHook.Subscribe()` + `UpgradeUIHandler.CreateInstance()` |
+| `Entry.cs` | `Init()` | `Harmony.PatchAll` + `ScriptManagerBridge.LookupScriptsInAssembly` + `UpgradeDataStore.Register()` + `ModSettings.Register()` + `RunStateHook.Subscribe()` + `UpgradeUIHandler.CreateInstance()` + `UpgradeFloatingButton.CreateInstance()` |
+| `ModSettings.cs` | `Register()`, `Refresh()`, `ShowFloatingWindow`, `TryGetFloatingPosition()`, `SaveFloatingPosition()`, `SubscribeWriteEvents()` | 模组配置的唯一读写入口（设置页 + 持久化 + 静态缓存） |
 | `UpgradeUIHandler.cs` | `_Ready`, `PopulateItems()`, `BuildUI()`, `ShowUI()/HideUI()`, `SwitchView()`, `RefreshAllRows()`, `ToggleFromFloatingButton()` | 面板生命周期与全部条目注册；`_sectionCategory` 驱动分区摘要；悬浮窗点它来开关面板 |
 | `UpgradeFloatingButton.cs` | `CreateInstance()`, `_Process`, `_Input`, `_Draw`, `Active`, `ApplyPosition()` | 可拖拽悬浮窗（CanvasLayer 127）；手动命中测试 + 拖拽/点击阈值判定；自绘胶囊 |
 | `CardOperationHelper.cs` | `SelectCardFromDeck()`, `TryApplyCardMod()`, `TryApplyAddCard()`, `EnsureMutableInDeck()`, `ApplyEnchantmentToCard()` | 选牌（含取消链路）与 action 执行体 |
@@ -66,9 +68,11 @@ Scripts/
 ### 启动流程
 1. 游戏 `OneTimeInitialization.ExecuteEssential()` → `ModManager.Initialize()` → 调用 `Entry.Init()`
    （此时 `LocManager` **还没**初始化 → UI 建树要等本地化就绪，见 `UpgradeUIHandler._Ready`）
-2. `Harmony.PatchAll` + 注册脚本 → `UpgradeDataStore.Register()` → `RunStateHook.Subscribe()`
+2. `Harmony.PatchAll` + 注册脚本 → `UpgradeDataStore.Register()` → `ModSettings.Register()`
+   + `ModSettings.SubscribeWriteEvents()` → `RunStateHook.Subscribe()`
 3. `UpgradeUIHandler.CreateInstance()`：建 `CanvasLayer(128)` + 面板 Control，`CallDeferred` 挂到根
-4. 面板 `_Ready` → 等 `UpgradeTheme.LocaleReady` → `PopulateItems()`（注册全部条目）→ `BuildUI()`
+4. `UpgradeFloatingButton.CreateInstance()`：建 `CanvasLayer(127)` + 悬浮窗 Control，同样 `CallDeferred`
+5. 面板 `_Ready` → 等 `UpgradeTheme.LocaleReady` → `PopulateItems()`（注册全部条目）→ `BuildUI()`
 
 ### 悬浮窗流程（v2.4）
 ```
@@ -90,6 +94,34 @@ _Draw → 胶囊（StyleBoxFlat 圆角=半高）+ 金环菱形（DrawPolyline/Dr
   `UpgradeTheme` 工厂创建；这里画的是纯数字，直接用同一套游戏字体 `DrawString` 更省节点。
 - **为什么常驻而不是 Visible 开关**：不依赖「隐藏节点的 `_Process` 是否继续执行」这一
   不确定行为，`_active` 由 `_Process` 每帧重算，保证从主菜单进局内一定能出现。
+
+### 模组配置流程（v2.4）
+```
+Entry.Init
+ ├─ ModSettings.Register()
+ │    ├─ RitsuLibFramework.BeginModDataRegistration(ModId)
+ │    │    └─ ModDataStore.For(ModId).Register<UpgradeSettings>(
+ │    │         key:"settings", fileName:"settings.json", scope:SaveScope.Profile)
+ │    ├─ 建 4 条绑定（ShowFloatingWindow / HasFloatingPosition / FloatingX / FloatingY，
+ │    │   全部指向同一个 dataKey="settings"）
+ │    ├─ Refresh()  ← 读一次初始值进静态缓存
+ │    └─ RegisterPage() → RegisterModSettings：设置页「通用 → 显示悬浮窗」
+ └─ ModSettings.SubscribeWriteEvents()   ← 锚 SceneTree.Root（进程级订阅）
+
+设置页拨开关
+ └─ 绑定 Write() → ModSettingsBindingWriteEvents.ValueWritten
+      → ModSettings.Refresh()（即时）→ UpgradeFloatingButton 下一次 _Process 生效
+
+悬浮窗 _Process 每 20 帧
+ └─ ModSettings.Refresh()（兜底轮询，防事件早于档案初始化而丢失）
+
+拖拽悬浮窗松手
+ └─ ModSettings.SaveFloatingPosition(Position) → 三条 Write + 一次 Save()（整份落盘）
+```
+- **UI 侧只读 `ModSettings.ShowFloatingWindow` 静态缓存**，绝不每帧 `Read()`（那会反复查 store）。
+- 设置页文本用 `ModSettingsText.Dynamic(() => UpgradeLoc.Get(...))`：每次解析现算，
+  语言切换后设置页跟着变；`Literal` 会把首次语言写死。
+- 配置**不依赖 `has_pck`**：本模组自加载 `localization/{zhs,eng}/cards.json`（同 UI 文本一套）。
 
 ### 新局 / 读档流程1. `RunStarted` → `seed = runState.Rng.StringSeed`
 2. `PointsPersistence.LoadPoints(seed)`（无文件 → 7）+ `CardUpgradeTracker.Load` +

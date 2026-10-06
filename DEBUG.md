@@ -1,6 +1,65 @@
 # DEBUG 记录 (InfiniteUpgradeSystem)
 
-## v2.4：可移动悬浮窗（2026-10-02）
+## v2.4（第二部分）：模组配置项「是否显示悬浮窗」（2026-10-02）
+
+### 需求
+在游戏内**模组设置**里加一个开关，控制是否显示悬浮窗；并让悬浮窗位置也持久化。
+
+### 关键决策与坑
+
+#### E1 配置作用域选 `SaveScope.Profile`（按存档独立，用户指定）
+- 数据槽：`ModDataStore.For(ModId).Register<UpgradeSettings>(key:"settings",
+  fileName:"settings.json", scope:SaveScope.Profile, defaultFactory:..., autoCreateIfMissing:true)`，
+  外层包 `RitsuLibFramework.BeginModDataRegistration(ModId)`（与 `UpgradeDataStore` 同一套注册作用域）。
+- 注意 `ModDataStore.Register` 有 4 个重载，区别在手中是 `defaultFactory` 还是
+  `syncToCloud`/`contextProvider` 在前。按教程的**具名参数**写法（`key:` / `fileName:` /
+  `scope:` / `defaultFactory:` / `autoCreateIfMissing:`）编译无歧义。
+
+#### E2 `float.NaN` 不能进配置文件（踩坑）
+- 位置「未保存」最初想用 `float.NaN` 表示，但持久化走 System.Text.Json，
+  默认**拒绝** NaN/Infinity（除非开 `JsonNumberHandling.AllowNamedFloatingPointLiterals`）
+  —— 一旦触发保存就会抛异常，而且是在游戏存档流程里炸。
+- 修复：模型里加显式标记 `HasFloatingPosition`，`FloatingX/Y` 默认 0，
+  由标记决定要不要用。**规则：配置模型里只放能安全 JSON 往返的值。**
+
+#### E3 配置生效用「写入事件 + 轮询」双保险
+- `ModSettingsBindingWriteEvents.SubscribeValueWrittenWhileNodeAlive(anchor, cb)`
+  能在设置页拨动开关后**同步**通知；但它需要一个场景树里的锚点节点。
+  所有模组节点都是 `CallDeferred` 挂上去的，`Entry.Init()` 时还不在树里。
+- 做法：锚点用 `SceneTree.Root`（永不退出场景树 = 进程级订阅，无生命周期风险）。
+- 再加**兜底轮询**：悬浮窗 `_Process` 每 20 帧 `ModSettings.Refresh()` 一次。
+  理由：事件订阅可能因 RitsuLib 版本或「配置读取早于档案初始化」而错过，
+  轮询保证配置**最终一定生效**（最坏 0.33s，玩家感知不到）。
+
+#### E4 档案未初始化时读配置会抛异常 → 只记一次日志
+- `Entry.Init()` 早于 profile 加载，`ModSettingsValueBinding.Read()` 在这段时间可能抛异常。
+- 缓存在失败时**保持上一次的值**（默认 true），并且**只记一次 Warn** ——
+  否则主菜单停留期间每 20 帧刷一条日志。
+
+#### E5 设置页文本必须用 `ModSettingsText.Dynamic`
+- `ModSettingsText.Literal("显示悬浮窗")` 在解析时就把当前语言写死，语言切换后设置页不变。
+- 改用 `ModSettingsText.Dynamic(() => UpgradeLoc.Get(key, fallback))`：
+  复用本模组自加载的双语 `cards.json`（`has_pck:false`，游戏 LocString 表里没有本模组的 key，
+  见陷阱 5），每次解析现算 → 跟随语言。
+
+#### E6 位置读取只在「首次布局」发生
+- `UpgradeFloatingButton.ApplyPosition()` 只在运行期静态位置为 NaN 时才去问配置。
+- 这样 `Refresh()`（每 20 帧）读回的位置**永远不会和玩家正在进行的拖拽打架**。
+
+### 涉及文件
+- 新增：`Scripts/ModSettings.cs`（`UpgradeSettings` 模型 + `ModSettings` 读写/注册）
+- 修改：`Scripts/Entry.cs`（`Register()` + `SubscribeWriteEvents()`，版本号 v57）、
+  `Scripts/UiComponents/UpgradeFloatingButton.cs`（配置轮询 + 开关接入 + 位置持久化）、
+  `Scripts/UiComponents/UpgradeLoc.cs`（3 个设置页 key）、
+  `localization/{zhs,eng}/cards.json`、`mod_manifest.json`（2.3.0 → **2.4.0**）
+
+### 验证
+- `dotnet build -c Debug`：0 警告 0 错误，自动部署到 `mods/InfiniteUpgradeSystem/`
+- 游戏内：待用户验证（设置页出现开关 / 关掉后悬浮窗消失 / 重开仍生效 / 位置跨局保持）
+
+---
+
+## v2.4（第一部分）：可移动悬浮窗（2026-10-02）
 
 ### 需求
 屏幕上一个**可移动的小悬浮窗**，点击它唤出系统界面；并加一个模组配置项控制「是否显示悬浮窗」。

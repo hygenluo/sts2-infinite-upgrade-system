@@ -122,6 +122,15 @@ public sealed partial class UpgradeFloatingButton : Control
     /// <summary>工具提示已解析时所用的语言（语言切换后重新解析）。</summary>
     private string _tooltipLocale = "";
 
+    /// <summary>配置轮询节流计数（每 <see cref="SettingsPollFrames"/> 帧读一次配置）。</summary>
+    private int _settingsPollCounter = SettingsPollFrames;
+
+    /// <summary>
+    /// 配置轮询间隔（帧）。写入事件已能即时同步；这里是**兜底**：事件订阅可能因
+    /// RitsuLib 版本 / 档案初始化时序而错过，轮询保证「配置最终一定生效」。
+    /// </summary>
+    private const int SettingsPollFrames = 20;
+
     /// <summary>公开给同程序集的可见性开关（步骤 2 的配置项由此驱动）。</summary>
     internal bool Active
     {
@@ -151,8 +160,15 @@ public sealed partial class UpgradeFloatingButton : Control
 
     public override void _Process(double delta)
     {
-        // 局内判定：RunState 消失（回主菜单）→ 收起来
-        Active = RunManager.Instance?.DebugOnlyGetState() != null;
+        // 配置轮询（兜底；正常路径是 ModSettings 的写入事件即时 Refresh）
+        if (--_settingsPollCounter <= 0)
+        {
+            _settingsPollCounter = SettingsPollFrames;
+            ModSettings.Refresh();
+        }
+
+        // 局内判定 + 配置开关：RunState 消失（主菜单）或玩家关了悬浮窗 → 收起来
+        Active = RunManager.Instance?.DebugOnlyGetState() != null && ModSettings.ShowFloatingWindow;
 
         var vpSize = GetViewportRect().Size;
         if (vpSize != _lastViewportSize)
@@ -235,8 +251,9 @@ public sealed partial class UpgradeFloatingButton : Control
 
         if (wasDrag)
         {
-            s_position = Position;              // 拖拽结束 → 记忆新位置
+            s_position = Position;                              // 拖拽结束 → 记忆位置
             ClampIntoViewport(GetViewportRect().Size);
+            ModSettings.SaveFloatingPosition(Position);          // 并写进配置（按存档持久化）
         }
         else if (HitTest(mouse))
         {
@@ -297,11 +314,15 @@ public sealed partial class UpgradeFloatingButton : Control
     // 位置
     // ═══════════════════════════════════════════════════════════════
 
-    /// <summary>应用记忆位置；没有记忆时落在「右侧中部」默认位。</summary>
+    /// <summary>应用记忆位置；没有运行期记忆时先用配置里存的，再退回「右侧中部」默认位。</summary>
     private void ApplyPosition(Vector2 vpSize)
     {
         if (float.IsNaN(s_position.X) || s_position == Vector2.Zero)
-            s_position = DefaultPosition(vpSize);
+        {
+            s_position = ModSettings.TryGetFloatingPosition(out var saved)
+                ? saved
+                : DefaultPosition(vpSize);
+        }
         Position = s_position;
         ClampIntoViewport(vpSize);
         s_position = Position;
