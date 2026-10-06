@@ -110,6 +110,64 @@ UI 文本全部走 `UpgradeLoc`（27 条新 key，`localization/{zhs,eng}/cards.
 
 新增组件：`RefundItemRow`（流水行）、`MinusIcon`（矢量减号）、`UpgradeItemRow` 增加行内回退按钮。
 
+### 0.7 悬浮窗（v2.4）
+
+**动机**：面板此前只能按 `P` 打开，新玩家完全不知道有这个系统。
+加一个**局内常驻、可拖拽的小入口**，点击即唤出面板。
+
+**形态**：56×84 的竖排胶囊，默认落在**屏幕右侧边缘、垂直居中**
+（避开顶栏与右下角「结束回合」）。
+
+```
+   ╭──────╮
+   │  ◇   │  上半：菱形图标（与顶栏点数徽标同款符号，矢量绘制）
+   │  12  │  下半：当前点数（金/米白，跟随点数实时变化）
+   ╰──────╯
+   非悬停 62% 透明 ── 悬停/按下 → 不透明 + 描边转亮金
+```
+
+| 项 | 决定 | 原因 |
+|---|---|---|
+| 载体 | 独立 `CanvasLayer(127)`（主面板是 128） | 主面板关闭会把整层降到 -1；悬浮窗必须独立才能「点开面板」 |
+| 出现时机 | 仅局内（`RunManager.DebugOnlyGetState() != null`） | 主菜单 / 读档界面没有加点概念 |
+| 不可见时 | `MouseFilter` 切回 `Ignore` | 否则留一块**看不见但吃得掉鼠标事件**的矩形（DEBUG.md D2） |
+| 点击 | 打开 / 收起面板（等价 `P`） | 一个入口两态，不额外加关闭按钮 |
+| 拖拽 | 位移 > **5px** 才算拖拽，否则算点击 | 手抖会把点击判成拖拽 → 点不开面板（DEBUG.md D4） |
+| 位置 | 拖拽结束后记忆并 Clamp 在视口内，**写入配置跨局保持** | 见 §0.8 |
+| 选牌中 | 点它**被忽略** | 选牌时面板是「隐藏但 `_isOpen` 保持」，收面板会打断取消链路（同陷阱 1） |
+| 文字渲染 | `DrawString` + `UpgradeTheme.FontBold`，**不建文本节点** | `MegaLabel._Ready` 断言 font 覆盖存在；这里只需画数字，省节点且照样跟随语言字体 |
+| 交互实现 | `_Input` + 手动命中测试（不用 `_GuiInput`） | 拖拽时要能在胶囊矩形**外**继续收鼠标事件 |
+
+新增组件：`Scripts/UiComponents/UpgradeFloatingButton.cs`。
+
+### 0.8 模组设置（v2.4）
+
+**动机**：悬浮窗不是所有人都想要，得能关掉。
+
+**位置**：游戏内「**模组设置 → 无限升级系统**」页（RitsuLib 提供宿主，主菜单 / 局内暂停 /
+战斗暂停都可进入）。
+
+```
+无限升级系统
+┌─ 通用 ────────────────────────────────────────────┐
+│  显示悬浮窗                              [ ●──]   │
+│  局内在屏幕右侧显示可拖拽的悬浮窗，点击可打开无限   │
+│  升级系统面板。关闭后仍可按 P 打开。                │
+└──────────────────────────────────────────────────┘
+```
+
+| 项 | 决定 | 原因 |
+|---|---|---|
+| 数据层 | RitsuLib `ModDataStore` + `ModSettingsValueBinding` | 与游戏的模组设置体系原生打通，不用自造 UI |
+| 作用域 | `SaveScope.Profile`（**按存档独立**） | 用户选定：不同存档可以有不同偏好 |
+| 生效时机 | 写入事件即时 + 每 20 帧兜底轮询 | 事件可能因档案初始化时序而错过，轮询保证最终一定生效（DEBUG.md E3） |
+| 位置持久化 | 与开关同一份 `settings.json` | 拖拽松手写一次，读档恢复 |
+| 设置页文本 | `ModSettingsText.Dynamic` + `UpgradeLoc` | `Literal` 会把首次语言写死；本模组无 pck，走自加载双语 JSON（同陷阱 5） |
+| 配置模型 | 只放能安全 JSON 往返的值（**禁 NaN**） | `float.NaN` 会被 System.Text.Json 拒绝，在存档流程里炸（DEBUG.md E2） |
+| 悬浮窗关闭时 | 面板本身完全不受影响，`P` 照常可用 | 悬浮窗只是入口，不是功能本体 |
+
+新增文件：`Scripts/ModSettings.cs`（`UpgradeSettings` 模型 + `ModSettings` 读写/注册）。
+
 ---
 
 
@@ -494,7 +552,7 @@ public static class SkillRegistry
 | 能力操作 (13) | 购买即写盘、读档恢复、战斗开始生效（ApplyInitialBoosts）、hp/energy/orbSlot 立即生效 |
 | 牌组操作 (1) | 删除卡牌、CardUpgradeTracker 索引修正 |
 | 测试 (3) | 点数+1/+5/+10 |
-| 全局 | 点数检查点保存/回滚、新局 6 点、同 seed 读档恢复 |
+| 全局 | 点数检查点保存/回滚、新局 3 点、同 seed 读档恢复 |
 
 ### 8.2 新 UI 功能清单
 
@@ -508,6 +566,22 @@ public static class SkillRegistry
 8. 选牌取消（左侧返回图标 / Esc）→ 回到牌组子面板 + 点数已返还
 9. 动效：开合淡入、分区展开、悬停金边、+1 飘字、点数不足抖动
 10. 中文衬线体渲染正常（标题/正文两级）
+
+### 8.4 悬浮窗 / 模组设置清单（v2.4）
+
+1. 进局后右侧中部出现悬浮窗（菱形 + 当前点数）；点数变化时数字实时更新
+2. 左键点击 → 面板打开；再点 → 收起
+3. 拖拽移动：位移 < 5px 视为点击（点头能开面板）；位移 > 5px 视为拖拽（不被误判成点击）
+4. 位置记忆：拖到别处 → 关闭再开 / 打完一场战斗 → 位置不跳回
+5. 位置持久化：拖到别处 → 存档退出 → 重进读档 → 位置保持
+6. 不挡路：非悬停时半透明；该位置原本的游戏点击（牌堆 / 敌人）仍可命中
+7. 主菜单 / 读档界面：悬浮窗消失，且**不再拦截任何鼠标事件**
+8. 选牌进行中点悬浮窗：被忽略，选牌界面不被打断（取消链路完好）
+9. 战斗中：悬浮窗可见，点击打开的是**只读面板**
+10. 模组设置页存在「无限升级系统 → 通用 → 显示悬浮窗」（默认开）
+11. 关掉开关 → 返回游戏悬浮窗消失；`P` 仍能打开面板
+12. 开关状态跨局保持（关掉 → 存档退出 → 重进仍是关）
+13. 中文 / 英文语言下设置页文本均正确（`Dynamic` 文本跟随语言）
 
 ### 8.3 测试流程建议
 
@@ -555,3 +629,14 @@ public static class SkillRegistry
 | `InfiniteUpgradeSystem/localization/{zhs,eng}/cards.json` | 30 条 PROMPT key + 条目名称 key |
 | `resources/fonts/` | 新增：思源宋体 SC（OFL） |
 | `Scripts/Entry.cs` | BUILD 版本号 +1 |
+
+### v2.4 追加
+
+| 文件 | 本次改动 |
+|---|---|
+| `Scripts/UiComponents/UpgradeFloatingButton.cs` | 新增：可拖拽悬浮窗（自绘胶囊 + 手动命中测试 + 位置记忆） |
+| `Scripts/ModSettings.cs` | 新增：`UpgradeSettings` 模型 + RitsuLib 设置页 + ModDataStore 持久化 |
+| `Scripts/UpgradeUIHandler.cs` | 新增 `ToggleFromFloatingButton()` / `IsOpen` 供悬浮窗调用 |
+| `Scripts/UiComponents/UpgradeLoc.cs` | 新增 4 条 key（悬浮窗 tooltip + 设置页 3 条） |
+| `InfiniteUpgradeSystem/localization/{zhs,eng}/cards.json` | 上述 4 条 key 的中英文本 |
+| `mod_manifest.json` | 版本 2.3.0 → 2.4.0 |
