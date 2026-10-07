@@ -31,7 +31,8 @@
     - 新增私有常量 `TextButtonPadding` 与私有方法 `MeasureTextWidth`（异常时返回 0，由 `minWidth` 兜底）。
   - `Scripts/UpgradeUIHandler.cs`：返回按钮补 `minWidth: 120f` 下限（防字体测量失败时回归），
     保留 `ShrinkBegin`（左对齐，现在宽度正确了）。
-  - `Scripts/Entry.cs`：BUILD → `v58-20261008-backbtn-hitbox`（便于在日志里确认跑的是哪个构建）。
+  - `Scripts/Entry.cs`：BUILD → `v58-20261008-backbtn-hitbox`（开发构建）；发版时按 §一 惯例 bump 为
+    `v59-20261008-backbtn-hitbox`（日期取真实当天 `Get-Date -Format yyyyMMdd`），便于在日志里确认跑的是哪个构建。
 - **验证**（2026-10-08 实测）：
   1. 构建：`dotnet build -c Debug` → **0 个警告 0 个错误**，自动部署到 `mods/InfiniteUpgradeSystem/`
      （DLL 时间戳 2026/10/8 2:07，`MeasureTextWidth` / `TextButtonPadding` 已在产物元数据中）。
