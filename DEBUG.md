@@ -49,8 +49,10 @@
   4. 交互确认（切回主面板）：**待用户点击确认**。
   5. 回归：职业标签页 / 附魔弹窗条目 / 取消按钮 / 顶栏 ✕ 都仍可点，且排版不错位。
      （新增的标签页最小宽度合计约 450px < 面板内容宽 692px，不会溢出。）
-- **新增验证用日志**：`InfiniteUpgradeUI: back button hitbox=(w, h)`（每会话一行）
-  —— 命中区域类问题以后一眼可查，不必再靠猜。
+- **新增验证用日志**（均为低频，便于以后定位「UI 命中 / 状态」类问题）：
+  - `InfiniteUpgradeUI: back button hitbox=(w, h)`（每会话一行）—— 返回按钮的实际可点击矩形。
+  - `InfiniteUpgradeUI: switch view requested=… current=…`（每次视图切换一行）
+    —— 用于区分「点击根本没打中按钮」与「点击到了但状态没变（`_currentView == view` 提前返回）」。
 - **附带观察**：RitsuLib 的 debug-compat 会为本模组的 `INFINITEUPGRADESYSTEM-*` key 打
   `Missing localization key ... in table 'cards'` 警告（`has_pck:false` 的固有现象，
   见陷阱 5）。最终文本由本模组 `LocStringPromptPatch`（Priority.First）覆盖，显示正常，

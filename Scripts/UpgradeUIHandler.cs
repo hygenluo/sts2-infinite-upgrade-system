@@ -595,6 +595,9 @@ public sealed partial class UpgradeUIHandler : Control
     /// <summary>主视图 ↔ 牌组子面板整页切换（只切换可见性，视图状态天然保持）。</summary>
     private void SwitchView(UiView view)
     {
+        // 诊断用：点「牌组」/「← 返回主面板」时能直接看到请求与当前视图
+        // （即使因 `_currentView == view` 提前返回也留痕，便于区分"点击没打中"与"状态没变"）
+        Log.Info($"InfiniteUpgradeUI: switch view requested={view} current={_currentView}");
         if (_currentView == view) return;
         _currentView = view;
         _scrollContainer!.Visible = view == UiView.Main;
