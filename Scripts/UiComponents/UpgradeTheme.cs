@@ -262,11 +262,21 @@ public static class UpgradeTheme
     public static Button TextButton(string text, int fontSize, Color textColor, Action onPressed,
         bool bold = false, float minHeight = 30f, float minWidth = 0f)
     {
+        // ★ 宽度必须自己算（见 DEBUG.md「TextButton 可点击矩形塌缩」）：
+        //   Godot `Button.get_minimum_size()` 只算「样式框 + Text/Icon」，**不遍历子节点**；
+        //   本工厂把文字放进子 MegaLabel（Button.Text 为空），子标签又用
+        //   `SetAnchorsPreset(FullRect)` 铺满 —— 锚点同样不参与父节点最小尺寸计算。
+        //   于是按钮最小宽度只剩样式框的 ~20px。凡是不给宽度、也不用 ExpandFill 的调用点
+        //   （例如 ShrinkBegin 的「← 返回主面板」）就得到一个 ~20×30 的可点击矩形，
+        //   而文字因 HorizontalAlignment.Left 溢出到按钮**之外** → 看得见、点不到
+        //   （Pressed 永不触发）。这里按字体实测文字宽度反推按钮宽度，让点击区域与可见文字一致。
+        float width = Mathf.Max(minWidth, MeasureTextWidth(text, fontSize, bold) + TextButtonPadding);
+
         var button = new Button
         {
             Flat = true,
             FocusMode = Control.FocusModeEnum.None,
-            CustomMinimumSize = new Vector2(minWidth, minHeight),
+            CustomMinimumSize = new Vector2(width, minHeight),
             MouseDefaultCursorShape = Control.CursorShape.PointingHand,
         };
         // 悬停/按下的视觉由样式框（SetButtonStyle）提供，去掉默认的两个空绘制态
@@ -282,6 +292,24 @@ public static class UpgradeTheme
         button.AddChild(label);
         label.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         return button;
+    }
+
+    /// <summary>按钮宽度 = 文字宽度 + 左右内容边距（ButtonStylebox padH=10 → 20）+ 安全余量。</summary>
+    private const float TextButtonPadding = 24f;
+
+    /// <summary>按当前语言字体测量文字宽度（失败返回 0，由调用方的 minWidth 兜底）。</summary>
+    private static float MeasureTextWidth(string text, int fontSize, bool bold)
+    {
+        if (string.IsNullOrEmpty(text)) return 0f;
+        try
+        {
+            var font = bold ? FontBold : FontRegular;
+            return font?.GetStringSize(text, HorizontalAlignment.Left, -1, fontSize).X ?? 0f;
+        }
+        catch (Exception)
+        {
+            return 0f;
+        }
     }
 
     /// <summary>取按钮内的 MegaLabel（用于状态切换时改文字/颜色）。</summary>

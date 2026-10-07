@@ -1,5 +1,72 @@
 # DEBUG 记录 (InfiniteUpgradeSystem)
 
+## 牌组子面板「← 返回主面板」点击无反应：TextButton 可点击矩形塌缩（2026-10-08）
+
+- **日期**：2026-10-08
+- **现象**：进「牌组」子面板后，点「← 返回主面板」没有任何反应（文字明明画出来了），
+  只能按 P/Esc 或 ✕ 关掉面板重开。
+- **复现**：局内按 P → 点「牌组」行 → 点左上角「← 返回主面板」→ 视图不切回主面板。
+- **日志**：`godot.log` 无任何异常/警告（静默失败）——这本身就是"点击根本没打中按钮"的特征。
+  同一次会话里 `ReturnToMainMenu` 正常、退出正常，排除游戏/存档链路问题。
+- **根因**（Godot 控件最小尺寸规则 + 本项目的按钮工厂写法）：
+  1. `UpgradeTheme.TextButton` 把文字放在**子 `MegaLabel`** 里（`Button.Text` 为空），
+     子标签用 `SetAnchorsPreset(FullRect)` 铺满父按钮。
+  2. Godot 的 `Button.get_minimum_size()` 只算「样式框 + `Text`/`Icon`」，**不会遍历子节点**；
+     锚点布局也**不参与**父节点最小尺寸计算 → 按钮最小宽度只剩样式框的 `~20px`
+     （`ButtonStylebox` 的 `ContentMarginLeft/Right = 10`）。
+  3. `UpgradeUIHandler.BuildCardOpsView()` 给返回按钮设了
+     `back.SizeFlagsHorizontal = SizeFlags.ShrinkBegin`（为了左对齐、不铺满整行）
+     → `VBoxContainer` 就按**最小宽度**给它 ≈20px，而**不是**铺满。
+  4. 文字用 `HorizontalAlignment.Left` 且控件默认不裁剪 → 文字从 20px 的按钮里溢出到右侧
+     ≈100px 都画得出来 → **看得见、点不到**：点击落在 `_cardOpsContent`/`_cardOpsScroll` 上，
+     `Button.Pressed` 永远不触发，`SwitchView(UiView.Main)` 自然不会被调用。
+  - 为什么其它按钮没事：`ClassTabBar` 标签页 / 附魔条目 / 取消按钮都用默认的 `Fill`
+    或被 `ExpandFill` 拉伸 → 铺满整行，整个可见区域都可点。**只有这一处用了 `ShrinkBegin`。**
+  - 同源历史坑：DEBUG.md「Button 无文本时最小尺寸 ≈12px」（标题文字溢出按钮、点击落在按钮外）
+    —— 当时只补了**高度**，没补宽度，本次是同一问题的宽度版本。
+- **修改**：
+  - `Scripts/UiComponents/UpgradeTheme.cs`
+    - `TextButton`：新增 `MeasureTextWidth()`（按当前语言字体实测文字宽度）+ `TextButtonPadding = 24f`，
+      宽度取 `Mathf.Max(minWidth, 文字宽度 + 24)` → **任何**文字按钮的可点击区域都与可见文字一致。
+    - 新增私有常量 `TextButtonPadding` 与私有方法 `MeasureTextWidth`（异常时返回 0，由 `minWidth` 兜底）。
+  - `Scripts/UpgradeUIHandler.cs`：返回按钮补 `minWidth: 120f` 下限（防字体测量失败时回归），
+    保留 `ShrinkBegin`（左对齐，现在宽度正确了）。
+  - `Scripts/Entry.cs`：BUILD → `v58-20261008-backbtn-hitbox`（便于在日志里确认跑的是哪个构建）。
+- **验证**（2026-10-08 实测）：
+  1. 构建：`dotnet build -c Debug` → **0 个警告 0 个错误**，自动部署到 `mods/InfiniteUpgradeSystem/`
+     （DLL 时间戳 2026/10/8 2:07，`MeasureTextWidth` / `TextButtonPadding` 已在产物元数据中）。
+  2. **运行时前提**：本地 `mods/` 副本原本在设置里是「禁用」、实际加载 Workshop 版
+     （`settings.save → mod_settings.mod_list`），必须切换到本地副本才测得到改动。
+     做法：`mods_directory` → `is_enabled: true`、`steam_workshop` → `false`
+     （改前已备份 `settings.save.bak-20261008-020952`）。
+  3. **运行时证据**（Steam 启动，新 `godot.log`）：
+     - `Loading assembly DLL ...\steamapps\common\Slay the Spire 2\mods\InfiniteUpgradeSystem\InfiniteUpgradeSystem.dll` → 加载的是本地新构建
+     - `InfiniteUpgradeSystem mod initialized. BUILD=v58-20261008-backbtn-hitbox`
+     - **`InfiniteUpgradeUI: back button hitbox=(120, 30)`** ← 返回按钮的可点击矩形
+       由修复前的 **~20×30** 变为 **120×30**（= `minWidth` 下限；中文文字实测宽 ≈96px + 24 边距）
+     - `InfiniteUpgradeUI: ready (v3 mega-label theme, localeReady=True).` → 整棵 UI 建树无异常
+     - 全日志 **0 条**提及本模组的 Exception/Error
+  4. 交互确认（切回主面板）：**待用户点击确认**。
+  5. 回归：职业标签页 / 附魔弹窗条目 / 取消按钮 / 顶栏 ✕ 都仍可点，且排版不错位。
+     （新增的标签页最小宽度合计约 450px < 面板内容宽 692px，不会溢出。）
+- **新增验证用日志**：`InfiniteUpgradeUI: back button hitbox=(w, h)`（每会话一行）
+  —— 命中区域类问题以后一眼可查，不必再靠猜。
+- **附带观察**：RitsuLib 的 debug-compat 会为本模组的 `INFINITEUPGRADESYSTEM-*` key 打
+  `Missing localization key ... in table 'cards'` 警告（`has_pck:false` 的固有现象，
+  见陷阱 5）。最终文本由本模组 `LocStringPromptPatch`（Priority.First）覆盖，显示正常，
+  属日志噪音；如嫌吵可在 RitsuLib 设置里关掉 debug compat 或改用 pck。
+- **顺带发现（本次未改，另行排期）**：
+  1. `UpgradeUIHandler` 的 `_isOpen` 与 `Visible` 是两个可独立变化的量：`SetUIVisible(false)`
+     不改 `_isOpen`（选牌前临时隐藏即此状态），而 `_Input` 的拖拽分支只判 `_isOpen && _mainPanel != null`
+     （**没判 `Visible`**）→ 面板隐藏期间，顶栏 `720×40` 区域内仍可能被 `SetInputAsHandled()` 吞掉点击。
+  2. `HideUI()` 的收尾 `SetUIVisible(false)` 挂在 Tween 回调里（0.12s 后）→ 这段窗口期
+     `Visible=true` + `MouseFilter=Stop` + `CanvasLayer=128` 同时成立，落在其中的点击会被全屏遮罩吃掉。
+  3. `UpgradeFloatingButton._Input` 无条件抢输入（按下/松开都 `SetInputAsHandled()`），
+     不判断游戏是否开着暂停菜单/设置/牌库 → 悬浮窗矩形下的游戏按钮会点不到。
+     建议加 `NCapstoneContainer.Instance?.InUse == true` 时直接 return。
+
+---
+
 ## v2.4（第二部分）：模组配置项「是否显示悬浮窗」（2026-10-07）
 
 ### 需求

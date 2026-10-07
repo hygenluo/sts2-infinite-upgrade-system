@@ -557,14 +557,20 @@ public sealed partial class UpgradeUIHandler : Control
     /// </summary>
     private void BuildCardOpsView()
     {
+        // minWidth：文字在子 MegaLabel 里，Button 自身最小宽度只有样式框（~20px）；
+        // 本行又是 ShrinkBegin（不再被 VBox 拉伸）→ 不给宽度就会「看得见、点不到」。
+        // TextButton 现在按文字实测宽度取宽，这里再给一个下限兜底，保证任何语言下都够点。
         var back = UpgradeTheme.TextButton(
             UpgradeLoc.Get(UpgradeLoc.UiBack, "← 返回主面板"), 14, UpgradeTheme.Gold,
-            () => SwitchView(UiView.Main), minHeight: 30);
+            () => SwitchView(UiView.Main), minHeight: 30, minWidth: 120f);
         UpgradeTheme.StyleButton(back, flat: true);
         var backLabel = UpgradeTheme.ButtonLabel(back);
         if (backLabel != null) backLabel.HorizontalAlignment = HorizontalAlignment.Left;
         back.SizeFlagsHorizontal = SizeFlags.ShrinkBegin;
         _cardOpsContent!.AddChild(back);
+        // 验证用：返回按钮的**实际可点击矩形**（= CustomMinimumSize，ShrinkBegin 下即最终宽度）。
+        // 修复前这里只有样式框的 ~20px 宽 → 点不到；应 ≈ 文字宽度 + 24 或 minWidth 下限。
+        Log.Info($"InfiniteUpgradeUI: back button hitbox={back.CustomMinimumSize}");
 
         _cardOpsContent.AddChild(UpgradeTheme.Divider());
 
