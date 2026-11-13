@@ -85,7 +85,7 @@ public sealed partial class ClassTabBar : HBoxContainer
             {
                 label.AddThemeColorOverride("font_color",
                     selected ? UpgradeTheme.HoverGlow : UpgradeTheme.TextSecondary);
-                label.MinFontSize = 9; // 6 个标签挤一行：允许缩到 9px 保证中文不裁切
+                label.MinFontSize = 9 + UpgradeTheme.FontBoost; // 6 个标签挤一行：最小缩到 11px 保证中文不裁切
             }
         }
     }

@@ -376,7 +376,7 @@ public sealed partial class UpgradeFloatingButton : Control
         // 点数
         var font = UpgradeTheme.FontBold;
         string text = _drawnPoints == int.MinValue ? "0" : _drawnPoints.ToString();
-        const int fontSize = 18;
+        const int fontSize = 18 + UpgradeTheme.FontBoost;
         var textSize = font.GetStringSize(text, HorizontalAlignment.Left, -1, fontSize);
         float textAreaTop = Size.Y * 0.60f;
         float baseline = textAreaTop + (Size.Y - textAreaTop - 10f - textSize.Y) / 2f

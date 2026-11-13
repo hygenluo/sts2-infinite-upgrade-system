@@ -289,7 +289,7 @@ public sealed partial class UpgradeUIHandler : Control
         // 否则占位文字会落到 Godot 内置主题的小字号字体上。
         UpgradeTheme.ApplyGameFont(_searchBox, fontSize: 14);
         _searchBox.AddThemeFontOverride("font_placeholder", UpgradeTheme.FontRegular);
-        _searchBox.AddThemeFontSizeOverride("font_placeholder_size", 14);
+        _searchBox.AddThemeFontSizeOverride("font_placeholder_size", 14 + UpgradeTheme.FontBoost);
         _searchBox.AddThemeColorOverride("font_color", UpgradeTheme.TextMain);
         _searchBox.AddThemeColorOverride("font_placeholder_color", UpgradeTheme.TextSecondary);
         _searchBox.AddThemeColorOverride("caret_color", UpgradeTheme.Gold);

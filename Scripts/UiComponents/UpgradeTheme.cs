@@ -81,6 +81,14 @@ public static class UpgradeTheme
     // 字体（游戏自带资源，无自备字体文件）
     // ═══════════════════════════════════════════════════════════════
 
+    /// <summary>
+    /// 全局字号抬升量（px）：玩家反馈 UI 字体偏小，所有工厂字号统一 +FontBoost。
+    /// 仅在工厂方法「最终写入主题覆盖」处应用，避免 TextButton→AutoLabel 双重叠加。
+    /// 工厂外直接写字号的散点（DrawString / MinFontSize 覆盖 / font_placeholder_size）
+    /// 需与增量保持一致。
+    /// </summary>
+    public const int FontBoost = 2;
+
     /// <summary>游戏主 UI 字体（非 CJK 语言）。</summary>
     private const string RegularPath = "res://themes/kreon_regular_shared.tres";
     private const string BoldPath = "res://themes/kreon_bold_shared.tres";
@@ -168,7 +176,7 @@ public static class UpgradeTheme
         }
 
         if (fontSize > 0)
-            control.AddThemeFontSizeOverride("font_size", fontSize);
+            control.AddThemeFontSizeOverride("font_size", fontSize + FontBoost);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -190,7 +198,7 @@ public static class UpgradeTheme
             VerticalAlignment = VerticalAlignment.Center,
         };
         label.AddThemeFontOverride("font", bold ? FontBold : FontRegular);
-        label.AddThemeFontSizeOverride("font_size", fontSize);
+        label.AddThemeFontSizeOverride("font_size", fontSize + FontBoost);
         label.AddThemeColorOverride("font_color", color);
         return label;
     }
@@ -206,13 +214,13 @@ public static class UpgradeTheme
         {
             Text = text,
             AutoSizeEnabled = true,
-            MinFontSize = minFontSize,
-            MaxFontSize = maxFontSize,
+            MinFontSize = minFontSize + FontBoost,
+            MaxFontSize = maxFontSize + FontBoost,
             HorizontalAlignment = align,
             VerticalAlignment = VerticalAlignment.Center,
         };
         label.AddThemeFontOverride("font", bold ? FontBold : FontRegular);
-        label.AddThemeFontSizeOverride("font_size", maxFontSize);
+        label.AddThemeFontSizeOverride("font_size", maxFontSize + FontBoost);
         label.AddThemeColorOverride("font_color", color);
         return label;
     }
@@ -242,7 +250,7 @@ public static class UpgradeTheme
         label.AddThemeFontOverride("bold_italics_font", FontBold);
         label.AddThemeFontOverride("mono_font", FontRegular);
         foreach (var sizeName in RichTextFontSizeNames)
-            label.AddThemeFontSizeOverride(sizeName, fontSize);
+            label.AddThemeFontSizeOverride(sizeName, fontSize + FontBoost);
         label.AddThemeColorOverride("default_color", color);
         return label;
     }
@@ -270,7 +278,7 @@ public static class UpgradeTheme
         //   （例如 ShrinkBegin 的「← 返回主面板」）就得到一个 ~20×30 的可点击矩形，
         //   而文字因 HorizontalAlignment.Left 溢出到按钮**之外** → 看得见、点不到
         //   （Pressed 永不触发）。这里按字体实测文字宽度反推按钮宽度，让点击区域与可见文字一致。
-        float width = Mathf.Max(minWidth, MeasureTextWidth(text, fontSize, bold) + TextButtonPadding);
+        float width = Mathf.Max(minWidth, MeasureTextWidth(text, fontSize + FontBoost, bold) + TextButtonPadding);
 
         var button = new Button
         {

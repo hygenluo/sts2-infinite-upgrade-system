@@ -117,7 +117,7 @@ public sealed partial class EnchantSelectPanel : Control
             if (label != null)
             {
                 label.HorizontalAlignment = HorizontalAlignment.Left;
-                label.MinFontSize = 10;
+                label.MinFontSize = 10 + UpgradeTheme.FontBoost;
             }
             list.AddChild(btn);
         }
