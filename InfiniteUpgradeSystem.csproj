@@ -105,7 +105,7 @@
 
   <!-- Mod manifest and resource content -->
   <ItemGroup>
-    <None Include="mod_manifest.json" />
+    <None Include="InfiniteUpgradeSystem.json" />
     <None Include="InfiniteUpgradeSystem\**\*" Exclude="InfiniteUpgradeSystem\**\*.cs" />
     <!-- NOTE (UI v3)：不再打包 resources/fonts 下的 49MB 思源宋体。
          面板字体已切换为游戏自带字体资源（res://themes/kreon_*），
@@ -138,7 +138,7 @@
     <!-- Copy mod DLL -->
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ModsPath)InfiniteUpgradeSystem\" />
     <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="$(ModsPath)InfiniteUpgradeSystem\" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
-    <Copy SourceFiles="mod_manifest.json" DestinationFolder="$(ModsPath)InfiniteUpgradeSystem\" />
+    <Copy SourceFiles="InfiniteUpgradeSystem.json" DestinationFolder="$(ModsPath)InfiniteUpgradeSystem\" />
 
     <!-- NOTE (UI v3): 不再部署打包字体 —— 面板用游戏自带字体资源（res://themes/kreon_*），
          中文等语言由游戏 FontManager 自动替换。见 UpgradeTheme.cs。 -->

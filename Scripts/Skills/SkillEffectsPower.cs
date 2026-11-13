@@ -414,12 +414,4 @@ public sealed class SkillEffectsPower : CustomPowerModel
             await AbilityOperationHelper.ApplyStrengthLoss(enemy, amount, gainer.Creature);
     }
 
-    public override async Task AfterDeath(PlayerChoiceContext choiceContext, Creature creature, bool wasRemovalPrevented, float deathAnimLength)
-    {
-        if (creature == null || wasRemovalPrevented) return;
-        if (!creature.IsEnemy) return;
-        var player = OwnerPlayer;
-        if (player == null || UpgradeDataStore.GetBoost(player, "gold_on_kill") <= 0) return;
-        await PlayerCmd.GainGold(20m, player);
-    }
 }

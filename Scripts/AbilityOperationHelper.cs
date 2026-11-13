@@ -189,7 +189,7 @@ public static class AbilityOperationHelper
                 case "hp":
                     // 保留至少 1 点最大生命（LoseMaxHp 会把当前 HP 压到新上限，MaxHp<=1 时不减）
                     if (player.Creature.MaxHp > 1)
-                        await CreatureCmd.LoseMaxHp(new BlockingPlayerChoiceContext(), player.Creature, 1m, false);
+                        await LoseMaxHpCompat(new BlockingPlayerChoiceContext(), player.Creature, 1m);
                     break;
                 case "energy":
                     if (player.MaxEnergy > 0) player.MaxEnergy -= 1;
@@ -222,6 +222,26 @@ public static class AbilityOperationHelper
     private static readonly System.Reflection.MethodInfo? s_exhaustMethod =
         typeof(CardCmd).GetMethod("Exhaust",
             new[] { typeof(PlayerChoiceContext), typeof(CardModel), typeof(bool), typeof(bool) });
+
+    /// <summary>
+    /// CreatureCmd.LoseMaxHp 双版本兼容：0.113 第4参为 CardModel cardSource（非卡源传 null），
+    /// 0.111 及以前为 bool isFromCard（传 false）。按运行时参数类型反射调用 ——
+    /// 直接调用在另一版本下 MissingMethodException（同 ExhaustCard 的先例）。
+    /// </summary>
+    private static readonly System.Reflection.MethodInfo? s_loseMaxHpMethod =
+        typeof(CreatureCmd).GetMethod("LoseMaxHp",
+            new[] { typeof(PlayerChoiceContext), typeof(Creature), typeof(decimal), typeof(CardModel) })
+        ?? typeof(CreatureCmd).GetMethod("LoseMaxHp",
+            new[] { typeof(PlayerChoiceContext), typeof(Creature), typeof(decimal), typeof(bool) });
+
+    private static async Task LoseMaxHpCompat(PlayerChoiceContext context, Creature creature, decimal amount)
+    {
+        if (s_loseMaxHpMethod == null) return;
+        var p4 = s_loseMaxHpMethod.GetParameters()[3];
+        object arg4 = p4.ParameterType == typeof(bool) ? (object)false : null!;
+        var task = (Task?)s_loseMaxHpMethod.Invoke(null, new[] { (object)context, creature, amount, arg4 });
+        if (task != null) await task;
+    }
 
     /// <summary>
     /// 反射调用 CardCmd.Exhaust。测试版(beta)返回 Task&lt;CardPileAddResult?&gt;，正式版(stable)返回 Task——

@@ -1082,3 +1082,39 @@
 
 
 
+
+## v0.113.0 适配（2026-11-13）
+
+- **现象**：游戏升级 v0.111.0 → v0.113.0（`release_info.json` commit 16ac0fe3）。`dotnet build` 报
+  `CS0115: AfterDeath(PlayerChoiceContext, Creature, bool, float) 没有找到适合的方法来重写`。
+- **排查**：用反射 dump `data_sts2_windows_x86_64/sts2.dll`（113）逐个验证本项目全部 API 触点：
+  Harmony 目标（`Hook.AfterRoomEntered/ShouldDisableRemainingRestSiteOptions/ShouldPlayerResetEnergy`、
+  `EnchantmentModel.get_DynamicExtraCardText`、`NCard.UpdateEnchantmentVisuals`、`LocString.GetRawText/
+  GetFormattedText`、`ChecksumTracker.CompareChecksums/OnReceivedStateDivergenceMessage`）、
+  反射点（`CardCmd.Exhaust`、`ModelDb.CardPool<T>/Enchantment<T>`、`CardModel._currentUpgradeLevel`、
+  `Models.Enchantments.*` 命名空间）——全部健在，仅两处签名变化 + 一处方法移除。
+- **根因与修复**：
+  1. **`AbstractModel.AfterDeath` 5 参化**：`AfterDeath(ctx, creature, bool, float)` →
+     `AfterDeath(ctx, creature, CardModel source, bool, float)`。同一方法无法写两个 override，
+     故 `SkillEffectsPower.AfterDeath`（gold_on_kill）整体迁移到新 `Patches/GoldOnKillPatch.cs`：
+     `HarmonyPatch` + `TargetMethod()` 反射探测 `Hook.AfterDeath` 的 113/旧版签名，
+     Postfix 把 `PlayerCmd.GainGold` 链入 `__result` Task 尾部 → 单 dll 双版本兼容。
+  2. **`CreatureCmd.LoseMaxHp` 第4参 `bool isFromCard` → `CardModel cardSource`**：
+     `AbilityOperationHelper.LoseMaxHpCompat` 反射按运行时参数类型调用
+     （`CardModel`→null / `bool`→false），同 `ExhaustCard` 先例。直接调用在另一版本会 MissingMethodException。
+  3. **`Hook.ShouldPlayerResetEnergy` 首参 `CombatState` → `ICombatState`**：
+     `EnergyKeepPatch` 形参改 `ICombatState`（接口），双版本兼容。
+  4. **`BaseLibCompatibilityHelper` 出现**（BaseLib 3.4.8 起）：BaseLib.json 新增
+     `dependencies: [BaseLibCompatibilityHelper]`，NuGet Content 不含 helper dll →
+     本地复制 BaseLib 到 mods/ 必然缺依赖。本项目本就不部署 BaseLib（workshop 安装），不受影响。
+  5. **NuGet 陈旧缓存**：`Version="*"` 不会自动重取，旧 assets 锁在 BaseLib 3.4.0 / RitsuLib 0.5.11。
+     `dotnet restore --force` 后取到 3.4.8 / 0.6.11（NuGet 均已发布最新版）。
+  6. **清单迁移**：`mod_manifest.json` → `InfiniteUpgradeSystem.json`（snake_case、
+     `min_game_version`、依赖 `min_version`、版本号去 v 前缀）。csproj 部署同步改名。
+     注：113 目前仍兼容旧文件名（日志可证），但上游规范已改。
+  7. **版本号**：manifest `version` 2.4.1 → 2.5.0。
+- **编译陷阱（重要）**：`CS0115`（override 找不到基类方法）属声明层错误——Roslyn 遇它**跳过方法体编译**，
+  同文件/其它文件的方法体错误（如 LoseMaxHp 的 CS1503）在修好 CS0115 前不会显示。逐层修。
+- **教程快照**：上游最新 `c3eeb78`（2026-09-11），尚无 113 内容；本节为一手核实记录。
+- **验证**：`dotnet build` 0 错；`mods/InfiniteUpgradeSystem/` 部署 `InfiniteUpgradeSystem.json` +
+  dll + localization。运行时验证待游戏内确认（本地 mod 需在设置里启用，且与 workshop 版 3763412710 同 id 互斥）。

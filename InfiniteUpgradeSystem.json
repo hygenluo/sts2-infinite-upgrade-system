@@ -3,13 +3,13 @@
   "name": "无限升级系统",
   "author": "InfiniteUpgrade",
   "description": "提供无限升级系统UI，消耗点数对卡牌进行无限升级。",
-  "version": "2.4.1",
-  "minGameVersion": "v0.107.1",
+  "version": "2.5.0",
+  "min_game_version": "0.107.1",
   "has_pck": false,
   "has_dll": true,
   "dependencies": [
-    { "id": "BaseLib", "minVersion": "v3.3.2" },
-    { "id": "STS2-RitsuLib", "minVersion": "v0.5.11" }
+    { "id": "BaseLib", "min_version": "3.4.8" },
+    { "id": "STS2-RitsuLib", "min_version": "0.6.11" }
   ],
   "affects_gameplay": true
 }
