@@ -19,7 +19,7 @@ Scripts/
 ├── UpgradeRefundService.cs       # ★ 回退服务（返还 floor(0.8×已付) / 流水项 / 同步执行）
 ├── AbilityOperationHelper.cs     # 能力操作引擎（Power 应用/初始 boost/即时生效与回退）
 ├── RunStateHook.cs               # 游戏生命周期订阅 + 检查点持久化 + 房间/战斗点数发放
-├── CompositeEnchantment.cs       # 合成附魔（多附魔共存）+ 2 个克隆/文本补丁
+├── CompositeEnchantment.cs       # 【仅旧档迁移】已废弃的复合附魔墓碑（清槽位用），不再有子附魔
 ├── SavePaths.cs                  # 存档路径（user://mod_data/...）+ 旧档迁移
 ├── Skills/
 │   ├── SkillRegistry.cs          # 技能注册表（等级化 + skills_<seed>.json）
@@ -29,8 +29,7 @@ Scripts/
 │   └── UpgradePurchaseAction.cs  # ★ 同步 action：INetAction + GameAction + 入队入口
 ├── Patches/
 │   ├── EnergyKeepPatch.cs        # 能量跨回合保留
-│   ├── LocStringPromptPatch.cs   # 模组 key 本地化解析（选牌提示 + 合成附魔文本）
-│   ├── NCardEnchantMarkersPatch.cs # 卡面多附魔标记
+│   ├── LocStringPromptPatch.cs   # 模组 key 本地化解析（选牌提示 + 旧版复合附魔文本兜底）
 │   └── DivergenceDiagnostics.cs  # checksum 分歧时的状态转储
 └── UiComponents/
     ├── UpgradeTheme.cs           # ★ UI v3 主题：游戏色板 + MegaLabel/样式框工厂 + 游戏字体解析

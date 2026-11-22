@@ -395,38 +395,44 @@ public static class CardOperationHelper
     }
 
     /// <summary>
-    /// 撤销一层附魔：同种叠层时扣掉原版数值，扣到 0 则移除该子附魔。
-    /// 注意：附魔的一次性 OnEnchant 副作用（如减费）不回滚 —— 与 CompositeEnchantment
-    /// 既有的「替换时不回滚」行为一致。
+    /// 撤销卡上的附魔（路线 A：一卡一附魔）。只有卡上现有附魔与记录的类型一致才撤销，
+    /// 否则说明这张牌后来被换过附魔，不能拿旧记录去回退。
+    /// 注意：附魔的一次性 OnEnchant 副作用（如余烬把费用改写成 0、部分附魔加关键词）不回滚 ——
+    /// 原版没有「卸下附魔」的 API，这里只能清槽位；数值类附魔走 hook 实时计算，清掉即失效。
     /// </summary>
     private static bool TryRevertEnchant(CardModel card, string? typeName)
     {
         if (string.IsNullOrEmpty(typeName)) return false;
-        if (card.Enchantment is not CompositeEnchantment composite)
+        var current = card.Enchantment;
+        if (current == null)
         {
-            Log.Warn($"[IU] Refund enchant: {card.Id.Entry} has no composite enchantment.");
+            Log.Warn($"[IU] Refund enchant: {card.Id.Entry} has no enchantment to remove.");
             return false;
         }
-        var sub = composite.Subs.FirstOrDefault(s => s.GetType().Name == typeName);
-        if (sub == null)
+        if (current.GetType().Name != typeName)
         {
-            Log.Warn($"[IU] Refund enchant: {typeName} not present on {card.Id.Entry} " +
-                     "(可能已被「替换最早附魔」顶掉，无法回退)。");
+            Log.Warn($"[IU] Refund enchant: {card.Id.Entry} carries {current.GetType().Name}, " +
+                     $"not the recorded {typeName} (可能已被新附魔替换，无法回退)。");
             return false;
         }
-
+        if (!card.IsMutable)
+        {
+            Log.Warn($"[IU] Refund enchant: {card.Id.Entry} is immutable.");
+            return false;
+        }
+        // 同种可叠加的附魔可能是"叠了几层"：每次回退只扣回一份原版数值，扣到只剩一份才清槽位。
         int original = GetOriginalAmount(typeName);
-        if (sub.Amount > original)
+        if (current.Amount > original)
         {
-            sub.Amount -= original;
-            sub.RecalculateValues();
+            current.Amount -= original;
+            current.RecalculateValues();
+            card.DynamicVars.RecalculateForUpgradeOrEnchant();
         }
         else
         {
-            composite.RemoveSub(typeName);
+            card.ClearEnchantmentInternal();
+            card.DynamicVars.RecalculateForUpgradeOrEnchant();
         }
-        card.DynamicVars.RecalculateForUpgradeOrEnchant();
-        composite.RefreshPrimaryDisplay();
         if (card.Owner != null) RefreshAllVisuals(card.Owner);
         return true;
     }
@@ -539,17 +545,11 @@ public static class CardOperationHelper
                 if (cur > 0) { card.EnergyCost.SetCustomBaseCost(cur - 1); CardUpgradeTracker.RecordModification(player, card, seed, modType, cost: cost); }
                 break;
             case CardUpgradeTracker.ModType.Enchant:
-                // 替换逻辑在 action 内重算（两端附魔列表一致 → replacedType 一致）
-                var currentTypes = GetCardEnchantments(card);
-                string? replacedType = null;
-                if (!currentTypes.Any(e => e.Type == arg) && currentTypes.Count >= GetEnchantLimit(card))
-                    replacedType = currentTypes[0].Type;
-                if (!ApplyEnchantmentToCard(card, arg)) break;
-                if (replacedType != null && card.Enchantment is CompositeEnchantment composite)
-                    composite.RemoveSub(replacedType);
-                if (replacedType != null)
-                    CardUpgradeTracker.RemoveEnchantmentEntries(player, card, seed, replacedType);
-                CardUpgradeTracker.RecordModification(player, card, seed, CardUpgradeTracker.ModType.Enchant, arg, cost);
+                // 路线 A（原版语义，一卡一附魔）：能否施加只取决于「卡上现有附魔 + arg」，
+                // 两端看到的是同一张卡（action 在两端执行，卡状态已一致）→ 结论一致。
+                // 不再有"已达上限就替换最早附魔"的逻辑。
+                if (ApplyEnchantmentToCard(card, arg))
+                    CardUpgradeTracker.RecordModification(player, card, seed, CardUpgradeTracker.ModType.Enchant, arg, cost);
                 break;
             case CardUpgradeTracker.ModType.DeckRemove:
                 int idx = FindCardIndexInDeck(player, card);
@@ -745,13 +745,23 @@ public static class CardOperationHelper
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // 卡牌附魔（update05：多种附魔共存，合成模型 CompositeEnchantment）
+    // 卡牌附魔（路线 A：原版语义，一卡一附魔）
+    //
+    // 参照海克斯符文（HextechRunes 0.10.1 / 拓展包）的做法：不自造包装附魔，
+    // 附魔就是真实的 EnchantmentModel（真实 ModelId），施加走原版 CardCmd.Enchant：
+    //   - 牌上没有附魔 → 挂上；
+    //   - 已有同种且 IsStackable → Amount 叠加；
+    //   - 其余情况 CanEnchant 返回 false（原版一卡一附魔）。
+    // 持久化由引擎负责：SerializableCard.Enchantment 带 Id+Amount+Props，
+    // 反序列化时 EnchantmentModel.FromSerializable → card.Enchantment.ModifyCard() → OnEnchant()
+    // 会把一次性副作用（如余烬减费）与带 [SavedProperty] 的计数重放出来。
+    // 因此附魔本身**不再需要本模组的记录重放**跨端/跨存档；记录只保留给回退算账。
+    // 代价（相对旧的 CompositeEnchantment）：一卡只能一个附魔，没有"多附魔/替换"。
     // ═══════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// 给卡牌应用附魔：同种 +1 层，新种添加。读档 ReapplyAll 也走此方法（幂等重建）。
-    /// 游戏存档把合成附魔记为无附魔，由 CardUpgradeTracker 持久化附魔列表。
-    /// 子附魔创建失败时返回 false 且不挂空合成附魔（空合成附魔会导致伤害倍率异常）。
+    /// 给卡牌施加附魔（原版语义）。读档/对端同步的修复路径也会调它，因此必须幂等：
+    /// 卡上已有附魔时只有「同种且可叠加」才继续叠加，其余情况返回 false 且不动这张卡。
     /// </summary>
     public static bool ApplyEnchantmentToCard(CardModel card, string enchantType)
     {
@@ -761,70 +771,25 @@ public static class CardOperationHelper
             Log.Warn($"InfiniteUpgrade: ApplyEnchantment skip on immutable card {card.Id.Entry}.");
             return false;
         }
-
-        var sub = CreateEnchantmentSub(card, enchantType);
-        if (sub == null)
+        var canonical = GetEnchantCanonical(enchantType);
+        if (canonical == null)
         {
-            Log.Warn($"InfiniteUpgrade: cannot create enchantment {enchantType} for {card.Id.Entry}.");
+            Log.Warn($"InfiniteUpgrade: unknown enchantment type {enchantType}.");
             return false;
         }
-
-        var composite = card.Enchantment as CompositeEnchantment;
-        if (composite == null)
+        // 原版门禁：卡类型 / 牌组里的 Unplayable / 已有附魔的槽位规则都在这里
+        if (!canonical.CanEnchant(card))
         {
-            composite = CreateCompositeInstance();
-            card.EnchantInternal(composite, 1);
+            Log.Warn($"InfiniteUpgrade: {enchantType} cannot enchant {card.Id.Entry} " +
+                     $"(current={(card.Enchantment?.GetType().Name ?? "none")}).");
+            return false;
         }
-
-        var existing = composite.Subs.FirstOrDefault(s => s.GetType() == sub.GetType());
-        if (existing != null)
-        {
-            existing.Amount += sub.Amount; // 同种叠加：每次购买施加原版数值
-            existing.RecalculateValues();
-        }
-        else
-        {
-            composite.Subs.Add(sub);
-            sub.ModifyCard(); // 触发子附魔 OnEnchant（如 TezcatarasEmber 减费）
-        }
-        card.DynamicVars.RecalculateForUpgradeOrEnchant();
-        composite.RefreshPrimaryDisplay();
-
+        // 原版施加入口：内部做 EnchantInternal + ModifyCard（触发 OnEnchant）+ FinalizeUpgradeInternal，
+        // 并写入本层 run history 的 CardsEnchanted。
+        CardCmd.Enchant((EnchantmentModel)canonical.ToMutable(), card, GetOriginalAmount(enchantType));
         if (card.Owner != null)
             RefreshAllVisuals(card.Owner);
         return true;
-    }
-
-    /// <summary>
-    /// 获取合成附魔可变实例。CompositeEnchantment 是 AbstractModel 子类，启动时被 ModelDb
-    /// 自动扫描注册（Id=ENCHANTMENT.COMPOSITE_ENCHANTMENT）——此时 `new` 必抛
-    /// DuplicateModelException。因此取已注册 canonical + ToMutable（内部走 MutableClone，
-    /// 不调用构造函数）。若某环境下未被注册（异常），回退到 `new` + MutableClone。
-    /// </summary>
-    private static CompositeEnchantment CreateCompositeInstance()
-    {
-        try
-        {
-            var canonical = ModelDb.Enchantment<CompositeEnchantment>();
-            return (CompositeEnchantment)canonical.ToMutable();
-        }
-        catch
-        {
-            var bare = new CompositeEnchantment();
-            return (CompositeEnchantment)bare.MutableClone();
-        }
-    }
-
-    /// <summary>创建子附魔可变实例并挂到卡牌（设 Card + Amount=原版数值，不触发 OnEnchant）。</summary>
-    private static EnchantmentModel? CreateEnchantmentSub(CardModel card, string enchantType)
-    {
-        var type = FindEnchantmentType(enchantType);
-        if (type == null) return null;
-        var canonical = GetCanonicalEnchantment(type);
-        if (canonical == null) return null;
-        var sub = (EnchantmentModel)canonical.ToMutable();
-        sub.ApplyInternal(card, GetOriginalAmount(enchantType));
-        return sub;
     }
 
     /// <summary>
@@ -875,40 +840,22 @@ public static class CardOperationHelper
         }
     }
 
-    /// <summary>卡牌当前附魔列表（类型名, 层数）。</summary>
+    /// <summary>卡牌当前附魔（0 或 1 条：类型名, 层数）。</summary>
     public static List<(string Type, int Amount)> GetCardEnchantments(CardModel card)
     {
-        if (card?.Enchantment is CompositeEnchantment composite)
-            return composite.Subs.Select(s => (s.GetType().Name, s.Amount)).ToList();
-        if (card?.Enchantment != null)
-            return new() { (card.Enchantment.GetType().Name, card.Enchantment.Amount) };
-        return new();
+        if (card?.Enchantment == null) return new();
+        return new() { (card.Enchantment.GetType().Name, card.Enchantment.Amount) };
     }
 
-    /// <summary>稀有度附魔种类上限：普通2 / 罕见3 / 稀有5 / 其它3。</summary>
-    public static int GetEnchantLimit(CardModel card) => card.Rarity switch
-    {
-        CardRarity.Common => 2,
-        CardRarity.Uncommon => 3,
-        CardRarity.Rare => 5,
-        _ => 3
-    };
-
     /// <summary>
-    /// 附魔可加性判断（参照游戏 CanEnchant 规则，但适配合成附魔）：
-    /// 只做类型门禁 + 不可玩牌排除。同种叠层 / 新种上限 / 替换由流程处理——
-    /// 已达上限时新种仍可选（选后替换最早的那个），因此此处不拦截上限。
+    /// 原版可附魔判断（卡类型门禁 + 牌组 Unplayable 排除 + 已有附魔的槽位规则）。
+    /// 路线 A 之后不再有"种类上限/替换最早附魔"，一切按原版 CanEnchant 走。
     /// </summary>
     public static bool CanEnchant(CardModel card, string enchantType)
     {
         if (card == null) return false;
-        var type = FindEnchantmentType(enchantType);
-        if (type == null) return false;
-        var canonical = GetCanonicalEnchantment(type);
-        if (canonical == null) return false;
-        if (!canonical.CanEnchantCardType(card.Type)) return false;
-        if (card.Pile?.Type == PileType.Deck && card.Keywords.Contains(CardKeyword.Unplayable)) return false;
-        return true;
+        var canonical = GetEnchantCanonical(enchantType);
+        return canonical != null && canonical.CanEnchant(card);
     }
 
     /// <summary>获取附魔的 canonical 模板（供 UI 显示名称/描述）。</summary>
@@ -919,8 +866,9 @@ public static class CardOperationHelper
     }
 
     /// <summary>
-    /// 卡牌附魔流程（v1.4.3）：选卡 → 选附魔 → 入队 CardMod action（原子扣点+附魔+替换+记录，跨端一致）。
-    /// 替换逻辑（replacedType）在 action 内重算，两端一致。
+    /// 卡牌附魔流程：选卡 → 选附魔 → 入队 CardMod action（原子扣点+附魔+记录，跨端一致）。
+    /// 路线 A：施加减法由原版 CanEnchant/CardCmd.Enchant 决定（一卡一附魔），
+    /// 两端在 action 内各算一次，结论一致。
     /// </summary>
     public static async Task<bool> AddEnchantment(int cost, string promptKey = "")
     {

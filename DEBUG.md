@@ -1,5 +1,49 @@
 # DEBUG 记录 (InfiniteUpgradeSystem)
 
+## 附魔改造：放弃复合附魔，改回原版一卡一附魔（路线 A，2026-11-22）
+
+- **日期**：2026-11-22
+- **动机**：上一轮查明「合成附魔 `CompositeEnchantment` 的 `Subs` 不在 `SerializableCard` 里」
+  是多人分歧/黑屏与跨端失效的来源之一。调研了生态里两种可行写法后选定**路线 A**
+  （对齐海克斯符文）：不自造包装附魔，走原版语义，持久化交给引擎。
+- **调研依据**（详见 `sts2_mods` 工作区报告与 `analysis\` 快照）：
+  - 海克斯符文 0.10.1 **没有**任何 `CanEnchant`/`EnchantInternal`/`set_Enchantment` 补丁，
+    附魔就是真实 ModelId；`[SavedProperty]` 计数 + `OnEnchant()` 重放负责持久化；
+  - 海克斯拓展包曾有 `SponsorCompositeEnchantment`，**已废弃**成迁移壳（只保留第一个、其余丢弃）；
+  - Limitless 的 `MultiEnchantment` 能一牌多附魔，靠 `[SavedProperty] List<SerializableCard>`
+    + 隐藏存储卡 + 4 处补丁，代价是第三方 `card.Enchantment is X` 全部失明（进化/熵减/余烬坏掉）。
+- **修改**：
+  1. `Scripts/CompositeEnchantment.cs`：从"包装附魔（转发效果 + 子附魔列表 + 2 个补丁）"
+     缩成**旧档墓碑**（`CanEnchant => false`、无子附魔、无转发）。**类型名必须保留**：
+     旧存档里的 `ENCHANTMENT.COMPOSITE_ENCHANTMENT` 一旦解析失败会退化成
+     `DeprecatedEnchantment`，那个空壳会永久占住唯一的附魔槽位。
+  2. `Scripts/CardOperationHelper.cs`：`ApplyEnchantmentToCard` 改走原版
+     `CardCmd.Enchant(canonical.ToMutable(), card, 原版数值)`；删掉
+     `CreateCompositeInstance` / `CreateEnchantmentSub` / `GetEnchantLimit`；
+     `CanEnchant` 直接委托 `canonical.CanEnchant(card)`（卡类型 + 牌组 Unplayable + 槽位规则）；
+     `ApplyCardMod` 的 Enchant 分支删掉"达上限替换最早附魔"的整套逻辑；
+     `TryRevertEnchant` 改为「类型与记录一致才撤」：同种可叠加的多层每次只扣一份原版数值，
+     剩一份时 `ClearEnchantmentInternal()`。
+  3. `Scripts/CardUpgradeTracker.cs`：Enchant 记录**不再用于施加**（附魔随 `SerializableCard`
+     自己过存档/过网络）；只在两种情况下补：① 旧档 `CompositeEnchantment` 空壳先清槽位，
+     ② 卡上确实没有附魔时按记录补一次。新增 `ClearLegacyComposites`（在 `ReapplyAll` 开头，
+     即使没有任何记录也清扫）。删除 `RemoveEnchantmentEntries`。
+  4. 删除 `Scripts/Patches/NCardEnchantMarkersPatch.cs`（卡面多附魔标记）；
+     `LocStringPromptPatch` 去掉 `LastSummary` 分支，只保留旧版复合附魔的标题/描述兜底。
+  5. UI：`EnchantSelectPanel` 标题不再显示 `x/y`、去掉"替换最早附魔"提示，改为
+     「原版规则：一张牌只能有一个附魔，只有同种可叠加附魔能继续叠」；同种叠加项标「（叠加）」。
+     中英 `cards.json` 同步更新（并删掉已废弃的 `UI_ENCHANT_FULL`）。
+- **迁移语义**：旧存档里一张牌上的多个附魔 → 只保留记录里**第一个** Enchant（与拓展包同策略），
+  其余丢弃并在日志里 WARN。旧复合附魔壳在 `RunStarted`（以及房间同步的重放钩子）被清扫。
+- **取舍（明确接受）**：不再支持"一卡多附魔 / 达上限替换"；装 Limitless「无上限附魔」的玩家
+  仍会看到一卡多附魔，但那是 Limitless 的包装，**与本模组无关**——本模组只施加真实附魔，
+  也确实会被它的包装接管（`card.Enchantment as X` 之类的判断在包装下失效），这一点由 Limitless 负责。
+- **验证**：`dotnet build -c Debug` 0 warning 0 error，已部署 mods。
+  实测要点：① 附一张「锋利」→ 打出去伤害变高；② 存档退出重进，附魔与数值仍在；
+  ③ 同一张牌再附别的附魔应被拒（面板里不出现可选项）；④ 回退附魔可清槽位并返点；
+  ⑤ 旧档（有复合附魔）读入后日志出现 `cleared N legacy composite enchantment(s)`，
+  且牌上剩一个可用的原版附魔。
+
 ## 多人联机改牌 → 进房间黑屏：选牌走了「选择同步」通道 + 派生修改跨端丢失（2026-11-22）
 
 - **日期**：2026-11-22

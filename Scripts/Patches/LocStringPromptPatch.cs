@@ -33,23 +33,18 @@ public static class LocStringRawTextPatch
         catch { /* 非致命 */ }
     }
 
-    /// <summary>解析合成附魔 key（title/description/extraCardText）。</summary>
+    /// <summary>
+    /// 旧存档里的复合附魔壳（路线 A 迁移前会短暂出现在牌组里）没有本地化文本，
+    /// 给个通用标题/描述兜底；读档后 <c>CardUpgradeTracker</c> 会把它清掉，所以只是显示兜底。
+    /// </summary>
     internal static void ResolveComposite(string locTable, string locEntryKey, ref string result)
     {
         if (locTable != "enchantments"
             || !locEntryKey.StartsWith("COMPOSITE_ENCHANTMENT.", StringComparison.OrdinalIgnoreCase))
             return;
 
-        // extraCardText（卡面附加文本）→ 显示子附魔名称（如「腐化」「腐化、动量」）
-        if (locEntryKey.EndsWith(".extraCardText", StringComparison.OrdinalIgnoreCase)
-            && !string.IsNullOrEmpty(CompositeEnchantment.LastSummary))
-        {
-            result = CompositeEnchantment.LastSummary;
-            return;
-        }
-        // title/description → 通用「多重附魔」；UpgradeLoc 不可用时硬编码回退
         var compositeText = UpgradeLoc.Get("INFINITEUPGRADESYSTEM-ENCHANT_COMPOSITE", "");
-        result = string.IsNullOrEmpty(compositeText) ? "多重附魔" : compositeText;
+        result = string.IsNullOrEmpty(compositeText) ? "多重附魔（旧版）" : compositeText;
     }
 }
 

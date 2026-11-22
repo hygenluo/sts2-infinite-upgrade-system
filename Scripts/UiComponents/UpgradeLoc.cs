@@ -133,7 +133,7 @@ public static class UpgradeLoc
     public const string UiClassDefect = "INFINITEUPGRADESYSTEM-UI_CLASS_DEFECT";
     public const string UiEnchantTitle = "INFINITEUPGRADESYSTEM-UI_ENCHANT_TITLE";
     public const string UiEnchantCurrent = "INFINITEUPGRADESYSTEM-UI_ENCHANT_CURRENT";
-    public const string UiEnchantFull = "INFINITEUPGRADESYSTEM-UI_ENCHANT_FULL";
+    public const string UiEnchantOccupied = "INFINITEUPGRADESYSTEM-UI_ENCHANT_OCCUPIED";
     public const string UiEnchantNone = "INFINITEUPGRADESYSTEM-UI_ENCHANT_NONE";
     public const string UiEnchantOwned = "INFINITEUPGRADESYSTEM-UI_ENCHANT_OWNED";
     public const string UiCancel = "INFINITEUPGRADESYSTEM-UI_CANCEL";

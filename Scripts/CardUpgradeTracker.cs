@@ -202,9 +202,36 @@ public static class CardUpgradeTracker
     /// 3. 未匹配记录（牌组变化导致身份偏移）→ 按 TemplateId 回退匹配未被占用的同名卡
     /// 4. 回退匹配成功后把记录迁移到新身份（下次读档即精确匹配）
     /// </summary>
+    /// <summary>
+    /// 清掉旧版本（路线 A 之前）留在卡上的 <see cref="CompositeEnchantment"/> 空壳。
+    /// 即使这个玩家一条记录都没有也必须清：空壳会永久占住唯一的附魔槽位。
+    /// 旧记录里第一个 Enchant 会在随后的重放中补回来，其余丢弃（一卡一附魔）。
+    /// </summary>
+    private static void ClearLegacyComposites(Player player)
+    {
+        int cleared = 0;
+        foreach (var card in player.Deck.Cards)
+        {
+            if (card?.Enchantment is not CompositeEnchantment) continue;
+            if (!card.IsMutable) continue;
+            try
+            {
+                card.ClearEnchantmentInternal();
+                cleared++;
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"InfiniteUpgrade: clear legacy enchant failed on {card.Id.Entry}: {ex.Message}");
+            }
+        }
+        if (cleared > 0)
+            Log.Warn($"InfiniteUpgrade: cleared {cleared} legacy composite enchantment(s) on player {player.NetId}.");
+    }
+
     public static void ReapplyAll(Player player)
     {
         if (player?.Deck?.Cards == null) return;
+        ClearLegacyComposites(player);
         var bucket = Bucket(player);
         if (bucket.Count == 0) return;
 
@@ -612,21 +639,29 @@ public static class CardUpgradeTracker
                 if (cur > 0) card.EnergyCost.SetCustomBaseCost(cur - 1);
                 break;
             case ModType.Enchant:
-                if (entry.Keyword != null)
+                // 路线 A：附魔本体随 SerializableCard 一起过存档/过网络（引擎负责），
+                // 正常情况下这里**不该再施加**。只有两种情况需要补：
+                //   ① 旧存档里的 CompositeEnchantment 空壳 —— 必须清掉，否则它占着唯一的附魔槽位；
+                //   ② 卡上确实没有附魔（例如被第三方 mod 清掉 / 旧档记录迁移）。
+                if (card.Enchantment is CompositeEnchantment)
+                {
+                    Log.Warn($"InfiniteUpgrade: clearing legacy composite enchantment on {card.Id.Entry} " +
+                             "(路线 A：一卡一附魔，旧壳已废弃)。");
+                    card.ClearEnchantmentInternal();
+                }
+                if (entry.Keyword == null) break;
+                if (card.Enchantment == null)
+                {
                     CardOperationHelper.ApplyEnchantmentToCard(card, entry.Keyword);
+                }
+                else if (card.Enchantment.GetType().Name != entry.Keyword)
+                {
+                    Log.Warn($"InfiniteUpgrade: {card.Id.Entry} already carries " +
+                             $"{card.Enchantment.GetType().Name}; recorded enchantment {entry.Keyword} skipped " +
+                             "(一卡一附魔，旧记录里多出来的附魔已丢弃)。");
+                }
                 break;
         }
-    }
-
-    /// <summary>移除某张卡指定附魔类型的全部记录（多种附魔替换用）。</summary>
-    public static void RemoveEnchantmentEntries(Player player, CardModel card, string seed, string enchantType)
-    {
-        if (player == null || card == null) return;
-        var bucket = Bucket(player);
-        string identity = GetCardIdentity(card, player.Deck.Cards);
-        if (!bucket.TryGetValue(identity, out var rec)) return;
-        rec.Entries.RemoveAll(e => e.Type == nameof(ModType.Enchant) && e.Keyword == enchantType);
-        SaveToDisk(seed);
     }
 
     private static string GetFilePath(string seed) => SavePaths.GetFilePath("card_upgrades", seed);

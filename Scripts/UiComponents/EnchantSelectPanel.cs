@@ -9,8 +9,8 @@ using MegaCrit.Sts2.Core.Models;
 namespace InfiniteUpgradeSystem.UiComponents;
 
 /// <summary>
-/// 附魔选择弹窗（UI v3）：选卡后列出该卡兼容的附魔（类型门禁 + 上限），点击选中；
-/// Esc / 取消按钮返回 null。
+/// 附魔选择弹窗（UI v3）：选卡后列出该卡**当前可施加**的附魔（走原版 CanEnchant 门禁：
+/// 卡类型 / 牌组 Unplayable / 一卡一附魔的槽位规则），点击选中；Esc / 取消按钮返回 null。
 /// 全部文本使用游戏自带 MegaLabel（UpgradeTheme 工厂），配色与主面板一致。
 /// </summary>
 public sealed partial class EnchantSelectPanel : Control
@@ -61,10 +61,10 @@ public sealed partial class EnchantSelectPanel : Control
         margin.AddChild(root);
 
         var current = CardOperationHelper.GetCardEnchantments(card);
-        var limit = CardOperationHelper.GetEnchantLimit(card);
 
+        // 路线 A（原版语义，一卡一附魔）：标题不再显示 "x/y" 的槽位计数
         root.AddChild(UpgradeTheme.Label(
-            UpgradeLoc.Format(UpgradeLoc.UiEnchantTitle, "附魔 {0}/{1}", current.Count, limit),
+            UpgradeLoc.Get(UpgradeLoc.UiEnchantTitle, "附魔"),
             17, UpgradeTheme.Gold, bold: true));
 
         root.AddChild(UpgradeTheme.Label(card.Id.Entry, 12, UpgradeTheme.TextSecondary));
@@ -77,14 +77,13 @@ public sealed partial class EnchantSelectPanel : Control
                 12, UpgradeTheme.TextSecondary);
             curLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
             root.AddChild(curLabel);
-        }
-        if (current.Count >= limit)
-        {
-            var fullLabel = UpgradeTheme.Label(
-                UpgradeLoc.Get(UpgradeLoc.UiEnchantFull, "已达上限，选新附魔将替换最早的那个"),
+
+            var occupied = UpgradeTheme.Label(
+                UpgradeLoc.Get(UpgradeLoc.UiEnchantOccupied,
+                    "原版规则：一张牌只能有一个附魔，只有同种可叠加附魔能继续叠"),
                 12, UpgradeTheme.Danger);
-            fullLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-            root.AddChild(fullLabel);
+            occupied.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            root.AddChild(occupied);
         }
 
         root.AddChild(UpgradeTheme.Divider());
@@ -106,7 +105,7 @@ public sealed partial class EnchantSelectPanel : Control
 
             var btn = UpgradeTheme.TextButton(
                 already
-                    ? UpgradeLoc.Format(UpgradeLoc.UiEnchantOwned, "{0}（已有，+1层）", name)
+                    ? UpgradeLoc.Format(UpgradeLoc.UiEnchantOwned, "{0}（叠加）", name)
                     : name,
                 14, UpgradeTheme.TextMain, () => Resolve(captured),
                 minHeight: 32);
