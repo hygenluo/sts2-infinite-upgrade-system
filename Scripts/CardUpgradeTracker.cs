@@ -147,6 +147,26 @@ public static class CardUpgradeTracker
         return bucket.TryGetValue(identity, out var record) ? record.Entries.Count : 0;
     }
 
+    /// <summary>某张卡上指定类型的修改次数（附魔回退后重算费用/关键词时用）。</summary>
+    public static int CountMods(Player player, CardModel card, ModType type)
+    {
+        if (player == null || card == null) return 0;
+        var bucket = Bucket(player);
+        if (!bucket.TryGetValue(GetCardIdentity(card, player.Deck.Cards), out var rec)) return 0;
+        string name = type.ToString();
+        return rec.Entries.Count(e => e.Type == name);
+    }
+
+    /// <summary>某张卡的修改记录（按记录顺序，只读）。</summary>
+    public static IReadOnlyList<CardModEntry> EntriesFor(Player player, CardModel card)
+    {
+        if (player == null || card == null) return Array.Empty<CardModEntry>();
+        var bucket = Bucket(player);
+        return bucket.TryGetValue(GetCardIdentity(card, player.Deck.Cards), out var rec)
+            ? rec.Entries
+            : Array.Empty<CardModEntry>();
+    }
+
     /// <summary>该玩家全部卡牌修改记录（UI 构建回退流水；identity → 记录）。</summary>
     public static IReadOnlyDictionary<string, List<CardModEntry>> Snapshot(Player player)
     {

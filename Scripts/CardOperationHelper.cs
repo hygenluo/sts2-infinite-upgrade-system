@@ -332,7 +332,7 @@ public static class CardOperationHelper
             return false;
         }
         card = EnsureMutableInDeck(player, card);
-        if (!RevertCardMod(card, modType, entry.Value.Keyword))
+        if (!RevertCardMod(player, card, modType, entry.Value.Keyword))
         {
             Log.Warn($"[IU] Refund: revert {modType} failed on {card.Id.Entry} (arg={entry.Value.Keyword})");
             return false;
@@ -355,7 +355,7 @@ public static class CardOperationHelper
     }
 
     /// <summary>逆操作改卡（与 ApplyCardMod 一一对应，数值/词条/附魔全为精确逆）。</summary>
-    private static bool RevertCardMod(CardModel card, CardUpgradeTracker.ModType modType, string? arg)
+    private static bool RevertCardMod(Player? player, CardModel card, CardUpgradeTracker.ModType modType, string? arg)
     {
         if (card == null) return false;
         switch (modType)
@@ -388,7 +388,7 @@ public static class CardOperationHelper
                 card.AddKeyword(kr);
                 return true;
             case CardUpgradeTracker.ModType.Enchant:
-                return TryRevertEnchant(card, arg);
+                return TryRevertEnchant(player, card, arg);
             default:
                 return false;
         }
@@ -398,10 +398,10 @@ public static class CardOperationHelper
     /// 撤销卡上的附魔（路线 A：一卡一附魔）。
     /// 装了 Limitless「无上限附魔」时附魔会被包进 <c>MultiEnchantment</c>，
     /// 所以这里统一交给 <see cref="EnchantmentAccess"/>：直挂就扣层/清槽位，包装内就精确摘掉那一个。
-    /// 注意：附魔的一次性 OnEnchant 副作用（如余烬把费用改写成 0、部分附魔加关键词）不回滚 ——
-    /// 原版没有「卸下附魔」的 API，这里只能清槽位；数值类附魔走 hook 实时计算，清掉即失效。
+    /// 清完槽位后 **必须** 再调 <see cref="RecomputeAfterEnchantRemoval"/> —— 原版把附魔槽位置空
+    /// 并不会撤销附魔在 <c>OnEnchant()</c> 里对卡牌本体做的一次性改动。
     /// </summary>
-    private static bool TryRevertEnchant(CardModel card, string? typeName)
+    private static bool TryRevertEnchant(Player? player, CardModel card, string? typeName)
     {
         if (string.IsNullOrEmpty(typeName)) return false;
         if (!EnchantmentAccess.Remove(card, typeName, out var reason))
@@ -409,8 +409,81 @@ public static class CardOperationHelper
             Log.Warn($"[IU] Refund enchant: cannot remove {typeName} from {card.Id.Entry} — {reason}.");
             return false;
         }
+        RecomputeAfterEnchantRemoval(player, card);
         if (card.Owner != null) RefreshAllVisuals(card.Owner);
         return true;
+    }
+
+    /// <summary>
+    /// 撤销附魔的一次性副作用。原版没有「卸下附魔」的 API —— <c>CardCmd.ClearEnchantment</c>
+    /// 只是把槽位置空，而某些附魔的 <c>OnEnchant()</c> 会**直接改写卡牌本体**：
+    /// 余烬(<c>TezcatarasEmber</c>) 把费用抹成 0 并加 Eternal 关键词；第三方附魔也可能这么做。
+    /// 所以清完槽位后按「同等级原型卡 + 本模组的记录」把费用与关键词重算一遍：
+    ///   - 费用基准 = 原型卡升到同等级的 _base，再减掉记录的每次 <c>EnergyReduce</c>(-1)；
+    ///   - 关键词 = 原型卡同等级的关键词集合，再按记录顺序套用 <c>KeywordAdd/KeywordRemove</c>。
+    /// 走 hook 实时计算的附魔（锋利/动量/余烬的+伤害）不用管：槽位一清就自动失效。
+    /// </summary>
+    public static void RecomputeAfterEnchantRemoval(Player? player, CardModel card)
+    {
+        if (card == null || !card.IsMutable) return;
+        try
+        {
+            var canonical = ModelDb.GetById<CardModel>(card.Id);
+            if (canonical == null) return;
+            var twin = canonical.ToMutable();
+
+            // 同等级原型卡：把原版升级的数值/费用/关键词都算进去
+            int level = Math.Max(0, card.CurrentUpgradeLevel);
+            for (int i = 0; i < level; i++)
+            {
+                twin.UpgradeInternal();
+                twin.FinalizeUpgradeInternal();
+            }
+
+            // ── 费用 ─────────────────────────────────────────────
+            if (!twin.EnergyCost.CostsX && !card.EnergyCost.CostsX)
+            {
+                int baseline = twin.EnergyCost.GetWithModifiers(CostModifiers.None);
+                int reduce = player != null
+                    ? CardUpgradeTracker.CountMods(player, card, CardUpgradeTracker.ModType.EnergyReduce)
+                    : 0;
+                int restored = Math.Max(0, baseline - reduce);
+                if (card.EnergyCost.GetWithModifiers(CostModifiers.None) != restored)
+                {
+                    Log.Info($"InfiniteUpgrade: restore cost of {card.Id.Entry}: " +
+                             $"{card.EnergyCost.GetWithModifiers(CostModifiers.None)} → {restored} " +
+                             $"(canonical@L{level}={baseline}, EnergyReduce×{reduce})");
+                    card.EnergyCost.SetCustomBaseCost(restored);
+                }
+            }
+
+            // ── 关键词 ───────────────────────────────────────────
+            var target = new HashSet<CardKeyword>(twin.Keywords);
+            if (player != null)
+            {
+                foreach (var entry in CardUpgradeTracker.EntriesFor(player, card))
+                {
+                    if (string.IsNullOrEmpty(entry.Keyword)) continue;
+                    if (!Enum.TryParse<CardKeyword>(entry.Keyword, out var keyword)) continue;
+                    if (entry.Type == nameof(CardUpgradeTracker.ModType.KeywordAdd)) target.Add(keyword);
+                    else if (entry.Type == nameof(CardUpgradeTracker.ModType.KeywordRemove)) target.Remove(keyword);
+                }
+            }
+            foreach (var keyword in target)
+            {
+                if (!card.Keywords.Contains(keyword)) card.AddKeyword(keyword);
+            }
+            foreach (var keyword in card.Keywords.ToList())
+            {
+                if (!target.Contains(keyword)) card.RemoveKeyword(keyword);
+            }
+
+            card.DynamicVars.RecalculateForUpgradeOrEnchant();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"InfiniteUpgrade: recompute after enchant removal failed on {card.Id.Entry}: {ex.Message}");
+        }
     }
 
     /// <summary>

@@ -1,5 +1,36 @@
 # DEBUG 记录 (InfiniteUpgradeSystem)
 
+## 附魔回退只清槽位：余烬的「费用归零 + Eternal」没被撤销（2026-11-22）
+
+- **现象**：在回退页撤销「余烬」附魔后，点数确实退了、附魔标记也没了，但卡牌**费用还是 0、还带 Eternal**，
+  余烬的 +3 伤害倒是没了。
+- **日志证据**（`%APPDATA%\SlayTheSpire2\logs\godot.log`，2026-11-22 21:37 这次会话）：
+  - `1465: [INFO] [IU] Refund: Enchant on STRIKE_IRONCLAD (STRIKE_IRONCLAD__0) → +9 pts (player=1, pts=13)`
+  - `1466: [INFO] IU Refund OK kind=card target=STRIKE_IRONCLAD__0 paid=12 refund=9 pts_after=13 player=1`
+    → 回退本身**成功**（记录删了、点退了、槽位清了），失败的是"撤销附魔对卡牌本体的改动"这一步。
+- **根因**：`TezcatarasEmber.OnEnchant()` 直接改写卡牌本体：
+  `Card.EnergyCost.UpgradeBy(-Card.EnergyCost.GetWithModifiers(None))`（把费用抹成 0）+ `Card.AddKeyword(Eternal)`。
+  而原版**没有卸下附魔的 API**：`CardCmd.ClearEnchantment(card)` 的实现就是 `card.ClearEnchantmentInternal()`
+  （反编译 `CardCmd.cs:595`），只把槽位置空，不会撤销 `OnEnchant` 做过的一次性改动。
+  我们上一版也只做了清槽位，所以「费用 0 / Eternal」留在了卡上。
+  只有走 hook 实时计算的那部分（余烬的 +3 伤害）会随槽位清空自动失效 —— 所以现象是"伤害没了、费用和词条还在"。
+- **补充（为什么重进游戏又好像没事）**：`CardEnergyCost._base` 与关键词增删**都不进存档**
+  （`SerializableCard` 只有 Id / 等级 / 附魔 / Props），重进游戏会从原型卡重建，于是这两样自己就没了。
+  但同一局内不会，必须由我们自己撤销。
+- **修改**：
+  1. `CardOperationHelper.TryRevertEnchant` 清完槽位后调 `RecomputeAfterEnchantRemoval(player, card)`；
+  2. 新方法 `RecomputeAfterEnchantRemoval`：用「同等级原型卡」算基准 ——
+     费用 = 原型卡升到同等级的 `_base` 再减掉记录的 `EnergyReduce` 次数（X 费卡跳过）；
+     关键词 = 原型卡同等级关键词集合，再按记录顺序套用 `KeywordAdd/KeywordRemove`；
+     最后只做差量同步（缺的 `AddKeyword`、多的 `RemoveKeyword`），并 `RecalculateForUpgradeOrEnchant()`。
+     费用真的变化时打一条 `restore cost of X: 0 → 1 (canonical@L1=1, EnergyReduce×0)` 便于核对。
+  3. `CardUpgradeTracker` 新增 `CountMods(player, card, type)` / `EntriesFor(player, card)`；
+     `RevertCardMod` 增加 `player` 参数（取记录用）。
+- **验证**：`dotnet build -c Debug` 0 warning 0 error，已部署 mods。
+  实测要点：附「余烬」（费用 0 + Eternal + 伤害+3）→ 回退 → 费用回原值、Eternal 消失、+3 伤害消失、点数返还；
+  日志里能看到 `InfiniteUpgrade: restore cost of STRIKE_IRONCLAD: 0 → 1`。
+  其它附魔（锋利/动量等纯 hook 的）回退后数值不变即正确（基准与现状一致时不会动卡）。
+
 ## 附魔回退失效：Limitless 把附魔包进 MultiEnchantment，我们的类型判断失明（2026-11-22）
 
 - **现象**：回退页点「附魔」那一条无效 —— 不返点、牌上附魔还在；界面无报错。
