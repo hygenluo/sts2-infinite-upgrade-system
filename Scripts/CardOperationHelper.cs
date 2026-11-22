@@ -395,43 +395,19 @@ public static class CardOperationHelper
     }
 
     /// <summary>
-    /// 撤销卡上的附魔（路线 A：一卡一附魔）。只有卡上现有附魔与记录的类型一致才撤销，
-    /// 否则说明这张牌后来被换过附魔，不能拿旧记录去回退。
+    /// 撤销卡上的附魔（路线 A：一卡一附魔）。
+    /// 装了 Limitless「无上限附魔」时附魔会被包进 <c>MultiEnchantment</c>，
+    /// 所以这里统一交给 <see cref="EnchantmentAccess"/>：直挂就扣层/清槽位，包装内就精确摘掉那一个。
     /// 注意：附魔的一次性 OnEnchant 副作用（如余烬把费用改写成 0、部分附魔加关键词）不回滚 ——
     /// 原版没有「卸下附魔」的 API，这里只能清槽位；数值类附魔走 hook 实时计算，清掉即失效。
     /// </summary>
     private static bool TryRevertEnchant(CardModel card, string? typeName)
     {
         if (string.IsNullOrEmpty(typeName)) return false;
-        var current = card.Enchantment;
-        if (current == null)
+        if (!EnchantmentAccess.Remove(card, typeName, out var reason))
         {
-            Log.Warn($"[IU] Refund enchant: {card.Id.Entry} has no enchantment to remove.");
+            Log.Warn($"[IU] Refund enchant: cannot remove {typeName} from {card.Id.Entry} — {reason}.");
             return false;
-        }
-        if (current.GetType().Name != typeName)
-        {
-            Log.Warn($"[IU] Refund enchant: {card.Id.Entry} carries {current.GetType().Name}, " +
-                     $"not the recorded {typeName} (可能已被新附魔替换，无法回退)。");
-            return false;
-        }
-        if (!card.IsMutable)
-        {
-            Log.Warn($"[IU] Refund enchant: {card.Id.Entry} is immutable.");
-            return false;
-        }
-        // 同种可叠加的附魔可能是"叠了几层"：每次回退只扣回一份原版数值，扣到只剩一份才清槽位。
-        int original = GetOriginalAmount(typeName);
-        if (current.Amount > original)
-        {
-            current.Amount -= original;
-            current.RecalculateValues();
-            card.DynamicVars.RecalculateForUpgradeOrEnchant();
-        }
-        else
-        {
-            card.ClearEnchantmentInternal();
-            card.DynamicVars.RecalculateForUpgradeOrEnchant();
         }
         if (card.Owner != null) RefreshAllVisuals(card.Owner);
         return true;
@@ -780,8 +756,11 @@ public static class CardOperationHelper
         // 原版门禁：卡类型 / 牌组里的 Unplayable / 已有附魔的槽位规则都在这里
         if (!canonical.CanEnchant(card))
         {
-            Log.Warn($"InfiniteUpgrade: {enchantType} cannot enchant {card.Id.Entry} " +
-                     $"(current={(card.Enchantment?.GetType().Name ?? "none")}).");
+            var have = GetCardEnchantments(card);
+            string current = have.Count == 0
+                ? "none"
+                : string.Join("、", have.Select(e => $"{e.Type}×{e.Amount}"));
+            Log.Warn($"InfiniteUpgrade: {enchantType} cannot enchant {card.Id.Entry} (current={current}).");
             return false;
         }
         // 原版施加入口：内部做 EnchantInternal + ModifyCard（触发 OnEnchant）+ FinalizeUpgradeInternal，
@@ -840,12 +819,9 @@ public static class CardOperationHelper
         }
     }
 
-    /// <summary>卡牌当前附魔（0 或 1 条：类型名, 层数）。</summary>
+    /// <summary>卡牌当前附魔（类型名, 层数）。装了 Limitless「无上限附魔」时会展开包装，列出真实附魔。</summary>
     public static List<(string Type, int Amount)> GetCardEnchantments(CardModel card)
-    {
-        if (card?.Enchantment == null) return new();
-        return new() { (card.Enchantment.GetType().Name, card.Enchantment.Amount) };
-    }
+        => EnchantmentAccess.Describe(card?.Enchantment);
 
     /// <summary>
     /// 原版可附魔判断（卡类型门禁 + 牌组 Unplayable 排除 + 已有附魔的槽位规则）。
@@ -863,6 +839,15 @@ public static class CardOperationHelper
     {
         var type = FindEnchantmentType(typeName);
         return type == null ? null : GetCanonicalEnchantment(type);
+    }
+
+    /// <summary>附魔的显示名（游戏本地化标题）；找不到该类型时退回类型名。</summary>
+    public static string GetEnchantDisplayName(string typeName)
+    {
+        var canonical = GetEnchantCanonical(typeName);
+        if (canonical == null) return typeName;
+        try { return canonical.Title.GetFormattedText(); }
+        catch { return typeName; }
     }
 
     /// <summary>

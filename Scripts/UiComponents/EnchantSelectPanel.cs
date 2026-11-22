@@ -62,6 +62,18 @@ public sealed partial class EnchantSelectPanel : Control
 
         var current = CardOperationHelper.GetCardEnchantments(card);
 
+        // 先算"这张牌现在能施加哪些附魔"，再决定要不要显示「一卡一附魔」提示 ——
+        // 装了 Limitless「无上限附魔」时 CanEnchant 会被它放行（可以继续加别的），
+        // 那时提示就是错的，所以只在"确实没有可选项"时才说这句话。
+        var applicable = new List<(string Type, EnchantmentModel Canonical)>();
+        foreach (var typeName in GetEnchantTypes())
+        {
+            if (!CardOperationHelper.CanEnchant(card, typeName)) continue;
+            var canonical = CardOperationHelper.GetEnchantCanonical(typeName);
+            if (canonical == null) continue;
+            applicable.Add((typeName, canonical));
+        }
+
         // 路线 A（原版语义，一卡一附魔）：标题不再显示 "x/y" 的槽位计数
         root.AddChild(UpgradeTheme.Label(
             UpgradeLoc.Get(UpgradeLoc.UiEnchantTitle, "附魔"),
@@ -78,12 +90,15 @@ public sealed partial class EnchantSelectPanel : Control
             curLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
             root.AddChild(curLabel);
 
-            var occupied = UpgradeTheme.Label(
-                UpgradeLoc.Get(UpgradeLoc.UiEnchantOccupied,
-                    "原版规则：一张牌只能有一个附魔，只有同种可叠加附魔能继续叠"),
-                12, UpgradeTheme.Danger);
-            occupied.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-            root.AddChild(occupied);
+            if (applicable.Count == 0)
+            {
+                var occupied = UpgradeTheme.Label(
+                    UpgradeLoc.Get(UpgradeLoc.UiEnchantOccupied,
+                        "原版规则：一张牌只能有一个附魔；要换附魔请先在回退页撤销"),
+                    12, UpgradeTheme.Danger);
+                occupied.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+                root.AddChild(occupied);
+            }
         }
 
         root.AddChild(UpgradeTheme.Divider());
@@ -94,11 +109,8 @@ public sealed partial class EnchantSelectPanel : Control
         list.AddThemeConstantOverride("separation", 4);
         scroll.AddChild(list);
 
-        foreach (var typeName in GetEnchantTypes())
+        foreach (var (typeName, canonical) in applicable)
         {
-            if (!CardOperationHelper.CanEnchant(card, typeName)) continue;
-            var canonical = CardOperationHelper.GetEnchantCanonical(typeName);
-            if (canonical == null) continue;
             string name = canonical.Title.GetFormattedText();
             bool already = current.Any(e => e.Type == typeName);
             var captured = typeName;
@@ -121,7 +133,7 @@ public sealed partial class EnchantSelectPanel : Control
             list.AddChild(btn);
         }
 
-        if (list.GetChildCount() == 0)
+        if (applicable.Count == 0)
         {
             list.AddChild(UpgradeTheme.Label(
                 UpgradeLoc.Get(UpgradeLoc.UiEnchantNone, "没有可用附魔"), 13, UpgradeTheme.TextSecondary));

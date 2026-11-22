@@ -650,16 +650,10 @@ public static class CardUpgradeTracker
                     card.ClearEnchantmentInternal();
                 }
                 if (entry.Keyword == null) break;
-                if (card.Enchantment == null)
-                {
-                    CardOperationHelper.ApplyEnchantmentToCard(card, entry.Keyword);
-                }
-                else if (card.Enchantment.GetType().Name != entry.Keyword)
-                {
-                    Log.Warn($"InfiniteUpgrade: {card.Id.Entry} already carries " +
-                             $"{card.Enchantment.GetType().Name}; recorded enchantment {entry.Keyword} skipped " +
-                             "(一卡一附魔，旧记录里多出来的附魔已丢弃)。");
-                }
+                // 包装附魔（如 Limitless MultiEnchantment）里也认：已经有了就什么都不做，避免重复施加。
+                if (EnchantmentAccess.Has(card.Enchantment, entry.Keyword))
+                    break;
+                CardOperationHelper.ApplyEnchantmentToCard(card, entry.Keyword);
                 break;
         }
     }

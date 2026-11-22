@@ -470,13 +470,21 @@ public sealed partial class UpgradeUIHandler : Control
                 ? " · " + UpgradeLoc.Format(UpgradeLoc.UiRefundOlderMods, "还有 {0} 次更早修改", entries.Count - 1)
                 : "";
 
+            // 附魔回退：标题必须写清"回退的是哪个附魔"，否则只看行只知道是哪张牌
+            string displayName = CardModDisplayName(modType, newest.Keyword);
+            if (modType == CardUpgradeTracker.ModType.Enchant && !string.IsNullOrEmpty(newest.Keyword))
+            {
+                displayName = UpgradeLoc.Format(UpgradeLoc.UiRefundEnchant, "附魔：{0}",
+                    CardOperationHelper.GetEnchantDisplayName(newest.Keyword));
+            }
+
             list.Add(new RefundEntry
             {
                 Kind = RefundKind.CardMod,
                 Target = kv.Key,
                 PaidCost = paid,
                 ModType = (int)modType,
-                DisplayName = CardModDisplayName(modType, newest.Keyword),
+                DisplayName = displayName,
                 Detail = cardName + older,
                 Refundable = revertible,
                 Note = revertible
@@ -484,7 +492,7 @@ public sealed partial class UpgradeUIHandler : Control
                     : UpgradeLoc.Get(UpgradeLoc.UiRefundNoteUpgrade,
                         "「升级卡牌」不支持回退：游戏的降级接口会把整张卡重置为原型，无法只撤销一次升级"),
                 OlderMods = entries.Count - 1,
-                SearchText = $"{cardName} {CardModDisplayName(modType, newest.Keyword)} {newest.Keyword}".ToLower(),
+                SearchText = $"{cardName} {displayName} {CardModDisplayName(modType, newest.Keyword)} {newest.Keyword}".ToLower(),
             });
         }
 

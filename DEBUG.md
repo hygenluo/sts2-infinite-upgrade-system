@@ -1,5 +1,42 @@
 # DEBUG 记录 (InfiniteUpgradeSystem)
 
+## 附魔回退失效：Limitless 把附魔包进 MultiEnchantment，我们的类型判断失明（2026-11-22）
+
+- **现象**：回退页点「附魔」那一条无效 —— 不返点、牌上附魔还在；界面无报错。
+- **日志证据**（`%APPDATA%\SlayTheSpire2\logs\godot2026-11-22T20.06.52.log`）：
+  - `1488: [Limitless] local config (run created): … ench=True …` → 装了 Limitless 且**无上限附魔开着**；
+  - `1712: [WARN] [IU] Refund enchant: STRIKE_IRONCLAD carries MultiEnchantment, not the recorded RoyallyApproved`
+    → 卡上的附魔是 Limitless 的包装附魔，不是我们记录的 `RoyallyApproved`；
+  - `1714: [WARN] IU Refund FAILED kind=card target=STRIKE_IRONCLAD__0 paid=12 pts=5 player=1`
+    → 回退失败，点数没退（同一行重复多次 = 玩家连点了多次）。
+- **根因**：路线 A 之后 `TryRevertEnchant` 用 `card.Enchantment.GetType().Name != 记录的类型` 判断，
+  而 Limitless 的「无上限附魔」会在 `CardModel.set_Enchantment` 前缀里把**任何**附魔包进
+  `Limitless.LimitlessCode.UncappedEnchantments.MultiEnchantment`（真附魔挂在隐藏的存储卡上）。
+  于是槽位里永远是 `MultiEnchantment` → 我们的判断恒为假 → 回退直接返回 false。
+  （这与海克斯「进化/熵减/余烬」在 Limitless 下失效是同一个根：所有 `card.Enchantment is X` 都会失明。）
+- **修改**：
+  1. 新增 `Scripts/EnchantmentAccess.cs`：包装附魔访问层。按优先级拆出"槽位里的真实附魔" ——
+     ① 上游公开契约 `static InnerEnchantments(EnchantmentModel)`（Limitless 提供）；
+     ② 包装附魔的公开成员 `EnchantmentsOnCards`（`List<CardModel>` 存储卡，每张卡的 `Enchantment` 就是真附魔）；
+     ③ 结构式搜索兜底（其它多附魔模组，深度/节点数都设了上限）。
+     并提供 `Find / Describe / Remove`：`Remove` 对直挂附魔做"扣层或清槽位"，
+     对包装附魔做"只摘掉那一个内层附魔 + 调 `SetSerializableCards` 同步它的 `[SavedProperty]` 镜像"，
+     摘空后整槽清掉（空包装会白占槽位）。
+  2. `CardOperationHelper.TryRevertEnchant` 改为委托 `EnchantmentAccess.Remove`，失败时把真实原因打进日志
+     （不再笼统地说"可能已被替换"）。
+  3. `GetCardEnchantments` 走 `EnchantmentAccess.Describe` → 附魔面板里的「当前」会展开包装显示真实附魔名
+     （否则会显示 `MultiEnchantment×1`）。
+  4. `CardUpgradeTracker.ApplyModification` 的 Enchant 分支改用 `EnchantmentAccess.Has`，
+     包装里已有同一附魔时不再重复施加/误报"已丢弃"。
+  5. **回退页显示**：`ModType.Enchant` 的行标题改成「附魔：<附魔名>」（`UpgradeLoc.UiRefundEnchant`，
+     名字取 `canonical.Title`），副标题仍是卡名；搜索文本同时含中英文附魔名。
+  6. 附魔面板的「一卡一附魔」提示改为**仅在确实没有可选项时**显示（装了 Limitless 时它可以继续加别的，
+     那句话就是错的）；文案改为「要换附魔请先在回退页撤销」。
+- **验证**：`dotnet build -c Debug` 0 warning 0 error，已部署 mods。
+  实测要点：① 装了 Limitless（ench=True）时，回退页那条「附魔：皇家认可」能点动、点数返还、牌上附魔消失；
+  ② 一张牌被 Limitless 包了多个附魔时，回退只摘掉记录里的那一个，其余保留；
+  ③ 回退页能看出回退的是哪个附魔；④ 附魔面板不再对已附魔的牌说"只能同种叠加"。
+
 ## 附魔改造：放弃复合附魔，改回原版一卡一附魔（路线 A，2026-11-22）
 
 - **日期**：2026-11-22

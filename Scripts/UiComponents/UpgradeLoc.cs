@@ -160,6 +160,7 @@ public static class UpgradeLoc
     public const string UiRefundLocked = "INFINITEUPGRADESYSTEM-UI_REFUND_LOCKED";
     public const string UiRefundHint = "INFINITEUPGRADESYSTEM-UI_REFUND_HINT";
     public const string UiRefundOlderMods = "INFINITEUPGRADESYSTEM-UI_REFUND_OLDER_MODS";
+    public const string UiRefundEnchant = "INFINITEUPGRADESYSTEM-UI_REFUND_ENCHANT";
     public const string UiRefundNoteUpgrade = "INFINITEUPGRADESYSTEM-UI_REFUND_NOTE_UPGRADE";
     public const string UiRefundNoteGone = "INFINITEUPGRADESYSTEM-UI_REFUND_NOTE_GONE";
     public const string UiRefundToast = "INFINITEUPGRADESYSTEM-UI_REFUND_TOAST";
