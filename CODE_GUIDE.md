@@ -39,7 +39,8 @@ Scripts/
     ├── UpgradeItemRow.cs         # 条目行（名称/值/成本徽标/加号/回退按钮/MAX/悬停/抖动）
     ├── RefundItemRow.cs          # 回退流水行（已付/返还/不可回退徽标/二次确认）
     ├── CollapsibleSection.cs     # 折叠分区（可见性切换 + 淡入 + 三角方向）
-    ├── ClassTabBar.cs            # 技能 6 职业标签页（含 已拥有/总数）
+    ├── ClassSideBar.cs           # ★ 技能左列角色选择（含 已拥有/总数、选中滑出放大动画）
+    ├── SkillClasses.cs           # 技能角色 key 与显示顺序（新增角色只改这里 + 本地化）
     ├── UpgradeTopBar.cs          # 顶栏（拖拽柄/标题/点数徽标/只读徽标/关闭）
     ├── EnchantSelectPanel.cs     # 附魔选择弹窗
     └── UpgradeLoc.cs             # 自包含双语本地化 + 全部 key 常量 + 格式化
@@ -224,7 +225,7 @@ UI 等待 action.CompletionTask → 成功则刷新点数标签 + 飘字
    **若新增即时生效类** → 同时在 `ApplyImmediateRefund` 加逆操作（否则回退后效果残留）；
 3. **若要支持回退**：`StatItem(..., refundTarget: "<store key>")` 或 `SkillItem(...)` 自动带上；
 4. 本地化：`UpgradeLoc` 加 key 常量 + `localization/{zhs,eng}/cards.json` 各加一条；
-5. **UI 组件代码零改动**（分区/标签页/MAX/禁用/回退按钮状态由数据驱动）。
+5. **UI 组件代码零改动**（分区/角色列/MAX/禁用/回退按钮状态由数据驱动）。
 
 ### 新增一项卡牌操作
 1. `CardOperationHelper` 加方法：选牌 → `CanApplyCardMod` 校验 → `EnqueueCardMod(...)`；
@@ -238,3 +239,13 @@ UI 等待 action.CompletionTask → 成功则刷新点数标签 + 飘字
 ### 新增一个技能
 见 [UI设计.md](UI设计.md) §六；要点：`SkillItem(...)` 一行 + `SkillEffectsPower` 里接线效果，
 UI/持久化零改动。
+
+### 新增一个角色（技能左列）
+1. `Scripts/UiComponents/SkillClasses.cs`：加一个中文常量 + 往 `All` 里塞进去（顺序 = 显示顺序，
+   「通用」固定在第一位）；
+2. `UpgradeLoc.ClassTitle`：加 `"<角色名>" => Get(新 key, "<角色名>")`；
+3. `SkillClasses` 的 key 同时是 `UpgradeItemDef.SubCategory`，`SkillItem(SkillClasses.新角色, ...)`
+   里的技能自动落进该角色的右列；
+4. 本地化：`localization/{zhs,eng}/cards.json` 加 `…UI_CLASS_<新角色>` 显示名。
+   若该角色暂无技能，左列按钮会自动隐藏（`ClassSideBar.SetCount` 按 total 判断），
+   所以「先落角色、后补技能」也是安全的。

@@ -52,7 +52,10 @@ public sealed partial class UpgradeUIHandler : Control
     private MegaLabel? _deckCountLabel;
     private MegaLabel? _emptyLabel;
     private MegaLabel? _cardOpsEmptyLabel;
-    private ClassTabBar? _skillTabBar;
+    private ClassSideBar? _skillSideBar;
+    /// <summary>技能右列容器（切换角色时整体淡入放大，配合左列按钮的滑出）。</summary>
+    private VBoxContainer? _skillContent;
+    private Tween? _skillRevealTween;
     private MegaLabel? _hintLabel;
     private CollapsibleSection? _refundSection;
     private VBoxContainer? _refundContent;
@@ -666,7 +669,7 @@ public sealed partial class UpgradeUIHandler : Control
     }
 
     /// <summary>
-    /// 分区构建：基础属性 / 能力（Stat 条目）、技能（职业标签页）、牌组（入口行）、
+    /// 分区构建：基础属性 / 能力（Stat 条目）、技能（左列角色 + 右列加点项）、牌组（入口行）、
     /// 测试（弱化样式）。全部默认收起。
     /// </summary>
     private void BuildSections()
@@ -677,30 +680,48 @@ public sealed partial class UpgradeUIHandler : Control
         var abilitySection = AddSection("能力");
         AddStatRows(abilitySection, "能力");
 
-        // 技能：职业标签页 → 各职业条目容器（默认选中「通用」）
+        // 技能（UI v4）：左列角色选择 + 右列该角色的加点项。
+        // 左列是独立的次级面板（ClassSideBar），右列是加点的行容器；两侧各自独立成列，
+        // 角色名的可用宽度从原来标签行的 ~1/6 面板宽变成整列宽，长职业名不再需要极限缩字。
         var skillSection = AddSection("技能");
-        _skillTabBar = new ClassTabBar();
-        skillSection.Content.AddChild(_skillTabBar);
-        foreach (var cls in ClassTabBar.Classes)
+        var skillBody = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        skillBody.AddThemeConstantOverride("separation", 8);
+        skillSection.Content.AddChild(skillBody);
+
+        _skillSideBar = new ClassSideBar();
+        skillBody.AddChild(_skillSideBar);
+
+        _skillContent = new VBoxContainer
         {
-            var box = new VBoxContainer();
-            box.AddThemeConstantOverride("separation", 3);
-            skillSection.Content.AddChild(box);
-            _skillClassBoxes[cls] = box;
-            box.Visible = cls == ClassTabBar.Generic;
-        }
-        _skillTabBar.ClassSelected += cls =>
-        {
-            foreach (var (key, box) in _skillClassBoxes)
-                box.Visible = key == cls;
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            // 不随左列高度拉伸：行数少时右列贴顶，不会把行均摊开
+            SizeFlagsVertical = SizeFlags.ShrinkBegin,
         };
+        _skillContent.AddThemeConstantOverride("separation", 3);
+        skillBody.AddChild(_skillContent);
+
+        foreach (var cls in SkillClasses.All)
+        {
+            var box = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+            box.AddThemeConstantOverride("separation", 3);
+            _skillContent.AddChild(box);
+            _skillClassBoxes[cls] = box;
+            box.Visible = cls == SkillClasses.Generic;
+        }
+
+        _skillSideBar.ClassSelected += OnSkillClassSelected;
+
         var zebra = false;
         foreach (var item in _allItems.Where(i => i.Category == "技能"))
         {
             var row = CreateRow(item, skillSection, zebra);
             zebra = !zebra;
-            _skillClassBoxes[item.SubCategory!].AddChild(row);
+            if (item.SubCategory != null && _skillClassBoxes.TryGetValue(item.SubCategory, out var target))
+                target.AddChild(row);
         }
+
+        // 初始选中「通用」：同步右列可见性（构建期 animate=false，不播动画）
+        _skillSideBar.Select(SkillClasses.Generic);
 
         // 牌组：入口行（点击进入子面板）
         BuildDeckEntryRow();
@@ -839,14 +860,14 @@ public sealed partial class UpgradeUIHandler : Control
                     _refundSection.SetCollapsed(false);
             }
         }
-        // 技能分区：搜索时显示含命中的职业容器（无搜索词时跟随选中标签）
+        // 技能分区：搜索时显示含命中的角色容器（无搜索词时跟随左列选中角色）
         if (_skillClassBoxes.Count > 0)
         {
             foreach (var (cls, box) in _skillClassBoxes)
             {
                 var anyVisible = box.GetChildren().OfType<UpgradeItemRow>().Any(r => r.Visible);
                 box.Visible = string.IsNullOrEmpty(filter)
-                    ? cls == (_skillTabBar?.SelectedClass ?? ClassTabBar.Generic)
+                    ? cls == (_skillSideBar?.SelectedClass ?? SkillClasses.Generic)
                     : anyVisible;
             }
         }
@@ -970,17 +991,17 @@ public sealed partial class UpgradeUIHandler : Control
             UpgradeLoc.PromptEnchant, pk => CardOperationHelper.AddEnchantment(12, pk)));
 
         // === 技能：购买后 MAX 徽标 ===
-        _allItems.Add(SkillItem(ClassTabBar.Generic, "每打出1张牌，都获得1格挡", UpgradeLoc.ItemSkillBlockOnPlay, "block_on_play", 10));
+        _allItems.Add(SkillItem(SkillClasses.Generic, "每打出1张牌，都获得1格挡", UpgradeLoc.ItemSkillBlockOnPlay, "block_on_play", 10));
         // 计数显示用余数：0/4 → 1/4 → 2/4 → 3/4 → 0/4（触发并归零）
-        _allItems.Add(SkillItem(ClassTabBar.Generic, "每当打出4张牌，获得1敏捷", UpgradeLoc.ItemSkillAgilityEvery4Plays, "agility_every_4_plays", 10,
+        _allItems.Add(SkillItem(SkillClasses.Generic, "每当打出4张牌，获得1敏捷", UpgradeLoc.ItemSkillAgilityEvery4Plays, "agility_every_4_plays", 10,
             () => $"{SkillRegistry.CombatPlayCount % 4}/4"));
-        _allItems.Add(SkillItem(ClassTabBar.Generic, "每当打出4张牌，获得1力量", UpgradeLoc.ItemSkillStrengthEvery4Plays, "strength_every_4_plays", 10,
+        _allItems.Add(SkillItem(SkillClasses.Generic, "每当打出4张牌，获得1力量", UpgradeLoc.ItemSkillStrengthEvery4Plays, "strength_every_4_plays", 10,
             () => $"{SkillRegistry.CombatPlayCount % 4}/4"));
-        _allItems.Add(SkillItem(ClassTabBar.Generic, "在你的回合，当你没有手牌时，抽1张牌", UpgradeLoc.ItemSkillDrawWhenNoHand, "draw_when_no_hand", 7));
-        _allItems.Add(SkillItem(ClassTabBar.Generic, "你可以在休息处选择任意数量的选项", UpgradeLoc.ItemSkillRestAllOptions, "rest_all_options", 10));
-        _allItems.Add(SkillItem(ClassTabBar.Generic, "每回合开始时，获取消耗牌堆数等量格挡", UpgradeLoc.ItemSkillBlockAtTurnStart, "block_at_turn_start", 10));
-        _allItems.Add(SkillItem(ClassTabBar.Generic, "你的回合开始时，获取2力量", UpgradeLoc.ItemSkillStrAtTurnStart, "str_at_turn_start", 12));
-        _allItems.Add(SkillItem(ClassTabBar.Generic, "回合开始时，对所有敌人造成x点伤害y次", UpgradeLoc.ItemSkillDmgXTimesAtTurnStart, "dmg_x_times_at_turn_start", 15,
+        _allItems.Add(SkillItem(SkillClasses.Generic, "在你的回合，当你没有手牌时，抽1张牌", UpgradeLoc.ItemSkillDrawWhenNoHand, "draw_when_no_hand", 7));
+        _allItems.Add(SkillItem(SkillClasses.Generic, "你可以在休息处选择任意数量的选项", UpgradeLoc.ItemSkillRestAllOptions, "rest_all_options", 10));
+        _allItems.Add(SkillItem(SkillClasses.Generic, "每回合开始时，获取消耗牌堆数等量格挡", UpgradeLoc.ItemSkillBlockAtTurnStart, "block_at_turn_start", 10));
+        _allItems.Add(SkillItem(SkillClasses.Generic, "你的回合开始时，获取2力量", UpgradeLoc.ItemSkillStrAtTurnStart, "str_at_turn_start", 12));
+        _allItems.Add(SkillItem(SkillClasses.Generic, "回合开始时，对所有敌人造成x点伤害y次", UpgradeLoc.ItemSkillDmgXTimesAtTurnStart, "dmg_x_times_at_turn_start", 15,
             () =>
             {
                 var c = CardOperationHelper.GetLocalPlayer()?.Creature;
@@ -990,37 +1011,37 @@ public sealed partial class UpgradeUIHandler : Control
                 int y = Math.Max(1, dex + 1);
                 return $"{x}伤 {y}次";
             }));
-        _allItems.Add(SkillItem(ClassTabBar.Generic, "每当你打出1张能力牌，你的下一张牌免费", UpgradeLoc.ItemSkillFreeNextCardOnPower, "free_next_card_on_power", 10));
-        _allItems.Add(SkillItem(ClassTabBar.Ironclad, "每当有一张牌被消耗时，抽一张牌", UpgradeLoc.ItemSkillDrawOnExhaust, "draw_on_exhaust", 10));
-        _allItems.Add(SkillItem(ClassTabBar.Ironclad, "每当你消耗1张牌时，给予所有敌人2层易伤", UpgradeLoc.ItemSkillVulnerableOnExhaust, "vulnerable_on_exhaust", 10));
-        _allItems.Add(SkillItem(ClassTabBar.Ironclad, "回合开始时，获取所有敌人易伤总和点力量", UpgradeLoc.ItemSkillStrFromVulnerableAtTurnStart, "str_from_vulnerable_at_turn_start", 15));
-        _allItems.Add(SkillItem(ClassTabBar.Ironclad, "每当失去生命值时，抽一张牌", UpgradeLoc.ItemSkillDrawOnHpLoss, "draw_on_hp_loss", 10));
-        _allItems.Add(SkillItem(ClassTabBar.Ironclad, "回合结束时，你的格挡翻倍", UpgradeLoc.ItemSkillDoubleBlockAtTurnEnd, "double_block_at_turn_end", 15));
-        _allItems.Add(SkillItem(ClassTabBar.Ironclad, "你的回合开始时，回复3点生命值", UpgradeLoc.ItemSkillHealAtTurnStart, "heal_at_turn_start", 8));
-        _allItems.Add(SkillItem(ClassTabBar.Silent, "每当丢弃一张牌时，给予所有敌人1层虚弱", UpgradeLoc.ItemSkillWeakOnDiscard, "weak_on_discard", 10));
-        _allItems.Add(SkillItem(ClassTabBar.Silent, "你每丢弃一张牌，获得1敏捷", UpgradeLoc.ItemSkillDexterityOnDiscard, "dexterity_on_discard", 15));
-        _allItems.Add(SkillItem(ClassTabBar.Silent, "你的[小刀]会攻击所有敌人", UpgradeLoc.ItemSkillShivAllEnemies, "shiv_all_enemies", 10));
-        _allItems.Add(SkillItem(ClassTabBar.Silent, "每当给予敌人中毒时，获得1格挡", UpgradeLoc.ItemSkillBlockOnPoison, "block_on_poison", 10));
-        _allItems.Add(SkillItem(ClassTabBar.Silent, "你每打出一张牌都给予所有敌人一层中毒", UpgradeLoc.ItemSkillPoisonAllOnCardPlay, "poison_all_on_card_play", 15));
-        _allItems.Add(SkillItem(ClassTabBar.Silent, "你的回合开始时，额外摸1张牌", UpgradeLoc.ItemSkillDrawAtTurnStart, "draw_at_turn_start", 8));
-        _allItems.Add(SkillItem(ClassTabBar.Regent, "每打出1张牌时，铸造1", UpgradeLoc.ItemSkillForgeOnPlay, "forge_on_play", 10));
-        _allItems.Add(SkillItem(ClassTabBar.Regent, "每打出1张技能牌时，获得2点活力", UpgradeLoc.ItemSkillVigorOnSkillPlay, "vigor_on_skill_play", 6));
-        _allItems.Add(SkillItem(ClassTabBar.Regent, "每铸造一次，君王之剑永久获取1格挡", UpgradeLoc.ItemSkillSovereignBladeBlockOnForge, "sovereign_blade_block_on_forge", 12));
-        _allItems.Add(SkillItem(ClassTabBar.Regent, "你的回合开始时，免费打出第一张牌", UpgradeLoc.ItemSkillFreeFirstCard, "free_first_card", 8));
-        _allItems.Add(SkillItem(ClassTabBar.Regent, "每当你获得1点辉星，所有敌人本回合失去1点力量", UpgradeLoc.ItemSkillEnemyLoseStrOnStar, "enemy_lose_str_on_star", 15));
-        _allItems.Add(SkillItem(ClassTabBar.Regent, "每回合开始时，在手牌中添加一张升级过的无色牌，其本回合可以免费打出", UpgradeLoc.ItemSkillAddColorlessCardAtTurnStart, "add_colorless_card_at_turn_start", 10));
-        _allItems.Add(SkillItem(ClassTabBar.Necrobinder, "每打出1张牌时，召唤1", UpgradeLoc.ItemSkillSummonOnPlay, "summon_on_play", 10));
-        _allItems.Add(SkillItem(ClassTabBar.Necrobinder, "每打出1张虚无牌，对所有敌人造成3点伤害", UpgradeLoc.ItemSkillDmgOnEtherealPlay, "dmg_on_ethereal_play", 7));
-        _allItems.Add(SkillItem(ClassTabBar.Necrobinder, "奥斯提会额外攻击一次", UpgradeLoc.ItemSkillOstyExtraAttack, "osty_extra_attack", 15));
-        _allItems.Add(SkillItem(ClassTabBar.Necrobinder, "你的回合开始时，额外召唤2", UpgradeLoc.ItemSkillSummonAtTurnStart, "summon_at_turn_start", 8));
-        _allItems.Add(SkillItem(ClassTabBar.Necrobinder, "每当你给予敌人灾厄时，该敌人失去1点力量", UpgradeLoc.ItemSkillEnemyLoseStrOnDoom, "enemy_lose_str_on_doom", 10));
-        _allItems.Add(SkillItem(ClassTabBar.Necrobinder, "回合结束时，打出消耗牌堆中的所有虚无牌", UpgradeLoc.ItemSkillPlayEtherealFromExhaust, "play_ethereal_from_exhaust", 15));
-        _allItems.Add(SkillItem(ClassTabBar.Defect, "每打出1张能力牌，抽一张牌", UpgradeLoc.ItemSkillDrawOnPowerPlay, "draw_on_power_play", 10));
-        _allItems.Add(SkillItem(ClassTabBar.Defect, "回合结束时，每有一个充能球，对所有敌人造成1点伤害", UpgradeLoc.ItemSkillOrbDmgAtTurnEnd, "orb_dmg_at_turn_end", 10));
-        _allItems.Add(SkillItem(ClassTabBar.Defect, "回合结束时，消耗你手牌中的状态牌，每张获得2格挡", UpgradeLoc.ItemSkillExhaustStatusGainBlockAtTurnEnd, "exhaust_status_gain_block_at_turn_end", 15));
-        _allItems.Add(SkillItem(ClassTabBar.Defect, "每当你抽到能力牌时，自动打出", UpgradeLoc.ItemSkillAutoPlayPowerOnDraw, "auto_play_power_on_draw", 20));
-        _allItems.Add(SkillItem(ClassTabBar.Defect, "你的回合开始时，随机获取1个充能球", UpgradeLoc.ItemSkillOrbAtTurnStart, "orb_at_turn_start", 8));
-        _allItems.Add(SkillItem(ClassTabBar.Defect, "在你的回合开始时，打出一张随机能力牌", UpgradeLoc.ItemSkillAutoPlayRandomPowerAtTurnStart, "auto_play_random_power_at_turn_start", 10));
+        _allItems.Add(SkillItem(SkillClasses.Generic, "每当你打出1张能力牌，你的下一张牌免费", UpgradeLoc.ItemSkillFreeNextCardOnPower, "free_next_card_on_power", 10));
+        _allItems.Add(SkillItem(SkillClasses.Ironclad, "每当有一张牌被消耗时，抽一张牌", UpgradeLoc.ItemSkillDrawOnExhaust, "draw_on_exhaust", 10));
+        _allItems.Add(SkillItem(SkillClasses.Ironclad, "每当你消耗1张牌时，给予所有敌人2层易伤", UpgradeLoc.ItemSkillVulnerableOnExhaust, "vulnerable_on_exhaust", 10));
+        _allItems.Add(SkillItem(SkillClasses.Ironclad, "回合开始时，获取所有敌人易伤总和点力量", UpgradeLoc.ItemSkillStrFromVulnerableAtTurnStart, "str_from_vulnerable_at_turn_start", 15));
+        _allItems.Add(SkillItem(SkillClasses.Ironclad, "每当失去生命值时，抽一张牌", UpgradeLoc.ItemSkillDrawOnHpLoss, "draw_on_hp_loss", 10));
+        _allItems.Add(SkillItem(SkillClasses.Ironclad, "回合结束时，你的格挡翻倍", UpgradeLoc.ItemSkillDoubleBlockAtTurnEnd, "double_block_at_turn_end", 15));
+        _allItems.Add(SkillItem(SkillClasses.Ironclad, "你的回合开始时，回复3点生命值", UpgradeLoc.ItemSkillHealAtTurnStart, "heal_at_turn_start", 8));
+        _allItems.Add(SkillItem(SkillClasses.Silent, "每当丢弃一张牌时，给予所有敌人1层虚弱", UpgradeLoc.ItemSkillWeakOnDiscard, "weak_on_discard", 10));
+        _allItems.Add(SkillItem(SkillClasses.Silent, "你每丢弃一张牌，获得1敏捷", UpgradeLoc.ItemSkillDexterityOnDiscard, "dexterity_on_discard", 15));
+        _allItems.Add(SkillItem(SkillClasses.Silent, "你的[小刀]会攻击所有敌人", UpgradeLoc.ItemSkillShivAllEnemies, "shiv_all_enemies", 10));
+        _allItems.Add(SkillItem(SkillClasses.Silent, "每当给予敌人中毒时，获得1格挡", UpgradeLoc.ItemSkillBlockOnPoison, "block_on_poison", 10));
+        _allItems.Add(SkillItem(SkillClasses.Silent, "你每打出一张牌都给予所有敌人一层中毒", UpgradeLoc.ItemSkillPoisonAllOnCardPlay, "poison_all_on_card_play", 15));
+        _allItems.Add(SkillItem(SkillClasses.Silent, "你的回合开始时，额外摸1张牌", UpgradeLoc.ItemSkillDrawAtTurnStart, "draw_at_turn_start", 8));
+        _allItems.Add(SkillItem(SkillClasses.Regent, "每打出1张牌时，铸造1", UpgradeLoc.ItemSkillForgeOnPlay, "forge_on_play", 10));
+        _allItems.Add(SkillItem(SkillClasses.Regent, "每打出1张技能牌时，获得2点活力", UpgradeLoc.ItemSkillVigorOnSkillPlay, "vigor_on_skill_play", 6));
+        _allItems.Add(SkillItem(SkillClasses.Regent, "每铸造一次，君王之剑永久获取1格挡", UpgradeLoc.ItemSkillSovereignBladeBlockOnForge, "sovereign_blade_block_on_forge", 12));
+        _allItems.Add(SkillItem(SkillClasses.Regent, "你的回合开始时，免费打出第一张牌", UpgradeLoc.ItemSkillFreeFirstCard, "free_first_card", 8));
+        _allItems.Add(SkillItem(SkillClasses.Regent, "每当你获得1点辉星，所有敌人本回合失去1点力量", UpgradeLoc.ItemSkillEnemyLoseStrOnStar, "enemy_lose_str_on_star", 15));
+        _allItems.Add(SkillItem(SkillClasses.Regent, "每回合开始时，在手牌中添加一张升级过的无色牌，其本回合可以免费打出", UpgradeLoc.ItemSkillAddColorlessCardAtTurnStart, "add_colorless_card_at_turn_start", 10));
+        _allItems.Add(SkillItem(SkillClasses.Necrobinder, "每打出1张牌时，召唤1", UpgradeLoc.ItemSkillSummonOnPlay, "summon_on_play", 10));
+        _allItems.Add(SkillItem(SkillClasses.Necrobinder, "每打出1张虚无牌，对所有敌人造成3点伤害", UpgradeLoc.ItemSkillDmgOnEtherealPlay, "dmg_on_ethereal_play", 7));
+        _allItems.Add(SkillItem(SkillClasses.Necrobinder, "奥斯提会额外攻击一次", UpgradeLoc.ItemSkillOstyExtraAttack, "osty_extra_attack", 15));
+        _allItems.Add(SkillItem(SkillClasses.Necrobinder, "你的回合开始时，额外召唤2", UpgradeLoc.ItemSkillSummonAtTurnStart, "summon_at_turn_start", 8));
+        _allItems.Add(SkillItem(SkillClasses.Necrobinder, "每当你给予敌人灾厄时，该敌人失去1点力量", UpgradeLoc.ItemSkillEnemyLoseStrOnDoom, "enemy_lose_str_on_doom", 10));
+        _allItems.Add(SkillItem(SkillClasses.Necrobinder, "回合结束时，打出消耗牌堆中的所有虚无牌", UpgradeLoc.ItemSkillPlayEtherealFromExhaust, "play_ethereal_from_exhaust", 15));
+        _allItems.Add(SkillItem(SkillClasses.Defect, "每打出1张能力牌，抽一张牌", UpgradeLoc.ItemSkillDrawOnPowerPlay, "draw_on_power_play", 10));
+        _allItems.Add(SkillItem(SkillClasses.Defect, "回合结束时，每有一个充能球，对所有敌人造成1点伤害", UpgradeLoc.ItemSkillOrbDmgAtTurnEnd, "orb_dmg_at_turn_end", 10));
+        _allItems.Add(SkillItem(SkillClasses.Defect, "回合结束时，消耗你手牌中的状态牌，每张获得2格挡", UpgradeLoc.ItemSkillExhaustStatusGainBlockAtTurnEnd, "exhaust_status_gain_block_at_turn_end", 15));
+        _allItems.Add(SkillItem(SkillClasses.Defect, "每当你抽到能力牌时，自动打出", UpgradeLoc.ItemSkillAutoPlayPowerOnDraw, "auto_play_power_on_draw", 20));
+        _allItems.Add(SkillItem(SkillClasses.Defect, "你的回合开始时，随机获取1个充能球", UpgradeLoc.ItemSkillOrbAtTurnStart, "orb_at_turn_start", 8));
+        _allItems.Add(SkillItem(SkillClasses.Defect, "在你的回合开始时，打出一张随机能力牌", UpgradeLoc.ItemSkillAutoPlayRandomPowerAtTurnStart, "auto_play_random_power_at_turn_start", 10));
 
         // === 牌组操作 ===
         _allItems.Add(ActionItem("牌组操作", "从牌组删除一张牌", UpgradeLoc.ItemDeckRemove, 20,
@@ -1272,7 +1293,7 @@ public sealed partial class UpgradeUIHandler : Control
             row.Refresh(points);
         RefreshDeckRow();
         UpdateSectionSummaries();
-        UpdateClassTabCounts();
+        UpdateSkillRoleCounts();
         RefreshRefundSection();
     }
 
@@ -1309,17 +1330,60 @@ public sealed partial class UpgradeUIHandler : Control
         }
     }
 
-    /// <summary>职业标签页计数（已拥有 / 总数）。</summary>
-    private void UpdateClassTabCounts()
+    /// <summary>角色列计数（已拥有 / 总数）；无技能的角色由 ClassSideBar 自行隐藏。</summary>
+    private void UpdateSkillRoleCounts()
     {
-        if (_skillTabBar == null) return;
+        if (_skillSideBar == null) return;
         var skills = _allItems.Where(i => i.Category == "技能").ToList();
-        foreach (var cls in ClassTabBar.Classes)
+        foreach (var cls in SkillClasses.All)
         {
             var inClass = skills.Where(i => i.SubCategory == cls).ToList();
-            if (inClass.Count == 0) continue;
             int owned = inClass.Count(i => (i.LevelProvider?.Invoke() ?? 0) > 0);
-            _skillTabBar.SetCount(cls, owned, inClass.Count);
+            _skillSideBar.SetCount(cls, owned, inClass.Count);
+        }
+    }
+
+    /// <summary>
+    /// 左列角色切换：只切换右列可见性，然后播放右列淡入（面板未打开时不播，构建期静默）。
+    /// 搜索进行中不动——搜索时右列由 <see cref="OnSearchTextChanged"/> 接管过滤/可见性。
+    /// </summary>
+    private void OnSkillClassSelected(string cls)
+    {
+        foreach (var (key, box) in _skillClassBoxes)
+            box.Visible = key == cls;
+        if (_isOpen) PlaySkillContentReveal();
+    }
+
+    /// <summary>
+    /// 右列切换动效：整体淡入 + 轻微放大（轴心左上，向右下生长），再让可见行错峰淡入。
+    /// 只改 Modulate / Scale，不动容器布局 —— 行位置不会被布局重算打断。
+    /// </summary>
+    private void PlaySkillContentReveal()
+    {
+        if (_skillContent == null || !GodotObject.IsInstanceValid(_skillContent)) return;
+        _skillRevealTween?.Kill();
+        _skillContent.PivotOffset = Vector2.Zero;
+        _skillContent.Modulate = new Color(1f, 1f, 1f, 0.30f);
+        _skillContent.Scale = new Vector2(0.985f, 0.985f);
+        _skillRevealTween = CreateTween().SetParallel(true)
+            .SetTrans(Tween.TransitionType.Cubic)
+            .SetEase(Tween.EaseType.Out);
+        _skillRevealTween.TweenProperty(_skillContent, "modulate:a", 1f, 0.16f);
+        _skillRevealTween.TweenProperty(_skillContent, "scale", Vector2.One, 0.18f);
+
+        var index = 0;
+        foreach (var box in _skillClassBoxes.Values)
+        {
+            if (!box.Visible) continue;
+            foreach (var child in box.GetChildren())
+            {
+                if (child is not Control row || !row.Visible) continue;
+                row.Modulate = new Color(1f, 1f, 1f, 0f);
+                var tween = CreateTween();
+                tween.TweenInterval(Math.Min(index++, 6) * 0.02f);
+                tween.TweenProperty(row, "modulate:a", 1f, 0.14f);
+            }
+            break; // 只有当前角色的一列可见
         }
     }
 

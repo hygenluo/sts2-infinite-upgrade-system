@@ -131,6 +131,8 @@ public static class UpgradeLoc
     public const string UiClassRegent = "INFINITEUPGRADESYSTEM-UI_CLASS_REGENT";
     public const string UiClassNecrobinder = "INFINITEUPGRADESYSTEM-UI_CLASS_NECROBINDER";
     public const string UiClassDefect = "INFINITEUPGRADESYSTEM-UI_CLASS_DEFECT";
+    /// <summary>技能分区左列（角色选择列）的列标题。</summary>
+    public const string UiSkillRoleList = "INFINITEUPGRADESYSTEM-UI_SKILL_ROLE_LIST";
     public const string UiEnchantTitle = "INFINITEUPGRADESYSTEM-UI_ENCHANT_TITLE";
     public const string UiEnchantCurrent = "INFINITEUPGRADESYSTEM-UI_ENCHANT_CURRENT";
     public const string UiEnchantOccupied = "INFINITEUPGRADESYSTEM-UI_ENCHANT_OCCUPIED";

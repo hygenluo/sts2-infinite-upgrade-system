@@ -1289,3 +1289,35 @@
 - **教程快照**：上游最新 `c3eeb78`（2026-09-11），尚无 113 内容；本节为一手核实记录。
 - **验证**：`dotnet build` 0 错；`mods/InfiniteUpgradeSystem/` 部署 `InfiniteUpgradeSystem.json` +
   dll + localization。运行时验证待游戏内确认（本地 mod 需在设置里启用，且与 workshop 版 3763412710 同 id 互斥）。
+
+## 技能界面改版：横排职业标签 → 左列角色 + 右列加点项（2026-11-22）
+
+- **起因**：玩家要求把技能分区的「通用 / 铁甲战士 / 静默猎手 …」从一行改成一列：
+  左边角色选择、右边该角色的加点项，选中角色要高亮 + 滑出变大的动画。
+- **改动**：
+  1. 新增 `Scripts/UiComponents/SkillClasses.cs`：角色 key 与显示顺序从控件里拆出来
+     （`All` 数组 + `Generic/Ironclad/…` 常量），新增角色只需改这里 + 本地化。
+  2. 删除 `Scripts/UiComponents/ClassTabBar.cs`（HBox + 6 个等分标签），
+     改为 `Scripts/UiComponents/ClassSideBar.cs`（PanelContainer + 竖列 `SkillRoleButton`，宽 132px）。
+  3. `UpgradeUIHandler.BuildSections()`：技能分区内容改成 `HBox{ ClassSideBar, _skillContent }`，
+     各角色行容器改挂到右列；左列切换只切右列可见性。
+  4. 动效：`SkillRoleButton.SetSelected()` 做「滑出变大」（Scale 1→1.06，轴心左中 + 内容右移 6px，
+     `Back/Out`）；`UpgradeUIHandler.PlaySkillContentReveal()` 让右列淡入 + 0.985→1 放大，行再错峰淡入。
+  5. 本地化新增 `INFINITEUPGRADESYSTEM-UI_SKILL_ROLE_LIST`（角色 / Roles）。
+- **踩坑与结论**：
+  - **容器内的 Position 补间会被布局重算打回**：`SkillRoleButton` 的正文放在
+    `MarginContainer`（FullRect 锚点）里，只对它的 `Position` 做补间 —— 父容器只接管按钮自身的位置/尺寸，
+    按钮也不会在自己尺寸不变时重置子节点偏移；再在 `Resized` 里补一次基准值兜底。
+    缩放的轴心改 `PivotOffset = (0, Size.Y/2)`，保证放大是「向右探出」而不是四边均摊。
+  - **高亮底不要依赖 `Flat = true`**：`Flat` 按钮是否绘制 StyleBox 取决于引擎/主题实现，
+    高亮块如果被吞掉就只剩文字变色。角色按钮统一 `Flat = false`，并补齐
+    `normal / hover / pressed / hover_pressed / disabled` 五个状态 + `focus = StyleBoxEmpty`
+    （`hover_pressed` 不盖会出现「悬停中按下闪一下默认按钮底」）。
+  - **列面板必须 `MouseFilter = Pass`**：`Stop` 会吞掉滚轮事件，鼠标停在左列空白处时主面板滚不动。
+  - **角色按钮只在有技能时显示**：`ClassSideBar.SetCount(cls, owned, total)` 里按 `total > 0` 决定
+    `Visible`，避免「先加角色常量、技能后补」阶段出现空角色。
+  - 左列宽度 132px（含 8px 内边距）是量出来的：720 面板 − 14×2 外边距 − 滚动条 ≈ 680，
+    右列还剩 ~540px；加点行固定件（值 66 + 成本 38 + 加号 26 + 回退 26 + 返还 22 + 间距）约 250px，
+    名称还有 ~290px，长技能名会换行（与改版前一致）。
+- **验证**：`dotnet build -c Debug` 0 错 0 警告并部署到 `mods/`；
+  游戏内表现（高亮/动画/滚动）待手动确认。manifest 版本仍为 2.5.1（发布时再统一升版 + 改 BUILD 标记）。

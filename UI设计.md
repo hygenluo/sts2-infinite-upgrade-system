@@ -187,7 +187,7 @@ UI 文本全部走 `UpgradeLoc`（27 条新 key，`localization/{zhs,eng}/cards.
 | 视觉 | 贴原版质感；打包中文字体（**Adobe 官方思源宋体 SC 静态 OTF** + **MSDF 渲染**，见 DEBUG.md Phase 0.5） |
 | 面板尺寸 | 固定尺寸（640×620 级），固定高度，内容内部滚动 |
 | 顶部栏 | 拖拽手柄 + 标题 + **金色点数计数器** + 关闭按钮（固定不随内容滚动） |
-| 分区 | 基础属性(8) / 能力(5) / 技能(6 标签页, 空态) / 牌组(入口) / 测试(3, 弱化) |
+| 分区 | 基础属性(8) / 能力(6) / 技能(左列角色 + 右列加点项) / 牌组(入口) / 测试(3, 弱化) |
 | 条目行 | 名称 + 当前值 + **成本小字（始终可见）** + 加号按钮 |
 | 成本状态 | 点数不足：成本变红 + 加号置灰禁用 |
 | 限等级项 | 用 **int 等级**存储（最大等级=1，**不用 bool 类型**，便于未来支持多级技能）；达到最大等级后加号消失，变为 **MAX 徽标** |
@@ -198,7 +198,7 @@ UI 文本全部走 `UpgradeLoc`（27 条新 key，`localization/{zhs,eng}/cards.
 | 取消链路 | 游戏选牌界面自带取消（左侧返回图标 / Esc）→ 点数自动返还 → **恢复牌组子面板** |
 | 搜索 | 全局搜索保留；命中自动展开分区 + 滚动定位 + 高亮命中文本 |
 | 动效 | 全做：开合淡入上移 / 分区展开动画 / 悬停金色描边 / 购买成功 +1 飘字 / 点数不足加号抖动 |
-| 技能分区 | 16 项初步设想已入档（见 §4.4，来源 `update/技能.md`），全部限等级=1；6 个二级标签页 |
+| 技能分区 | 39 项（见 §4.4），全部限等级=1；**左列角色选择（6 个角色，可扩展）+ 右列该角色的加点项**（v4 起） |
 | 测试分区 | 默认收起，样式弱化 |
 
 ---
@@ -215,7 +215,7 @@ UI 文本全部走 `UpgradeLoc`（27 条新 key，`localization/{zhs,eng}/cards.
 ├─────────────────────────────────────────────┤
 │ ▶ 基础属性                    (收起,默认)   │ ← 折叠分区头
 │ ▶ 能力                                       │
-│ ▶ 技能                        (6 标签页)    │
+│ ▶ 技能                     (角色列 | 加点项)  │
 │ ▶ 牌组                     当前卡牌数: 12  → │ ← 入口行,点击切入子面板
 │ ▶ 测试                        (弱化样式)    │
 └─────────────────────────────────────────────┘
@@ -228,7 +228,32 @@ UI 文本全部走 `UpgradeLoc`（27 条新 key，`localization/{zhs,eng}/cards.
 │   └─ ...                                     │
 ```
 
-### 3.2 牌组子面板（整页切换）
+### 3.2 技能分区（v2.6 起：左列角色 + 右列加点项）
+
+技能原先是一条横向标签行（`ClassTabBar`），6 个角色平分 680px，长职业名必须缩到 11px 才不裁切，
+而且标签行自己吃掉一整行高度。v2.6 改为两列：
+
+```
+│ ▼ 技能                                       │
+│ ┌──────────┬───────────────────────────────┐ │
+│ │ 角色     │ 每打出1张牌，都获得1格挡  ✗ 10 + │ │
+│ │ 通用 3/9 │ 每当打出4张牌，获得1敏捷  1/4 10 + │ │
+│ │ 铁甲…    │ ...                            │ │
+│ │ 静默…    │                                │ │
+│ │ 储君     │                                │ │
+│ └──────────┴───────────────────────────────┘ │
+```
+
+- **左列**：`ClassSideBar`（PanelContainer，宽 132px，贴顶）。每个角色一个 `SkillRoleButton`：
+  第一行角色名（自适应字号 9~13px），第二行 `已拥有/总数`。
+- **选中态**：金色半透明底 + 金描边 + 左侧金色强调条 + 名称转亮金，并**向右滑出 6px、放大到 1.06 倍**
+  （轴心在左中，所以是「从列里探出来」的方向）；离开选中反向收回。
+  动画只改 `Scale` 与子节点 `Position`，不动容器布局，列内其它按钮不会跳动。
+- **右列**：所选角色的加点行（沿用 `UpgradeItemRow`）。切换角色时右列整体淡入 + 0.985→1 轻微放大，
+  行再错峰淡入。
+- 角色按钮只在「该角色有技能」时显示（`SetCount(total: 0)` 隐藏），因此新增角色可以先落常量、技能随后补。
+
+### 3.3 牌组子面板（整页切换）
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -403,12 +428,12 @@ public sealed class UpgradeItemDef
 
 ### Phase 2 — 组件重构
 
-**文件**：`Scripts/UpgradeUIHandler.cs` 大改；新增 `Scripts/UiComponents/CollapsibleSection.cs`、`UpgradeItemRow.cs`、`ClassTabBar.cs`、`UpgradeTopBar.cs`；`Scripts/Entry.cs`（BUILD 版本号 +1）
+**文件**：`Scripts/UpgradeUIHandler.cs` 大改；新增 `Scripts/UiComponents/CollapsibleSection.cs`、`UpgradeItemRow.cs`、`ClassSideBar.cs`（v2.6 前的横向标签行 `ClassTabBar.cs` 已删除）、`UpgradeTopBar.cs`；`Scripts/Entry.cs`（BUILD 版本号 +1）
 
 1. **视图状态**：`enum UiView { Main, CardOps }`，`UpgradeUIHandler` 记录当前视图；`SetUIVisible(true)` 恢复上次视图（取消链路的关键）。
 2. **CollapsibleSection**：分区头（箭头 + 标题 + 右侧摘要）+ 内容容器；高度 Tween 展开/收起；箭头旋转动画。
 3. **UpgradeItemRow**：按 Kind 渲染（§4.2）；状态机：普通 / 悬停(金边发光) / 禁用(灰+红成本) / MAX。
-4. **ClassTabBar**：技能分区内 6 个二级标签页（当前为空态占位）。
+4. **ClassSideBar**：技能分区的左列角色选择（v2.6 把初版的 6 个二级标签页改成竖列，右列显示该角色的加点项）。
 5. **UpgradeTopBar**：标题 + 金色点数计数器（宝石图标 + 数字）+ 关闭按钮。
 6. 测试分区样式弱化：次级色、字号减小。
 7. 验证：四个分区折叠/展开正常，牌组入口行显示卡牌数。
@@ -476,7 +501,7 @@ public static class SkillBlockOnPlay
 _allItems.Add(new UpgradeItemDef
 {
     Category = "技能",
-    SubCategory = "通用",           // 自动落入「通用」标签页
+    SubCategory = "通用",           // 自动落入「通用」角色列
     DisplayName = "每打出1张牌，获得1点格挡",
     LocKey = "INFINITEUPGRADESYSTEM-ITEM_BLOCK_ON_PLAY",
     Cost = 10,
@@ -526,7 +551,7 @@ public static class SkillRegistry
    - 打出牌触发类 → 找游戏内对应 Command 的 Postfix（如打牌、弃牌、消耗命令）
    - 回合开始/结束触发类 → `RunStateHook` 已有生命周期订阅模式，新增对应事件
 2. **不要改游戏本体代码**：全部通过 Harmony Patch 或现有事件订阅。
-3. **技能 UI 呈现零成本**：只要在 `PopulateItems()` 加一行 + 本地化，UI 自动：落入对应职业标签页、限等级渲染（MaxLevel=1）、满级后 MAX 徽标、点数不足禁用。**新增技能永远不需要改 UI 组件代码。**
+3. **技能 UI 呈现零成本**：只要在 `PopulateItems()` 加一行 + 本地化，UI 自动：落入对应角色列、限等级渲染（MaxLevel=1）、满级后 MAX 徽标、点数不足禁用。**新增技能永远不需要改 UI 组件代码。** 新增**角色**则是在 `SkillClasses.All` 加一个 key + `UpgradeLoc.ClassTitle` 加显示名（同上，零控件改动）。
 
 ---
 
@@ -537,7 +562,7 @@ public static class SkillRegistry
 2. **效果注册表 + 事件总线**：`SkillRegistry` 与效果实现解耦，技能 id → 效果 handler 映射，便于批量管理与测试。
 3. **局内只读模式**：战斗中可打开面板仅浏览当前属性值（不可购买），需要面板增加 read-only 状态。
 4. **面板位置/折叠状态持久化到磁盘**：当前为运行内存级，可后续随检查点 JSON 存盘，跨会话保持。
-5. **更多职业支持**：6 个标签页按职业 id 自动生成，新职业只需加 SubCategory 常量。
+5. **更多职业支持**：角色列按 `SkillClasses.All` 自动生成，新角色只需加一个常量 + 本地化显示名。
 6. **自定义卡牌操作项**：后续「卡牌额外效果」系统（策划中 Phase 4 未实现部分）可通过 Action 型条目扩展，`PromptKey` 机制已预留。
 
 ---
@@ -620,10 +645,10 @@ public static class SkillRegistry
 
 | 文件 | 本次改动 |
 |---|---|
-| `Scripts/UpgradeUIHandler.cs` | 大改：视图状态机、分区/行/标签页渲染、搜索跳转、动效 |
+| `Scripts/UpgradeUIHandler.cs` | 大改：视图状态机、分区/行/角色列渲染、搜索跳转、动效 |
 | `Scripts/UiComponents/UpgradeItemData.cs` | 扩展为 `UpgradeItemDef`（Kind/MaxLevel/LevelProvider/ValueText/PromptKey） |
 | `Scripts/UiComponents/UpgradeTheme.cs` | 新增：色板 + 字体 |
-| `Scripts/UiComponents/CollapsibleSection.cs` 等 | 新增：折叠分区/条目行/标签页/顶栏组件 |
+| `Scripts/UiComponents/CollapsibleSection.cs` 等 | 新增：折叠分区/条目行/角色列（`ClassSideBar`）/顶栏组件 |
 | `Scripts/CardOperationHelper.cs` | 各方法增加 `promptKey` 参数透传 |
 | `Scripts/Skills/SkillRegistry.cs` | 新增（仅技能扩展时需要） |
 | `InfiniteUpgradeSystem/localization/{zhs,eng}/cards.json` | 30 条 PROMPT key + 条目名称 key |
