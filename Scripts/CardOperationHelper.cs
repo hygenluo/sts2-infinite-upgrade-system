@@ -71,6 +71,47 @@ public static class CardOperationHelper
     /// <summary>当前选牌流程的取消信号（Esc 触发；非本模组选牌时为 null）。</summary>
     private static TaskCompletionSource<bool>? s_activeSelectionCancel;
 
+    /// <summary>
+    /// 【多人关键】只在本机弹出牌组选牌屏，**不走游戏的「同步选择」通道**。
+    ///
+    /// 为什么不能用 <c>CardSelectCmd.FromDeckGeneric</c>：那条路径在正常（无 selector）情况下会
+    /// 调 <c>PlayerChoiceSynchronizer.ReserveChoiceId(player)</c> 并在选完后
+    /// <c>SyncLocalChoice</c> 广播结果 —— 这是给「所有端都会跑到的确定性流程」（战斗、事件、火堆）
+    /// 设计的协议：**每个端都必须按相同顺序为同一个玩家预留相同的 choice id**，
+    /// 而且 <c>PlayerChoiceSynchronizer.ChoiceIds</c> 会作为 <c>nextChoiceIds</c> 进入
+    /// <c>NetFullCombatState</c> 的 checksum。
+    ///
+    /// 本模组的选牌由玩家在任意时刻点面板触发，只有点的那一端会执行 → 该玩家的 choice id
+    /// 计数器单边 +1，于是：
+    ///   1) 下一次 checksum 的 nextChoiceIds 两端不同 → 分歧 → host 踢人 → 黑屏；
+    ///   2) 对端那条「过期」的选择结果会滞留在 _receivedChoices 里，被后续某个**真正的**游戏选择
+    ///      消费掉（类型不符会抛 InvalidOperationException），或让对端永久等一个不会来的 id
+    ///      （WaitForRemoteChoice 永不完成 → 流程卡死、无异常日志）。
+    ///
+    /// 因此这里直接复刻 FromDeckGeneric 的「本地分支」：Push 选牌屏 + await 结果，
+    /// 不预留 choice id、不同步。选中的卡最终通过 CardMod action 的 cardIdentity 传给对端，
+    /// 两端再各自按身份校验/应用，确定性完全由 action 保证。
+    /// </summary>
+    private static Task<IEnumerable<CardModel>> ShowLocalDeckSelect(Player player, CardSelectorPrefs prefs)
+    {
+        var cards = PileType.Deck.GetPile(player).Cards.ToList();
+        if (cards.Count == 0)
+            return Task.FromResult<IEnumerable<CardModel>>(Array.Empty<CardModel>());
+        // 与游戏一致：不需要手动确认且可选数已达下限 → 直接全选，不弹屏
+        if (!prefs.RequireManualConfirmation && cards.Count <= prefs.MinSelect)
+            return Task.FromResult<IEnumerable<CardModel>>(cards);
+
+        var screen = NDeckCardSelectScreen.Create(cards, prefs);
+        var overlayStack = NOverlayStack.Instance;
+        if (overlayStack == null)
+        {
+            Log.Warn("InfiniteUpgrade: NOverlayStack.Instance is null; local deck selection aborted.");
+            return Task.FromResult<IEnumerable<CardModel>>(Array.Empty<CardModel>());
+        }
+        overlayStack.Push(screen);
+        return screen.CardsSelected();
+    }
+
     public static async Task<CardModel?> SelectCardFromDeck(Player player, string builtInPromptKey = "")
     {
         // 专属提示（Phase 4）：key 在显示时由 LocStringPromptPatch（Harmony Postfix
@@ -80,7 +121,7 @@ public static class CardOperationHelper
             : new CardSelectorPrefs(new LocString("cards", builtInPromptKey), 1);
 
         // 启动卡牌选择后延迟一帧，确保 NOverlayStack.Push 已完成并将 UI 节点加入场景树
-        var selectTask = CardSelectCmd.FromDeckGeneric(player, prefs);
+        var selectTask = ShowLocalDeckSelect(player, prefs);
         await Task.Delay(33); // 2 帧 — Push() + 子节点 _Ready()
         EnsureOverlayOnTop();
         // 游戏自带返回图标在 0 张已选牌时抛异常（空集合 First()，游戏本体 bug），

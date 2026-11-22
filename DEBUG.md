@@ -1,5 +1,64 @@
 # DEBUG 记录 (InfiniteUpgradeSystem)
 
+## 多人联机改牌 → 进房间黑屏：选牌走了「选择同步」通道 + 派生修改跨端丢失（2026-11-22）
+
+- **日期**：2026-11-22
+- **反馈**（工坊用户）：多人联机下只要用本模组改过卡（任意卡牌修改），很快在进入房间后卡住、
+  直接黑屏；其他功能（加点、买技能/能力）正常。黑屏时日志尾部无异常。
+- **基线**：游戏 v0.113.1（`release_info.json`）、模组 2.5.1（workshop 3825256262/本地 mods）、
+  教程 `adffafc`；游戏源码用 `ilspycmd` 反编译安装版 sts2.dll 到 `_decompiled_1131\`（一手事实源）。
+- **根因 1（致命）：选牌走了游戏的「确定性选择同步」通道**
+  - `CardOperationHelper.SelectCardFromDeck` 调 `CardSelectCmd.FromDeckGeneric`。
+    无 selector 时它内部执行 `PlayerChoiceSynchronizer.ReserveChoiceId(player)`，
+    选完再 `SyncLocalChoice` **广播**结果（反编译 `CardSelectCmd.cs:616/629`）。
+  - 这是给「**所有端都会跑到**的确定性流程」（战斗/事件/火堆）设计的协议：每个端必须按相同顺序
+    为同一玩家预留相同 choice id；且 `PlayerChoiceSynchronizer.ChoiceIds` 会作为
+    `nextChoiceIds` 进入 `NetFullCombatState` 的 checksum（`NetFullCombatState.cs:426`）。
+  - 本模组选牌由玩家在任意时刻点面板触发，**只有点的那端执行** → 该玩家 choice id 计数器单边 +1：
+    1. 下一次 checksum 两端 `nextChoiceIds` 不同 → 分歧；
+    2. 对端 `_receivedChoices` 里滞留一条「过期」的选择结果，会被后续**真正的**游戏选择消费
+       （`AsDeckCards`/`AsCombatCards` 类型不符 → `InvalidOperationException`），
+       或让对端 `WaitForRemoteChoice` 永远等一个不会来的 id（任务永不完成 → 卡死且无异常日志）。
+- **根因 2（致命）：牌组派生修改不跨端，进房间就被还原**
+  - `RunManager.EnterMapPointInternal` 每次进新地图点都会 `CombatStateSynchronizer.StartSync()` +
+    `await WaitForSync()`；`WaitForSync` 对**每个非本地玩家**调
+    `Player.SyncWithSerializedPlayer` → `Deck.Clear()` + 用 `SerializableCard` 逐张重建牌组
+    （`Player.cs:425/437`）。
+  - `SerializableCard` 只带 Id / CurrentUpgradeLevel / Enchantment(Id+Amount+Props) / Props
+    （`SerializableCard.cs`），**不带**本模组制造的状态：额外 DynamicVar（+攻击/格挡/抽牌）、
+    加/删关键词、`SetCustomBaseCost` 自定义费用、`BaseReplayCount`、合成附魔的 `Subs`。
+  - 于是「自己那份是改过的、对端那份每次进房间被还原成原型」：对端模拟出的伤害/格挡/费用不同，
+    一打这张牌 post-action checksum 就分歧；合成附魔在对端只剩空壳。
+  - 已有的 `ReapplyAllPlayers` 只在 `RunStarted`（读档）跑，**覆盖不到房间同步这条路径**。
+- **根因 3（附带，未改）：合成附魔跨端/存档只剩壳**
+  - `CompositeEnchantment.Subs` 是普通字段、没有 `[SavedProperty]`，`EnchantmentModel.ToSerializable`
+    只写 Id+Amount+Props → 对端 `EnchantmentModel.FromSerializable` 反序列化出 **Subs 为空**的
+    `CompositeEnchantment`。`ModelDb.Init` 会注册所有子类型（含模组模型），所以 Id 是能解析的，
+    **不会**退化成 `DeprecatedEnchantment`（本文件旧注释此处有误），而是静默变成一个无效果的壳。
+- **黑屏链条**：checksum 分歧 → host `ChecksumTracker.CompareChecksums` 发 `StateDivergenceMessage`
+  → `DisconnectClient` 踢人 → 之后 host 侧任何定向发送都会命中
+  `SteamHost.SendMessageToClient` 的 `throw new InvalidOperationException("Could not find connection for peer ...")`
+  （`SteamHost.cs:150`）→ 房间 `Exit`/结算/下一间房的异步链 fault → 过渡停在黑场。
+  若该 fault 落在没人 await 的 fire-and-forget 任务里，异常不进日志 → 与「日志尾部干净」吻合。
+  （与 2026-08-12「休息处黑屏」是同一种收尾：分歧 → 断线 → 房间 Exit 抛异常 → 黑屏。）
+- **修改**：
+  1. `Scripts/CardOperationHelper.cs`：新增 `ShowLocalDeckSelect`，**不再调用** `CardSelectCmd.FromDeckGeneric`，
+     改为直接 `NDeckCardSelectScreen.Create(list, prefs)` + `NOverlayStack.Instance.Push` +
+     `await screen.CardsSelected()`（复刻游戏的本地分支，不预留 choice id、不同步）。
+     选中的卡仍通过 CardMod action 的 `cardIdentity` 传给对端，确定性由 action 保证。
+     保留原有「提升 Overlay 层级 / 禁用返回按钮 / Esc 自接管取消」逻辑不变。
+  2. `Scripts/Patches/MultiplayerCardResyncPatch.cs`（新）：Harmony Postfix on
+     `Player.SyncWithSerializedPlayer` → 若该玩家有本模组记录则 `CardUpgradeTracker.ReapplyAll(player)`。
+     钩在这个方法上（而不是 `WaitForSync`）以只处理「刚被重建的那一个玩家」，避免重复叠加；
+     重建出来的牌组是干净原型，重放一次正好等于改过的状态，两端记录本来就一致 → 结果确定。
+- **未改 / 后续**：根因 3 建议给 `CompositeEnchantment` 加 `[SavedProperty]` 的
+  `SubData`（如 `"Sharp:2,Nimble:2"`）+ `OnEnchant()` 里按需懒重建 `Subs`，
+  让附魔能自己走存档与网络；当前先靠根因 2 的重放兜住联机部分。
+- **验证**：`dotnet build -c Debug` 0 warning 0 error，已部署到 mods。
+  实测要点：两端都装本模组 → 改一张牌（加伤害/加关键词/附魔各来一次）→ 进下一个房间 →
+  战斗里打出这张牌，观察不再出现 `State divergence detected!`、也不再黑屏；
+  对端牌组/战斗里看到的数值应与改牌者一致。
+
 ## 牌组子面板「← 返回主面板」点击无反应：TextButton 可点击矩形塌缩（2026-10-08）
 
 - **日期**：2026-10-08
