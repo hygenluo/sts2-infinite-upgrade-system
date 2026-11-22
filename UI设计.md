@@ -198,7 +198,7 @@ UI 文本全部走 `UpgradeLoc`（27 条新 key，`localization/{zhs,eng}/cards.
 | 取消链路 | 游戏选牌界面自带取消（左侧返回图标 / Esc）→ 点数自动返还 → **恢复牌组子面板** |
 | 搜索 | 全局搜索保留；命中自动展开分区 + 滚动定位 + 高亮命中文本 |
 | 动效 | 全做：开合淡入上移 / 分区展开动画 / 悬停金色描边 / 购买成功 +1 飘字 / 点数不足加号抖动 |
-| 技能分区 | 39 项（见 §4.4），全部限等级=1；**左列角色选择（6 个角色，可扩展）+ 右列该角色的加点项**（v4 起） |
+| 技能分区 | 45 项（见 §4.4），全部限等级=1；**左列角色选择（7 个角色，可扩展）+ 右列该角色的加点项**（v4 起） |
 | 测试分区 | 默认收起，样式弱化 |
 
 ---
@@ -342,9 +342,11 @@ public sealed class UpgradeItemDef
 
 **牌组子面板（30 项，Action）**：29 项卡牌操作 + 「从牌组删除一张牌」，每项带专属 `PromptKey`（见 §5.4）。
 
-### 4.4 技能（16 项，全部 MaxLevel=1）— 来源 `update/技能.md`（2026-08-04 初步设想）
+### 4.4 技能（45 项，全部 MaxLevel=1）
 
-> 技能数值只影响局内；level 取数来源 `SkillRegistry.GetLevel(id)`；id 为建议命名，实现时统一。
+> 下表前六节是 2026-08-04 的**初版设想**（16 项），实际已扩到 39 项并在 2026-11-22 追加愚者 6 项；条目以
+> `UpgradeUIHandler.PopulateItems()` 里的 `SkillItem(...)` 为准。技能数值只影响局内；level 取数来源
+> `SkillRegistry.GetLevel(id)`（现为 `UpgradeDataStore.GetLevel(player, id)`）。
 
 **通用**
 
@@ -391,6 +393,22 @@ public sealed class UpgradeItemDef
 |---|---|---|---|
 | draw_on_power_play | 每打出1张能力牌，抽一张牌 | 10 | 打出牌 Postfix + 卡牌类型判定（Power） |
 | orb_dmg_at_turn_end | 回合结束时，每有一个充气球，对所有敌人造成1点伤害 | 10 | 回合结束事件 → `player.OrbCount` 次全体伤害 |
+
+**愚者（0.113 原生角色；2026-11-22 追加 6 项，已实现）**
+
+> 机制名对照（反编译安装版 **0.113.1** 核实）：箭矢 = `Entities/FoolArrows/ArrowSlot`（每场战斗按
+> `CharacterModel.BaseArrowSlotCount` 生成，愚者 = 1）+ `Commands/ArrowCmd`；拉伸 = `Powers/StretchPower`
+> （给下一张获得格挡的牌加格挡）；瞄准 = `Powers/AimPower`（只给带 `ValueProp.FromArrow` 的攻击加伤害）；
+> 悲伤 = `Cards/Sadness`（Retain + Unplayable 的状态牌）；旋律 = 带 `CardTag.Wah/Cho/Ki` 的卡牌。
+
+| id | 条目 | 成本 | 效果实现要点 |
+|---|---|---|---|
+| fool_arrow_slot | 箭矢+1 | 10 | 战斗开始 `ArrowCmd.GainArrowSlot(player)`（两端都跑，箭矢列表在 checksum 内） |
+| fool_arrow_debuff | 当你发射箭矢时，给予敌人1层虚弱和1层易伤 | 10 | `AfterArrowImpaled`（`AfterArrowShot` 发生在命中前、没有目标）→ 用 `arrow.owner` 过滤队友的箭 |
+| fool_random_melody | 回合开始时，获得一个随机旋律 | 6 | `AfterPlayerTurnStart`：角色卡池筛 `Wah/Cho/Ki` → `CardFactory.GetDistinctForCombat(…, Rng.CombatCardGeneration)` 进手牌（同官方遗物 Ocarina） |
+| fool_stretch_on_block | 当你获得格挡时，获得格挡数的拉伸 | 20 | `AfterBlockGained`（amount > 0、只认自己的 creature）→ `PowerCmd.Apply<StretchPower>` |
+| fool_sadness_block | 回合结束时，你手牌中每有一张悲伤，就获得5点格挡 | 18 | `BeforeSideTurnEnd`：手牌里 `is Sadness` 计数 × 5 格挡 |
+| fool_aim_at_turn_end | 回合结束时，获得剩余费用数*5点瞄准 | 10 | `BeforeSideTurnEnd`：`PlayerCombatState.Energy`（早于费用清零）× 5 → `AimPower` |
 
 ---
 

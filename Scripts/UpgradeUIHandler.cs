@@ -1043,6 +1043,14 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(SkillItem(SkillClasses.Defect, "你的回合开始时，随机获取1个充能球", UpgradeLoc.ItemSkillOrbAtTurnStart, "orb_at_turn_start", 8));
         _allItems.Add(SkillItem(SkillClasses.Defect, "在你的回合开始时，打出一张随机能力牌", UpgradeLoc.ItemSkillAutoPlayRandomPowerAtTurnStart, "auto_play_random_power_at_turn_start", 10));
 
+        // === 技能：愚者（0.113 原生角色；机制见 DEBUG.md 愚者一节） ===
+        _allItems.Add(SkillItem(SkillClasses.Fool, "箭矢+1", UpgradeLoc.ItemSkillFoolArrowSlot, "fool_arrow_slot", 10));
+        _allItems.Add(SkillItem(SkillClasses.Fool, "当你发射箭矢时，给予敌人1层虚弱和1层易伤", UpgradeLoc.ItemSkillFoolArrowDebuff, "fool_arrow_debuff", 10));
+        _allItems.Add(SkillItem(SkillClasses.Fool, "回合开始时，获得一个随机旋律", UpgradeLoc.ItemSkillFoolRandomMelody, "fool_random_melody", 6));
+        _allItems.Add(SkillItem(SkillClasses.Fool, "当你获得格挡时，获得格挡数的拉伸", UpgradeLoc.ItemSkillFoolStretchOnBlock, "fool_stretch_on_block", 20));
+        _allItems.Add(SkillItem(SkillClasses.Fool, "回合结束时，你手牌中每有一张悲伤，就获得5点格挡", UpgradeLoc.ItemSkillFoolSadnessBlock, "fool_sadness_block", 18));
+        _allItems.Add(SkillItem(SkillClasses.Fool, "回合结束时，获得剩余费用数*5点瞄准", UpgradeLoc.ItemSkillFoolAimAtTurnEnd, "fool_aim_at_turn_end", 10));
+
         // === 牌组操作 ===
         _allItems.Add(ActionItem("牌组操作", "从牌组删除一张牌", UpgradeLoc.ItemDeckRemove, 20,
             UpgradeLoc.PromptDeckRemove, pk => CardOperationHelper.RemoveCardFromDeck(20, pk)));

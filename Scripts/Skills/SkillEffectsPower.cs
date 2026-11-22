@@ -7,6 +7,7 @@ using MegaCrit.Sts2.Core.Commands.Builders;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Entities.FoolArrows;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Powers;
 using MegaCrit.Sts2.Core.Factories;
@@ -273,6 +274,27 @@ public sealed class SkillEffectsPower : CustomPowerModel
             if (generated != null)
                 await CardCmd.AutoPlay(choiceContext, generated, null);
         }
+
+        // 技能（愚者）：回合开始时，获得一个随机旋律。
+        // 旋律 = 带 Wah/Cho/Ki 标签的卡牌（0.113 原生机制，见 FoolCardPool 的 ChoChorus/KiHop/WahBlast…）。
+        // 取法与官方遗物 Ocarina 一致：从角色卡池里筛带旋律标签的牌，随机取 1 张进手牌。
+        // 随机源必须用 RunState.Rng.CombatCardGeneration（同步流）—— 两端同序消耗才会生成同一张牌。
+        if (UpgradeDataStore.HasSkill(player, "fool_random_melody"))
+        {
+            var melodyTags = new[] { CardTag.Wah, CardTag.Cho, CardTag.Ki };
+            var melodyPool = player.UnlockState.CharacterCardPools
+                .SelectMany(p => p.GetUnlockedCards(player.UnlockState, player.RunState.CardMultiplayerConstraint))
+                .Where(c => c.Tags.Any(t => melodyTags.Contains(t)))
+                .ToList();
+            if (melodyPool.Count > 0)
+            {
+                var picked = CardFactory
+                    .GetDistinctForCombat(player, melodyPool, 1, player.RunState.Rng.CombatCardGeneration)
+                    .ToList();
+                if (picked.Count > 0)
+                    await CardPileCmd.AddGeneratedCardsToCombat(picked, PileType.Hand, player);
+            }
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -331,6 +353,70 @@ public sealed class SkillEffectsPower : CustomPowerModel
                 await CreatureCmd.GainBlock(player.Creature, 2m * statusCards.Count, default, null, false);
             }
         }
+
+        // 技能（愚者）：回合结束时，手牌中每有一张「悲伤」→ 5 格挡。
+        // 悲伤（Sadness，0.113 原生卡）= 费用 -1 的不可打出状态牌，自带 Retain，所以会留在手牌里累积。
+        if (UpgradeDataStore.HasSkill(player, "fool_sadness_block"))
+        {
+            var handPile = player.Piles.FirstOrDefault(p => p.Type == PileType.Hand);
+            int sadness = handPile?.Cards.Count(c => c is MegaCrit.Sts2.Core.Models.Cards.Sadness) ?? 0;
+            if (sadness > 0)
+                await CreatureCmd.GainBlock(player.Creature, 5m * sadness, default, null, false);
+        }
+
+        // 技能（愚者）：回合结束时，剩余费用 × 5 → 瞄准（Aim：给下一发箭矢攻击加伤害，命中后清零）。
+        // BeforeSideTurnEnd 早于费用清零，所以这里读到的就是「剩余费用」。
+        if (UpgradeDataStore.HasSkill(player, "fool_aim_at_turn_end"))
+        {
+            int energy = player.PlayerCombatState?.Energy ?? 0;
+            if (energy > 0)
+                await PowerCmd.Apply<AimPower>(choiceContext, player.Creature, 5m * energy, player.Creature, null);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 愚者（Fool，0.113 原生角色）专属触发
+    //
+    // 机制来源（反编译安装版 0.113.1 核实）：
+    // - 箭矢 = PlayerCombatState.Arrows 里的 ArrowSlot（开场按 Character.BaseArrowSlotCount 生成，愚者为 1），
+    //   发射走 ArrowCmd.ShootArrowAtTarget；箭头命中后由 ImpaledPower 承载（InstanceType = InstancedPerApplier）。
+    // - 拉伸 = StretchPower：给「下一张获得格挡的牌」加数值，打出后清零。
+    // - 瞄准 = AimPower：只对带 ValueProp.FromArrow 的攻击加伤害，命中后清零。
+    // - 悲伤 = Sadness 卡（Retain + Unplayable）。
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// 愚者：箭矢命中敌人 → 1 虚弱 + 1 易伤。
+    ///
+    /// 用 <c>AfterArrowImpaled</c> 而不是 <c>AfterArrowShot</c>：发射回调发生在 impale 之前，那时
+    /// 还没有目标（ArrowCmd.TryShootArrow 先挂 hook 再走 ImpaleTarget），拿不到「被射中的敌人」。
+    /// 落点由 ImpaledPower.Owner 给出，且用 arrow.owner 过滤掉别人的箭（多人时队友的箭也会触发本 hook）。
+    /// </summary>
+    public override async Task AfterArrowImpaled(ImpaledPower power, ArrowSlot arrow, PlayerChoiceContext context, CardModel? source)
+    {
+        var player = OwnerPlayer;
+        if (player?.Creature == null || power?.Owner == null || arrow == null) return;
+        if (arrow.owner != player) return;
+        if (!UpgradeDataStore.HasSkill(player, "fool_arrow_debuff")) return;
+        var enemy = power.Owner;
+        if (!enemy.IsAlive) return;
+        await AbilityOperationHelper.ApplyPower(enemy, "weak", 1, player.Creature, null, context);
+        await AbilityOperationHelper.ApplyPower(enemy, "vulnerable", 1, player.Creature, null, context);
+    }
+
+    /// <summary>
+    /// 愚者：获得格挡时，获得等量拉伸。
+    ///
+    /// 只在「自己获得格挡」且 amount &gt; 0 时触发；拉伸本身不产生格挡，所以不会自激。
+    /// 该 hook 没有 PlayerChoiceContext，沿用本项目既有做法用 BlockingPlayerChoiceContext（两端确定性、无玩家选择）。
+    /// </summary>
+    public override async Task AfterBlockGained(Creature creature, decimal amount, ValueProp props, CardModel? cardSource)
+    {
+        var player = OwnerPlayer;
+        if (player?.Creature == null || creature != player.Creature) return;
+        if (amount <= 0) return;
+        if (!UpgradeDataStore.HasSkill(player, "fool_stretch_on_block")) return;
+        await PowerCmd.Apply<StretchPower>(new BlockingPlayerChoiceContext(), creature, amount, creature, null);
     }
 
     // ═══════════════════════════════════════════════════════════════

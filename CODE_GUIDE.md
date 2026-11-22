@@ -240,6 +240,16 @@ UI 等待 action.CompletionTask → 成功则刷新点数标签 + 飘字
 见 [UI设计.md](UI设计.md) §六；要点：`SkillItem(...)` 一行 + `SkillEffectsPower` 里接线效果，
 UI/持久化零改动。
 
+**愚者（The Fool）系列**（2026-11-22 接入，0.113 原生角色）：
+- UI：`SkillClasses.Fool` + `UpgradeLoc.ClassTitle("愚者")` + `UI_CLASS_FOOL`/`ITEM_SKILL_FOOL_*` 本地化；
+- 效果：`SkillEffectsPower.AfterArrowImpaled`（箭矢命中 → 虚弱/易伤）、`AfterPlayerTurnStart`（随机旋律）、
+  `AfterBlockGained`（拉伸）、`BeforeSideTurnEnd`（悲伤格挡 / 剩余费用→瞄准）；「箭矢+1」在
+  `RunStateHook.OnCombatSetUp` 里 `ArrowCmd.GainArrowSlot`；
+- **多人三条硬规则**：① 效果只写进模型 hook（两端同序 await），不要用 fire-and-forget 或只在本地执行；
+  ② 随机一律用 `player.RunState.Rng.CombatCardGeneration` 这类同步流，禁用 `System.Random`/`GD.Rand`；
+  ③ 任何写进战斗状态（箭矢数、能力层数、手牌）的动作两端都必须执行同一份，且用 `arrow.owner` /
+  `creature == player.Creature` 之类过滤掉队友触发。
+
 ### 新增一个角色（技能左列）
 1. `Scripts/UiComponents/SkillClasses.cs`：加一个中文常量 + 往 `All` 里塞进去（顺序 = 显示顺序，
    「通用」固定在第一位）；

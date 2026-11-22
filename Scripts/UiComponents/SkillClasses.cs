@@ -20,6 +20,8 @@ public static class SkillClasses
     public const string Regent = "储君";
     public const string Necrobinder = "亡灵契约师";
     public const string Defect = "故障机器人";
+    /// <summary>愚者（0.113 原生角色，解锁于故障机器人之后）。</summary>
+    public const string Fool = "愚者";
 
     /// <summary>角色列显示顺序（通用在前：它不属于任何职业，是所有人的被动）。</summary>
     public static readonly string[] All =
@@ -30,5 +32,6 @@ public static class SkillClasses
         Regent,
         Necrobinder,
         Defect,
+        Fool,
     ];
 }

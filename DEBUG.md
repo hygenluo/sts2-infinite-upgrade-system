@@ -1321,3 +1321,52 @@
     名称还有 ~290px，长技能名会换行（与改版前一致）。
 - **验证**：`dotnet build -c Debug` 0 错 0 警告并部署到 `mods/`；
   游戏内表现（高亮/动画/滚动）待手动确认。manifest 版本仍为 2.5.1（发布时再统一升版 + 改 BUILD 标记）。
+
+## 愚者（The Fool）技能接入 + 多人确定性（2026-11-22）
+
+- **背景**：玩家要求给技能分区加「愚者」角色，6 条技能：箭矢+1 / 发射箭矢给虚弱+易伤 / 回合开始随机旋律 /
+  获得格挡时等量拉伸 / 回合结束每张悲伤 5 格挡 / 回合结束剩余费用×5 瞄准。要求**兼容多人（最多 4 人）**。
+- **关键事实（反编译安装版 sts2.dll / 0.113.1 核实，不是猜的）**：
+  - **愚者是 0.113 原生角色**（`Models.Characters.Fool`，`BaseArrowSlotCount = 1`，解锁于故障机器人之后），
+    所以技能 UI 只是多一列角色，不需要新增角色 mod 依赖。
+  - 箭矢 = `Entities.FoolArrows.ArrowSlot` 列表（`PlayerCombatState.Arrows`，构造时按
+    `CharacterModel.BaseArrowSlotCount` 逐个 `GainArrow()`）；发射 = `Commands.ArrowCmd.ShootArrowAtTarget`
+    → `TryShootArrow`（**先** `Hook.AfterArrowShot`，此时还没有目标）→ `ImpaleTarget`
+    （**后** `Hook.AfterArrowImpaled`，落点由 `ImpaledPower.Owner` 给出）。
+  - 拉伸 = `Powers.StretchPower`（`ModifyBlockAdditive` 给「下一张获得格挡的牌」加值，打出后整段清零）。
+  - 瞄准 = `Powers.AimPower`（只对 `ValueProp.FromArrow` 的攻击加伤害，命中后清零）。
+  - 悲伤 = `Cards.Sadness`（费用 -1、`Retain` + `Unplayable` 的状态牌）。
+  - 旋律 = 带 `CardTag.Wah / Cho / Ki` 的**卡牌**（不是 buff）。官方「随机给旋律」的实现参考：
+    遗物 `Ocarina`（`BeforeHandDraw` 筛卡池 → `CardFactory.GetDistinctForCombat` → 进手牌）与
+    药水 `BottledSong`（三种各给一张）。
+- **实现**：
+  1. `SkillClasses.Fool` + `All` 末尾一项；`UpgradeLoc.UiClassFool` + `ClassTitle("愚者")`；
+     `localization/{zhs,eng}/cards.json` 加 `UI_CLASS_FOOL` 与 6 个 `ITEM_SKILL_FOOL_*`。
+  2. `UpgradeUIHandler.PopulateItems()` 追加 6 条 `SkillItem(...)`，成本 10/10/6/20/18/10，全部 `MaxLevel=1`。
+  3. `RunStateHook.OnCombatSetUp` → 「箭矢+1」：`ArrowCmd.GainArrowSlot(player)`（每场战斗补 1 格）。
+  4. `SkillEffectsPower` 新增/补充 4 个 hook：
+     - `AfterArrowImpaled`：虚弱 + 易伤（用 `arrow.owner` 过滤队友的箭，`power.Owner` 取落点，死亡跳过）；
+     - `AfterPlayerTurnStart`：随机旋律进手牌；
+     - `AfterBlockGained`：`PowerCmd.Apply<StretchPower>(amount)`；
+     - `BeforeSideTurnEnd`：手牌 `is Sadness` 计数 ×5 格挡；`PlayerCombatState.Energy` ×5 → `AimPower`。
+- **多人（MP）适配要点**：
+  - **钩子两端同序执行**：全部效果都做成 `SkillEffectsPower`（隐藏 power，随战斗施加在玩家 creature 上）的
+    模型回调，`Hook.AfterXxx` 用 `await` 串进游戏动作管线 —— 这就是本项目此前的官方范式，
+    `CombatState.IterateHookListeners()` 确认会遍历 `creature.Powers`，所以隐藏 power 能收到
+    `AfterArrowImpaled` / `AfterBlockGained` 这类冷门钩子。
+  - **随机必须走同步流**：随机旋律用 `player.RunState.Rng.CombatCardGeneration`（与官方 Ocarina 同一个流），
+    两端按同序消耗 → 抽到同一张牌；**不能**用 `System.Random`/`GD.Rand`（只在本地推进，必分歧）。
+  - **箭矢+1 必须两端都加**：`PlayerCombatState.Arrows` 被 `StateTracker.Subscribe` 记录（在 checksum 内），
+    只在一端 +1 会直接分歧。`CombatManager.SetUpCombat` 在 `CombatSetUp?.Invoke` 之前已经
+    `PopulateCombatState` 建好箭矢，所以战斗开始的补格时机是对的。
+  - 触发对象过滤：箭矢看 `arrow.owner`、格挡看 `creature == player.Creature` —— 多人时队友的箭 /
+    队友的格挡也会走同一个 hook，不过滤就会把效果算到别人头上。
+  - 购买链路没动：仍然走 `UpgradePurchaseFlow.EnqueuePurchase`（原版动作队列 + 两端执行）。
+- **注意（可能被玩家问）**：
+  - 「当你发射箭矢时」按**命中**判定（`AfterArrowImpaled`）。游戏在发射回调里没有目标，只有 impale 之后才有，
+    所以对空/箭矢没命中（无箭可发）时不会上 debuff。
+  - 拉伸是「下一张获得格挡的牌 +N 格挡」，因此本 mod 的「获得格挡 → 等量拉伸」会形成正反馈
+    （打出格挡牌 → 拿到更多拉伸 → 下一张格挡牌更高），这是机制本意，但数值可能偏强，需要实测调价。
+- **验证**：`dotnet build -c Debug` 0 错 0 警告并部署；Steam 启动烟测（`steam://rungameid/2868840`），
+  日志 `InfiniteUpgradeUI: ready (localeReady=True)`，全日志 0 异常。
+  实战验证待玩家用愚者开局逐条对照（见 README「技能」一节）。

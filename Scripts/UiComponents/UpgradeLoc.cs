@@ -102,6 +102,14 @@ public static class UpgradeLoc
     public const string ItemSkillDmgXTimesAtTurnStart = "INFINITEUPGRADESYSTEM-ITEM_SKILL_DMG_X_TIMES_AT_TURN_START";
     public const string ItemSkillFreeNextCardOnPower = "INFINITEUPGRADESYSTEM-ITEM_SKILL_FREE_NEXT_CARD_ON_POWER";
 
+    // ── 技能：愚者（0.113 原生角色）──
+    public const string ItemSkillFoolArrowSlot = "INFINITEUPGRADESYSTEM-ITEM_SKILL_FOOL_ARROW_SLOT";
+    public const string ItemSkillFoolArrowDebuff = "INFINITEUPGRADESYSTEM-ITEM_SKILL_FOOL_ARROW_DEBUFF";
+    public const string ItemSkillFoolRandomMelody = "INFINITEUPGRADESYSTEM-ITEM_SKILL_FOOL_RANDOM_MELODY";
+    public const string ItemSkillFoolStretchOnBlock = "INFINITEUPGRADESYSTEM-ITEM_SKILL_FOOL_STRETCH_ON_BLOCK";
+    public const string ItemSkillFoolSadnessBlock = "INFINITEUPGRADESYSTEM-ITEM_SKILL_FOOL_SADNESS_BLOCK";
+    public const string ItemSkillFoolAimAtTurnEnd = "INFINITEUPGRADESYSTEM-ITEM_SKILL_FOOL_AIM_AT_TURN_END";
+
     // ═══════════════════════════════════════════════════════════════
     // UI 文字（UI v3：面板标题/分区名/占位符/提示，全部本地化，不再硬编码中文）
     // 格式串用 {0} {1} 占位，配合 Format(key, fallback, args)。
@@ -131,6 +139,7 @@ public static class UpgradeLoc
     public const string UiClassRegent = "INFINITEUPGRADESYSTEM-UI_CLASS_REGENT";
     public const string UiClassNecrobinder = "INFINITEUPGRADESYSTEM-UI_CLASS_NECROBINDER";
     public const string UiClassDefect = "INFINITEUPGRADESYSTEM-UI_CLASS_DEFECT";
+    public const string UiClassFool = "INFINITEUPGRADESYSTEM-UI_CLASS_FOOL";
     /// <summary>技能分区左列（角色选择列）的列标题。</summary>
     public const string UiSkillRoleList = "INFINITEUPGRADESYSTEM-UI_SKILL_ROLE_LIST";
     public const string UiEnchantTitle = "INFINITEUPGRADESYSTEM-UI_ENCHANT_TITLE";
@@ -282,6 +291,7 @@ public static class UpgradeLoc
         "储君" => Get(UiClassRegent, "储君"),
         "亡灵契约师" => Get(UiClassNecrobinder, "亡灵契约师"),
         "故障机器人" => Get(UiClassDefect, "故障机器人"),
+        "愚者" => Get(UiClassFool, "愚者"),
         _ => className,
     };
 

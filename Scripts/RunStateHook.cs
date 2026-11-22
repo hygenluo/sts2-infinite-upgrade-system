@@ -69,6 +69,12 @@ public static class RunStateHook
                 // 静默猎手「小刀攻击所有敌人」→ FanOfKnivesPower（Shiv 检测该 power 即全体攻击）
                 if (UpgradeDataStore.HasSkill(player, "shiv_all_enemies"))
                     await AbilityOperationHelper.ApplyPower(player.Creature, "fanOfKnives", 1);
+                // 愚者「箭矢+1」→ 本场战斗额外 1 个箭矢槽。
+                // PlayerCombatState 在构造时按 Character.BaseArrowSlotCount（愚者 = 1）生成箭矢，
+                // 所以在这里补一格；CombatSetUp 两端都会跑到，两端箭头数一致（该列表在 StateTracker
+                // 的 checksum 范围内，只有单边加才会分歧）。
+                if (UpgradeDataStore.HasSkill(player, "fool_arrow_slot"))
+                    MegaCrit.Sts2.Core.Commands.ArrowCmd.GainArrowSlot(player);
                 // 统一技能效果 power（v2.0 官方范式）：隐藏 SkillEffectsPower 承载全部技能/能力效果，
                 // hook 在游戏管线内被 await → 两端确定性。
                 if (HasAnySkillOrBoost(player))
