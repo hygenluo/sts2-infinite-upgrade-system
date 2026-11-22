@@ -275,26 +275,28 @@ public sealed class SkillEffectsPower : CustomPowerModel
                 await CardCmd.AutoPlay(choiceContext, generated, null);
         }
 
-        // 技能（愚者）：回合开始时，获得一个随机旋律。
-        // 旋律 = 带 Wah/Cho/Ki 标签的卡牌（0.113 原生机制，见 FoolCardPool 的 ChoChorus/KiHop/WahBlast…）。
-        // 取法与官方遗物 Ocarina 一致：从角色卡池里筛带旋律标签的牌，随机取 1 张进手牌。
-        // 随机源必须用 RunState.Rng.CombatCardGeneration（同步流）—— 两端同序消耗才会生成同一张牌。
+        // 技能（愚者）：回合开始时，获得一个随机旋律（哇 / 啾 / 叽）。
+        // 旋律不是卡牌也不是 buff —— 游戏用「本回合是否打出过带该标签的牌」判定「拥有旋律」，
+        // 所以这里只登记到 VirtualMelody（`MelodyCmd.PlayedThisTurn` 的 Postfix 会把它算进去），
+        // 不发牌、不进手牌。随机源用 RitsuLib 每玩家确定性流（两端同一个标签）。
         if (UpgradeDataStore.HasSkill(player, "fool_random_melody"))
         {
-            var melodyTags = new[] { CardTag.Wah, CardTag.Cho, CardTag.Ki };
-            var melodyPool = player.UnlockState.CharacterCardPools
-                .SelectMany(p => p.GetUnlockedCards(player.UnlockState, player.RunState.CardMultiplayerConstraint))
-                .Where(c => c.Tags.Any(t => melodyTags.Contains(t)))
-                .ToList();
-            if (melodyPool.Count > 0)
-            {
-                var picked = CardFactory
-                    .GetDistinctForCombat(player, melodyPool, 1, player.RunState.Rng.CombatCardGeneration)
-                    .ToList();
-                if (picked.Count > 0)
-                    await CardPileCmd.AddGeneratedCardsToCombat(picked, PileType.Hand, player);
-            }
+            var tag = VirtualMelody.PickRandom(player);
+            if (tag != CardTag.None)
+                VirtualMelody.Grant(player, tag);
         }
+    }
+
+    /// <summary>自己回合开始前清掉上一回合白给的旋律（与游戏「本回合」口径一致：按 RoundNumber）。</summary>
+    public override Task BeforeSideTurnStart(PlayerChoiceContext choiceContext, CombatSide side,
+        IReadOnlyList<Creature> participants, ICombatState combatState)
+    {
+        if (side != CombatSide.Player) return Task.CompletedTask;
+        var player = OwnerPlayer;
+        if (player?.Creature == null) return Task.CompletedTask;
+        if (participants != null && !participants.Contains(player.Creature)) return Task.CompletedTask;
+        VirtualMelody.Clear(player);
+        return Task.CompletedTask;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -405,7 +407,7 @@ public sealed class SkillEffectsPower : CustomPowerModel
     }
 
     /// <summary>
-    /// 愚者：获得格挡时，获得等量拉伸。
+    /// 愚者：获得格挡时，获得**格挡数一半**的拉伸（下取整）。
     ///
     /// 只在「自己获得格挡」且 amount &gt; 0 时触发；拉伸本身不产生格挡，所以不会自激。
     /// 该 hook 没有 PlayerChoiceContext，沿用本项目既有做法用 BlockingPlayerChoiceContext（两端确定性、无玩家选择）。
@@ -416,7 +418,9 @@ public sealed class SkillEffectsPower : CustomPowerModel
         if (player?.Creature == null || creature != player.Creature) return;
         if (amount <= 0) return;
         if (!UpgradeDataStore.HasSkill(player, "fool_stretch_on_block")) return;
-        await PowerCmd.Apply<StretchPower>(new BlockingPlayerChoiceContext(), creature, amount, creature, null);
+        decimal stretch = Math.Floor(amount / 2m);
+        if (stretch < 1m) return;
+        await PowerCmd.Apply<StretchPower>(new BlockingPlayerChoiceContext(), creature, stretch, creature, null);
     }
 
     // ═══════════════════════════════════════════════════════════════

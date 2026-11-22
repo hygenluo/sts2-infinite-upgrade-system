@@ -1370,3 +1370,49 @@
 - **验证**：`dotnet build -c Debug` 0 错 0 警告并部署；Steam 启动烟测（`steam://rungameid/2868840`），
   日志 `InfiniteUpgradeUI: ready (localeReady=True)`，全日志 0 异常。
   实战验证待玩家用愚者开局逐条对照（见 README「技能」一节）。
+
+## 愚者技能三处调整：旋律改成「状态」、拉伸减半、箭矢+1 无限叠层（2026-11-22）
+
+- **需求**：① 回合开始「获得一个旋律」而不是发一张旋律牌；② 获得格挡时改为获得「格挡数一半」的拉伸；
+  ③ 「箭矢+1」改为无上限。
+- **① 旋律到底是什么（一手核实）**：从游戏 pck 抽出 `localization/zhs/cards.json`（**pck 是 version 3，
+  目录在文件尾部、头 0x20 处存 directory_offset——旧 `pck_tool.py` 因此解析失败**，已写 `pck_tool3.py`），
+  官方文本证据：
+  - `MELODIC_SHOT`：「你每拥有一种[gold]旋律[/gold]，就额外命中一次」；实现 = `MelodyCmd.MelodiesThisTurn`；
+  - `LOST_LUTE`：「每当你**获得**旋律时，打出你抽牌堆顶的牌」；实现 = `LostLutePower` 数本回合该旋律标签的
+    首次出牌；
+  - `TUNE`：「如果你拥有叽 旋律…」、`WAH_BLAST`「如果你拥有啾 旋律或叽 旋律…」；
+  - 结论：**旋律是「本回合是否打出过带 Wah/Cho/Ki 标签的牌」的判定结果**，既不是卡牌也不是 buff，
+    游戏里没有可加的「旋律层数」。
+  → 要让技能白给一个旋律，只能在判定入口上动手：新增 `Scripts/Skills/VirtualMelody.cs`，
+  在 `MelodyCmd.PlayedThisTurn(Player, CardTag)` 上挂 **Postfix**（`HarmonyPriority(Priority.Last)`），
+  原版为 false 时把「本回合白给的标签」算作拥有。一处补丁覆盖全部消费者：
+  `MelodiesThisTurn` / `PlayedWah|Cho|KiThisTurn` / 旋律射击·节奏打击命中数 / 无头（Coda）减费 /
+  谐音盾 / 稳定节拍 / 哇爆 / 叽息 / 曲调 / 摇篮曲 / 歌径，以及愚者战斗 UI 的旋律图标
+  （`NFoolCombatUi` 订阅 `StateTracker.CombatStateChanged`，状态变化就会重画，不需要额外通知）。
+  - 生命周期：`SkillEffectsPower.AfterPlayerTurnStart` 授予、`BeforeSideTurnStart`（自己的回合开始前）清理，
+    与游戏 `HappenedThisTurn` 的 RoundNumber 口径一致（敌方回合仍算同一回合）。
+  - 随机源：`ModRunRngRegistry.Get(player, ModId, "melody")`（RitsuLib 每玩家确定性流，键含 NetId，
+    随 run save 持久化）——**不消耗原版战斗随机流**，也不会有 `System.Random` 那种单边推进的分歧。
+    取不到（玩家不属于具体 RunState）时两端同样返回 None。
+  - 兼容性坑：日志诊断显示这个方法上还有另一个 mod 的 Postfix
+    （`owners=[Natsuki.HextechRunes, InfiniteUpgradeSystem]`），所以我们的 Postfix 必须
+    `HarmonyPriority(Priority.Last)` 最后跑，否则可能被别人覆盖。
+  - 运行时证据：`Entry.Init` 新增诊断日志
+    `InfiniteUpgradeSystem: melody patch target=True postfixes=2 owners=[Natsuki.HextechRunes,InfiniteUpgradeSystem]`
+    ——目标方法找到、我们的补丁确实在列表里。
+- **② 拉伸减半**：`AfterBlockGained` 里改为 `Math.Floor(amount / 2m)`，不足 1 点不施加；
+  本地化同步改成「获得格挡数一半的拉伸」/「half that Block」。
+- **③ 箭矢+1 无上限**：
+  - `SkillRegistry` 新增等级上限表 `s_maxLevels`（`"fool_arrow_slot" = 0` 表示无上限）+ `MaxLevelOf(id)`；
+    `TryPurchase` 的 `maxLevel <= 0` 视为不限；同步 action 端改成
+    `SkillRegistry.TryPurchase(..., SkillRegistry.MaxLevelOf(_key))`（两端读同一张表 → 是否满级结论一致）；
+  - UI：`SkillItem(..., unlimited: true)` → `MaxLevel = 0`（加号常驻、不显示 MAX 徽标）且值列显示**当前等级**；
+  - 效果：`RunStateHook.OnCombatSetUp` 按 `UpgradeDataStore.GetLevel(player, "fool_arrow_slot")` 循环
+    `ArrowCmd.GainArrowSlot(player)`，每场战斗 +N 格；
+  - 回退/持久化无需改动：等级本来就存在 `store.Skills[id]`，回退走既有 `RemoveOneLevel`（每次 −1 级、
+    返还 floor(0.8×成本)），`RefreshLocalCache` 会刷新 UI 等级数字。
+- **验证**：`dotnet build -c Debug` 0 错 0 警告并部署；Steam 启动两次烟测，日志
+  `melody patch target=True postfixes=2 owners=[...]`、`mod initialized`、`InfiniteUpgradeUI: ready`，
+  全日志 0 异常。**技能效果本身仍待玩家在愚者局里实测**（旋律：看本回合旋律图标 / 旋律射击命中数；
+  拉伸：`block 10` 后应得 5 拉伸；箭矢：连买两级应看到 3 个箭矢槽）。

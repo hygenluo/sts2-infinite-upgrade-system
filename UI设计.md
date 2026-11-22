@@ -403,10 +403,10 @@ public sealed class UpgradeItemDef
 
 | id | 条目 | 成本 | 效果实现要点 |
 |---|---|---|---|
-| fool_arrow_slot | 箭矢+1 | 10 | 战斗开始 `ArrowCmd.GainArrowSlot(player)`（两端都跑，箭矢列表在 checksum 内） |
+| fool_arrow_slot | 箭矢+1 | 10 | **无上限**（可叠加，`SkillRegistry.MaxLevelOf("fool_arrow_slot") = 0`）：战斗开始按等级循环 `ArrowCmd.GainArrowSlot(player)`，每场战斗 +N 格（两端都跑，箭矢列表在 checksum 内） |
 | fool_arrow_debuff | 当你发射箭矢时，给予敌人1层虚弱和1层易伤 | 10 | `AfterArrowImpaled`（`AfterArrowShot` 发生在命中前、没有目标）→ 用 `arrow.owner` 过滤队友的箭 |
-| fool_random_melody | 回合开始时，获得一个随机旋律 | 6 | `AfterPlayerTurnStart`：角色卡池筛 `Wah/Cho/Ki` → `CardFactory.GetDistinctForCombat(…, Rng.CombatCardGeneration)` 进手牌（同官方遗物 Ocarina） |
-| fool_stretch_on_block | 当你获得格挡时，获得格挡数的拉伸 | 20 | `AfterBlockGained`（amount > 0、只认自己的 creature）→ `PowerCmd.Apply<StretchPower>` |
+| fool_random_melody | 回合开始时，获得一个随机旋律 | 6 | **旋律不是卡牌也不是 buff**：只登记 `VirtualMelody`（`MelodyCmd.PlayedThisTurn` 的 Harmony Postfix 把白给标签算作「拥有」），随机源 = RitsuLib 每玩家确定性流 `"melody"`；自己回合开始前清理 |
+| fool_stretch_on_block | 当你获得格挡时，获得格挡数一半的拉伸 | 20 | `AfterBlockGained`（amount > 0、只认自己的 creature）→ `floor(amount / 2)` → `PowerCmd.Apply<StretchPower>` |
 | fool_sadness_block | 回合结束时，你手牌中每有一张悲伤，就获得5点格挡 | 18 | `BeforeSideTurnEnd`：手牌里 `is Sadness` 计数 × 5 格挡 |
 | fool_aim_at_turn_end | 回合结束时，获得剩余费用数*5点瞄准 | 10 | `BeforeSideTurnEnd`：`PlayerCombatState.Energy`（早于费用清零）× 5 → `AimPower` |
 

@@ -1044,7 +1044,7 @@ public sealed partial class UpgradeUIHandler : Control
         _allItems.Add(SkillItem(SkillClasses.Defect, "在你的回合开始时，打出一张随机能力牌", UpgradeLoc.ItemSkillAutoPlayRandomPowerAtTurnStart, "auto_play_random_power_at_turn_start", 10));
 
         // === 技能：愚者（0.113 原生角色；机制见 DEBUG.md 愚者一节） ===
-        _allItems.Add(SkillItem(SkillClasses.Fool, "箭矢+1", UpgradeLoc.ItemSkillFoolArrowSlot, "fool_arrow_slot", 10));
+        _allItems.Add(SkillItem(SkillClasses.Fool, "箭矢+1", UpgradeLoc.ItemSkillFoolArrowSlot, "fool_arrow_slot", 10, unlimited: true));
         _allItems.Add(SkillItem(SkillClasses.Fool, "当你发射箭矢时，给予敌人1层虚弱和1层易伤", UpgradeLoc.ItemSkillFoolArrowDebuff, "fool_arrow_debuff", 10));
         _allItems.Add(SkillItem(SkillClasses.Fool, "回合开始时，获得一个随机旋律", UpgradeLoc.ItemSkillFoolRandomMelody, "fool_random_melody", 6));
         _allItems.Add(SkillItem(SkillClasses.Fool, "当你获得格挡时，获得格挡数的拉伸", UpgradeLoc.ItemSkillFoolStretchOnBlock, "fool_stretch_on_block", 20));
@@ -1094,9 +1094,12 @@ public sealed partial class UpgradeUIHandler : Control
         SearchText = BuildSearchText(category, locKey, fallbackName),
     };
 
-    /// <summary>技能条目构建（限等级 MaxLevel=1，按职业 SubCategory 落入标签页）。</summary>
+    /// <summary>
+    /// 技能条目构建（默认 MaxLevel=1；<paramref name="unlimited"/> = true 时无上限、
+    /// 值列显示当前等级而不是「已拥有/未拥有」，加号常驻）。
+    /// </summary>
     private UpgradeItemDef SkillItem(string cls, string fallbackName, string locKey, string skillId, int cost,
-        Func<string>? valueText = null) => new()
+        Func<string>? valueText = null, bool unlimited = false) => new()
     {
         Category = "技能",
         SubCategory = cls,
@@ -1104,11 +1107,13 @@ public sealed partial class UpgradeUIHandler : Control
         LocKey = locKey,
         Cost = cost,
         Kind = UpgradeItemKind.Stat,
-        MaxLevel = 1,
+        MaxLevel = unlimited ? 0 : 1,
         LevelProvider = () => SkillRegistry.GetLevel(skillId),
-        ValueText = valueText ?? (() => SkillRegistry.Has(skillId)
-            ? UpgradeLoc.Get(UpgradeLoc.UiOwned, "已拥有")
-            : UpgradeLoc.Get(UpgradeLoc.UiNotOwned, "未拥有")),
+        ValueText = valueText ?? (unlimited
+            ? () => SkillRegistry.GetLevel(skillId).ToString()
+            : () => SkillRegistry.Has(skillId)
+                ? UpgradeLoc.Get(UpgradeLoc.UiOwned, "已拥有")
+                : UpgradeLoc.Get(UpgradeLoc.UiNotOwned, "未拥有")),
         OnClick = async () =>
         {
             var ok = await UpgradePurchaseFlow.EnqueuePurchase(skillId, cost, isSkill: true, isImmediate: false);

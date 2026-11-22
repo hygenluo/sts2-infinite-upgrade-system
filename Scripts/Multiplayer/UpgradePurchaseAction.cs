@@ -113,7 +113,9 @@ public sealed class UpgradeDataAction : GameAction
             case UpgradeDataOp.Purchase:
                 if (_flag1)
                 {
-                    Succeeded = SkillRegistry.TryPurchase(_player, _key, _cost);
+                    // 技能上限按 SkillRegistry.MaxLevelOf 判定（0 = 无上限，如愚者「箭矢+1」）；
+                    // 两端读同一张表 → 是否满级结论一致。
+                    Succeeded = SkillRegistry.TryPurchase(_player, _key, _cost, SkillRegistry.MaxLevelOf(_key));
                 }
                 else
                 {

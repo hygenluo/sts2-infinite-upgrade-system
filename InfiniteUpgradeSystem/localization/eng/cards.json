@@ -80,7 +80,7 @@
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_FOOL_ARROW_SLOT": "+1 Arrow",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_FOOL_ARROW_DEBUFF": "When you fire an arrow, apply 1 Weak and 1 Vulnerable to the enemy",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_FOOL_RANDOM_MELODY": "At the start of your turn, gain a random melody",
- "INFINITEUPGRADESYSTEM-ITEM_SKILL_FOOL_STRETCH_ON_BLOCK": "When you gain Block, gain Stretch equal to the Block gained",
+ "INFINITEUPGRADESYSTEM-ITEM_SKILL_FOOL_STRETCH_ON_BLOCK": "When you gain Block, gain Stretch equal to half that Block",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_FOOL_SADNESS_BLOCK": "At the end of your turn, gain 5 Block for each Sadness in your hand",
  "INFINITEUPGRADESYSTEM-ITEM_SKILL_FOOL_AIM_AT_TURN_END": "At the end of your turn, gain 5 Aim for each unspent Energy",
  "INFINITEUPGRADESYSTEM-ENCHANT_COMPOSITE": "Multiple Enchantments",

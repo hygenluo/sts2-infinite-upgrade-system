@@ -22,8 +22,9 @@ Scripts/
 ├── CompositeEnchantment.cs       # 【仅旧档迁移】已废弃的复合附魔墓碑（清槽位用），不再有子附魔
 ├── SavePaths.cs                  # 存档路径（user://mod_data/...）+ 旧档迁移
 ├── Skills/
-│   ├── SkillRegistry.cs          # 技能注册表（等级化 + skills_<seed>.json）
+│   ├── SkillRegistry.cs          # 技能注册表（等级化 + skills_<seed>.json + s_maxLevels 等级上限表）
 │   ├── SkillEffectsPower.cs      # ★ 技能/能力效果统一承载（隐藏 Power，hook 在游戏管线内 await）
+│   ├── VirtualMelody.cs          # ★ 愚者「虚拟旋律」：MelodyCmd.PlayedThisTurn 的 Harmony Postfix + 每回合状态
 │   └── SkillEventPatches.cs      # 仅休息处任意选项
 ├── Multiplayer/
 │   └── UpgradePurchaseAction.cs  # ★ 同步 action：INetAction + GameAction + 入队入口
@@ -242,11 +243,16 @@ UI/持久化零改动。
 
 **愚者（The Fool）系列**（2026-11-22 接入，0.113 原生角色）：
 - UI：`SkillClasses.Fool` + `UpgradeLoc.ClassTitle("愚者")` + `UI_CLASS_FOOL`/`ITEM_SKILL_FOOL_*` 本地化；
-- 效果：`SkillEffectsPower.AfterArrowImpaled`（箭矢命中 → 虚弱/易伤）、`AfterPlayerTurnStart`（随机旋律）、
-  `AfterBlockGained`（拉伸）、`BeforeSideTurnEnd`（悲伤格挡 / 剩余费用→瞄准）；「箭矢+1」在
-  `RunStateHook.OnCombatSetUp` 里 `ArrowCmd.GainArrowSlot`；
+  「箭矢+1」用 `SkillItem(..., unlimited: true)`（等级无上限，值列显示当前等级），上限表在
+  `SkillRegistry.MaxLevelOf`（0 = 无上限）；
+- 效果：`SkillEffectsPower.AfterArrowImpaled`（箭矢命中 → 虚弱/易伤）、`AfterPlayerTurnStart`（随机旋律 →
+  `VirtualMelody`）、`AfterBlockGained`（格挡数一半的拉伸）、`BeforeSideTurnEnd`（悲伤格挡 / 剩余费用→瞄准）；
+  「箭矢+1」在 `RunStateHook.OnCombatSetUp` 里按等级循环 `ArrowCmd.GainArrowSlot`；
+- **旋律不是卡牌也不是 buff**：游戏用 `MelodyCmd.PlayedThisTurn`（查本回合出牌历史）判定「拥有旋律」，
+  所以 `Skills/VirtualMelody.cs` 在这个方法上挂 `HarmonyPriority(Priority.Last)` 的 Postfix，
+  把本回合白给的标签算作拥有；生命周期由 `BeforeSideTurnStart` 清理，随机源是 RitsuLib 每玩家流 `"melody"`；
 - **多人三条硬规则**：① 效果只写进模型 hook（两端同序 await），不要用 fire-and-forget 或只在本地执行；
-  ② 随机一律用 `player.RunState.Rng.CombatCardGeneration` 这类同步流，禁用 `System.Random`/`GD.Rand`；
+  ② 随机一律用确定性流（`RunState.Rng.*` 或 `ModRunRngRegistry`），禁用 `System.Random`/`GD.Rand`；
   ③ 任何写进战斗状态（箭矢数、能力层数、手牌）的动作两端都必须执行同一份，且用 `arrow.owner` /
   `creature == player.Creature` 之类过滤掉队友触发。
 

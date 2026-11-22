@@ -23,6 +23,19 @@ public static class SkillRegistry
     private static readonly Dictionary<string, int> s_levels = new();
     private static readonly JsonSerializerOptions s_jsonOptions = new() { PropertyNameCaseInsensitive = true };
 
+    /// <summary>
+    /// 技能等级上限表。未列出的技能默认上限 1（= 已拥有即满级，UI 显示 MAX 徽标）；
+    /// 值 0 表示**无上限**（可重复购买叠层，UI 显示当前等级且加号常驻）。
+    /// 购买上限由 action 端按这里判定，两端用同一张表 → 结论一致。
+    /// </summary>
+    private static readonly Dictionary<string, int> s_maxLevels = new()
+    {
+        ["fool_arrow_slot"] = 0, // 愚者「箭矢+1」：每级每场战斗 +1 箭矢槽
+    };
+
+    /// <summary>该技能的等级上限（0 = 无上限；未配置 = 1）。</summary>
+    public static int MaxLevelOf(string id) => s_maxLevels.TryGetValue(id, out int v) ? v : 1;
+
     /// <summary>本场战斗打牌计数（v1.4.3：每玩家 store，两端一致；每 4 张触发敏捷/力量技能）。</summary>
     private static int s_combatPlayCount;
 
@@ -68,14 +81,14 @@ public static class SkillRegistry
 
     /// <summary>
     /// 购买技能（方案 B）：扣点 + 技能等级写入指定玩家的 store。由同步 action 两端执行。
-    /// 点数不足/已满级返回 false。
+    /// 点数不足 / 达到上限返回 false。<paramref name="maxLevel"/> &lt;= 0 表示无上限。
     /// </summary>
     public static bool TryPurchase(Player player, string id, int cost, int maxLevel = 1)
     {
         if (player == null) { Log.Info($"IU purchase {id} FAIL player=null"); return false; }
         if (UpgradeDataStore.GetPoints(player) < cost)
         { Log.Info($"IU purchase {id} cost={cost} pts={UpgradeDataStore.GetPoints(player)} FAIL(pts)"); return false; }
-        if (UpgradeDataStore.GetLevel(player, id) >= maxLevel)
+        if (maxLevel > 0 && UpgradeDataStore.GetLevel(player, id) >= maxLevel)
         { Log.Info($"IU purchase {id} FAIL(maxlevel)"); return false; }
         UpgradeDataStore.Mutate(player, d =>
         {

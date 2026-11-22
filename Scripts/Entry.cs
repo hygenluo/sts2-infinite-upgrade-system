@@ -1,3 +1,4 @@
+using System.Linq;
 using Godot.Bridge;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Logging;
@@ -19,6 +20,17 @@ public static class Entry
         harmony.PatchAll(typeof(Entry).Assembly);
         ScriptManagerBridge.LookupScriptsInAssembly(typeof(Entry).Assembly);
 
+        // 诊断：确认「虚拟旋律」补丁真的挂在 MelodyCmd.PlayedThisTurn 上（愚者「随机旋律」技能靠它生效）。
+        // postfixes 应为 1；为 0 说明目标方法没找到/补丁没应用，技能会是哑的。
+        var melodyMethod = AccessTools.Method(typeof(MegaCrit.Sts2.Core.Commands.MelodyCmd),
+            nameof(MegaCrit.Sts2.Core.Commands.MelodyCmd.PlayedThisTurn));
+        var melodyPatches = melodyMethod == null ? null : Harmony.GetPatchInfo(melodyMethod);
+        string owners = melodyPatches == null
+            ? "-"
+            : string.Join(",", melodyPatches.Postfixes.Select(p => p.owner));
+        Log.Info($"InfiniteUpgradeSystem: melody patch target={(melodyMethod != null)} " +
+                 $"postfixes={melodyPatches?.Postfixes.Count ?? 0} owners=[{owners}]");
+
         // 注册 RitsuLib 每玩家数据槽位（须在 RunStateHook.Subscribe 前）
         UpgradeDataStore.Register();
 
@@ -35,6 +47,6 @@ public static class Entry
         // 可拖拽悬浮窗（HUD 常驻入口，点击唤出加点面板；可由模组配置关闭）
         InfiniteUpgradeSystem.UiComponents.UpgradeFloatingButton.CreateInstance();
 
-        Log.Info("InfiniteUpgradeSystem mod initialized. BUILD=v61-20261113-fontboost");
+        Log.Info("InfiniteUpgradeSystem mod initialized. BUILD=v62-20261122-foolskills");
     }
 }
